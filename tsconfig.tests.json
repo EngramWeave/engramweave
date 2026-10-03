@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": { "@engramweave/contracts": ["packages/contracts/src/index.ts"] }
+  },
+  "include": ["tests/**/*.ts", "vitest.config.ts"]
+}

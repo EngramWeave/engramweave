@@ -1,22 +1,32 @@
+## Project Direction
+
+- Treat the EngramWeave overall design as the architecture baseline.
+- Follow the current phase implementation plan and TODO as the execution scope.
+- Do not redesign established architecture unless there is a concrete conflict or implementation blocker. Report such conflicts before changing the design.
+- If project documents conflict, do not silently choose one interpretation; identify the conflict and use the narrowest change that preserves established architecture.
+
+## Implementation
+
+- Prefer the smallest implementation that satisfies the current contract and acceptance criteria.
+- Reuse existing project utilities and mature dependencies before introducing new infrastructure.
+- Do not create empty future packages, generic frameworks, compatibility layers, or abstractions without a current concrete use case.
+- Avoid unrelated refactors while implementing a scoped task.
+- Keep modules cohesive; split code when a file begins to own multiple unrelated responsibilities.
+- New dependencies must have a clear current-purpose justification
+
+## Local conventions
+
+- Use English for code, comments, identifiers, commits, and code blocks.
+- Keep local implementation artifacts out of committed documentation. Raw test reports, AI execution logs, checkpoint reports, debugging notes, temporary evidence, and similar phase-specific materials belong under the gitignored `.local/<phase>/` directory, such as `.local/p1/`.
+- Reserve `docs/` for stable, intentional project documentation that is meant to be maintained and committed.
+- Local-only fixture notes, provenance records, validation evidence, or temporary fixture documentation also belong under `.local/<phase>/`, unless they describe committed, reusable fixtures and are intended to be permanent repository documentation.
+
 ## Testing
 
-### Testing Strategy
+- Add or update tests when needed to protect behavior, contracts, safety, persistence, recovery, or meaningful regressions.
+- For test changes or changes to the code they cover, follow `tests/AGENTS.md`, even when no test edit is planned.
+- Follow `tests/AGENTS.md` for detailed testing rules.
 
-- Tests exist to protect behavior, invariants, contracts, persistence, safety, recovery, idempotency, parsing boundaries, and meaningful regressions — not to maximize test count or coverage.
-- Prefer manual smoke tests for obvious user-facing UI/Desktop behavior when it can be verified faster and more reliably by direct use. Automate it only when protecting an important regression, contract, or safety invariant.
-- Keep E2E tests few, thin, and focused on critical cross-component paths.
-- Do not duplicate the same behavior across unit, integration, and E2E layers without a specific regression risk.
-- At checkpoints involving user-visible behavior, provide a short manual acceptance checklist.
+## Documentation
 
-### Test Organization
-
-- Organize tests by subsystem and behavior. Do not create monolithic catch-all test files; split files that grow to cover unrelated behaviors or subsystems.
-- Move reusable fixtures and helpers into dedicated modules rather than expanding E2E or integration test files.
-- Reuse Vitest and existing repository test utilities.
-- Tests should verify externally observable behavior and invariants rather than reproduce production implementation logic.
-- Prefer the smallest targeted test that proves the change, then run broader regression tests as needed.
-
-### Testing Infrastructure
-
-- Do not create custom test frameworks, validation projects/apps, DSLs, temporary test applications, benchmark projects, or large testing harnesses unless explicitly required or the existing test stack is technically insufficient.
-- If substantial new validation infrastructure appears necessary, stop and explain why before creating it.
+- All `README.md` files and committed project documentation should follow the documentation principles in `docs/AGENTS.md`, even when they are outside `docs/`.

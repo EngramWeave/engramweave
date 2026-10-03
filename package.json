@@ -1,0 +1,23 @@
+{
+  "name": "engramweave",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "engines": { "node": "24.x", "npm": "11.x" },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "build": "npm run build --workspace @engramweave/contracts && npm run build --workspace @engramweave/core",
+    "typecheck": "npm run build --workspace @engramweave/contracts && npm run typecheck --workspaces && tsc -p tsconfig.tests.json",
+    "test": "npm run build && vitest run",
+    "core": "node packages/core/dist/main.js",
+    "fixtures:prepare": "node scripts/prepare-real-fixtures.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.12.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}
