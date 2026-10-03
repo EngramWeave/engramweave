@@ -4,11 +4,19 @@ import { CoreError, errorCode } from './errors.js';
 import { createHttp, type HttpRuntime } from './http.js';
 import { acquireInstance, type Instance } from './instance.js';
 import type { Config } from '@engramweave/contracts';
+import { openDatabase } from './storage/database.js';
+import { ScanJobs } from './jobs/scans.js';
+import type { CoreServices } from './http/context.js';
 
 export async function startCore(input: Config) {
   const config = await validateConfig(input);
   const runtime: HttpRuntime = { token: null, status: 'starting' };
-  const server = createHttp(config, runtime);
+  let services: CoreServices | undefined;
+  let database: CoreServices['db'] | undefined;
+  const server = createHttp(config, runtime, () => {
+    if (!services) throw new CoreError('CORE_UNAVAILABLE', 'Core database is not initialized', 503);
+    return services;
+  });
   let instance: Instance | undefined;
   try {
     // A port-conflicting process must never touch ownership metadata or the database.
@@ -19,19 +27,20 @@ export async function startCore(input: Config) {
     }
     instance = await acquireInstance(config);
     runtime.token = instance.token;
-    // T03 provides real database initialization. T01 deliberately cannot report ready.
-    runtime.status = 'degraded';
+    database = await openDatabase(config);
+    services = { db: database, jobs: new ScanJobs(database, config.vault_path), instance_id: instance.id };
+    runtime.status = 'ready';
     let closed = false;
     return { config, instance_id: instance.id, server, async close() {
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); }
-      finally { await instance?.close(); }
+      try { await server.close(); await services?.jobs.close(); }
+      finally { try { database?.close(); } finally { await instance?.close(); } }
     } };
   } catch (error) {
-    await server.close();
-    await instance?.close();
+    try { await server.close(); await services?.jobs.close(); }
+    finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }
 }
@@ -41,7 +50,7 @@ async function main() {
     throw new CoreError('CONFIG_ERROR', 'Usage: node packages/core/dist/main.js --config <absolute config.json>', 400);
   }
   const core = await startCore(await loadConfig(process.argv[3]));
-  console.log(JSON.stringify({ event: 'core_started', instance_id: core.instance_id, port: core.config.port, status: 'degraded', database_initialized: false }));
+  console.log(JSON.stringify({ event: 'core_started', instance_id: core.instance_id, port: core.config.port, status: 'ready', database_initialized: true }));
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
@@ -50,10 +59,15 @@ async function main() {
     console.log(JSON.stringify({ event: 'core_stopped' }));
     if (process.connected) process.disconnect();
   };
-  process.once('SIGINT', () => { void stop(); });
-  process.once('SIGTERM', () => { void stop(); });
+  const requestStop = () => { void stop().catch(error => {
+    console.error(JSON.stringify({ event: 'core_failed', code: errorCode(error) }));
+    process.exitCode = 1;
+    if (process.connected) process.disconnect();
+  }); };
+  process.once('SIGINT', requestStop);
+  process.once('SIGTERM', requestStop);
   if (process.send) process.on('message', message => {
-    if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'stop') void stop();
+    if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'stop') requestStop();
   });
 }
 

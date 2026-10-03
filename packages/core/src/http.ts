@@ -2,13 +2,17 @@ import Fastify, { type FastifyError } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
 import { API, API_VERSION, CORE_VERSION, LIMITS, type Config, type Health } from '@engramweave/contracts';
 import { CoreError } from './errors.js';
+import type { CoreServices } from './http/context.js';
+import { registerRegistryRoutes } from './http/registry.js';
+import { registerDocumentRoutes } from './http/documents.js';
+import { registerSearchRoute } from './http/search.js';
 
 export interface HttpRuntime {
   token: string | null;
   status: Health['status'];
 }
 
-export function createHttp(config: Config, runtime: HttpRuntime) {
+export function createHttp(config: Config, runtime: HttpRuntime, services?: () => CoreServices) {
   const server = Fastify({
     logger: false,
     bodyLimit: LIMITS.capture_json_bytes,
@@ -29,7 +33,7 @@ export function createHttp(config: Config, runtime: HttpRuntime) {
     }
   });
   server.setErrorHandler((error, _request, reply) => {
-    if (error instanceof CoreError) return reply.code(error.status).send({ error: { code: error.code, message: error.message, details: null } });
+    if (error instanceof CoreError) return reply.code(error.status).send({ error: { code: error.code, message: error.message, details: error.details } });
     const failure = error as FastifyError;
     if (failure.validation) return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Request does not match the API schema', details: null } });
     if (failure.statusCode === 413) return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request exceeds the size limit', details: null } });
@@ -41,5 +45,10 @@ export function createHttp(config: Config, runtime: HttpRuntime) {
     const health: Health = { status: runtime.status, core_version: CORE_VERSION, api_version: API_VERSION };
     return reply.code(runtime.status === 'ready' ? 200 : 503).send(health);
   } });
+  if (services) {
+    registerRegistryRoutes(server, config, services);
+    registerDocumentRoutes(server, config, services);
+    registerSearchRoute(server, services);
+  }
   return server;
 }

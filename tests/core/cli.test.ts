@@ -25,14 +25,15 @@ it('runs the built standalone CLI and stops through its owned IPC channel with r
     const token = await readFile(path.join(isolated.config.data_dir, 'token'), 'utf8');
     const url = `http://127.0.0.1:${isolated.config.port}`;
     const health = await fetch(`${url}/v1/health`);
-    expect(health.status).toBe(503);
-    expect(await health.json()).toEqual({ status: 'degraded', core_version: '0.1.0', api_version: '1' });
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ status: 'ready', core_version: '0.1.0', api_version: '1' });
     const query = await fetch(`${url}/v1/health?secret=${token}`);
     expect(query.status).toBe(400);
     const unauthorized = await fetch(`${url}/v1/status`);
     expect(unauthorized.status).toBe(401);
     const authorized = await fetch(`${url}/v1/status`, { headers: { authorization: `Bearer ${token}` } });
-    expect(authorized.status).toBe(404);
+    expect(authorized.status).toBe(200);
+    expect(await authorized.json()).toMatchObject({ index_generation: 0, active_job: null, database_initialized: true });
     child.send({ type: 'stop' });
     expect(await exited).toEqual([0, null]);
     expect(errors).toBe('');
@@ -42,7 +43,7 @@ it('runs the built standalone CLI and stops through its owned IPC channel with r
     expect(output).not.toContain(isolated.config.vault_path);
     expect(output).not.toContain('secret');
     expect(await readdir(isolated.config.vault_path)).toEqual([]);
-    expect(await readdir(isolated.config.data_dir)).toEqual(['token']);
+    expect(await readdir(isolated.config.data_dir)).toEqual(['core.sqlite', 'token']);
   } finally {
     if (child.exitCode === null && child.signalCode === null) { child.kill(); await exited; }
     await isolated.cleanup();

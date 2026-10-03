@@ -1,6 +1,6 @@
 # EngramWeave P1
 
-本地单 Vault Core，文件为真相源，SQLite 将作为可重建投影。当前 T00/T01 范围已实现：工程骨架、共享契约、配置校验、本机运行所有权及 health。扫描、查询、Capture 和 Desktop 尚未实现。
+本地单 Vault Core，文件为真相源，SQLite 保存可重建投影。支持显式扫描、Source 登记、当前文件读取、扫描任务查询和基础关键词检索。Capture、资产引用解析、完整恢复入口和 Desktop 尚未实现。
 
 ## 安装与验证
 
@@ -13,7 +13,7 @@ npm run typecheck
 npm test
 ```
 
-真实资料和原样基线保持只读。测试配置/故障操作只在 `.local/test-runs/` 子目录进行。
+原样基线保留作可复核输入。自动测试的编辑、删除和故障操作只在 `.local/test-runs/` 子目录进行；用户明确授权的测试 Vault 也可手工用于验证。
 
 ## 独立启动
 
@@ -36,15 +36,15 @@ npm run core -- --config D:/code/EngramWeave/engramweave/.local/manual/config.js
 curl.exe -i http://127.0.0.1:43127/v1/health
 ```
 
-T01 预期 `503 {"status":"degraded","core_version":"0.1.0","api_version":"1"}`，因为数据库在 T03 实现；503 不能视为完整 Core 已可用。Ctrl+C 正常停止；由宿主持有的 Node IPC 可发送 `{type:"stop"}` 正常关闭。停止后 instance.lock 移除，本地 token 保留；不开放 shutdown HTTP。
+数据库初始化成功后，预期 `200 {"status":"ready","core_version":"0.1.0","api_version":"1"}`；尚未扫描时索引代次为0。Ctrl+C 正常停止；宿主可通过自有Node IPC发送 `{type:"stop"}`。停止后instance.lock移除，数据库和token保留；不开放shutdown HTTP。
 
-应用数据不会进入 Vault，不创建完整 Vault 目录树。Host 必须为配置的 `127.0.0.1:port`，拒绝浏览器 Origin。访问其余路由需 `Authorization: Bearer <data_dir/token>`，T01 尚未注册的路由认证后返回404。token不得贴到日志或公开材料。
+应用数据不会进入Vault，不创建完整Vault目录树。Host必须为配置的`127.0.0.1:port`，拒绝浏览器Origin。health之外的路由需`Authorization: Bearer <data_dir/token>`。token不得贴到日志或公开材料。
 
 ## 工程与检查
 
 - `packages/contracts/`：唯一 JSON Schema、推导类型、限额和九个 P1 API 契约。
-- `packages/core/src/`：main/config/http/instance/errors。先绑端口、取独占运行权，后续才打开数据库。没有 Desktop 包和后续业务空包。
+- `packages/core/src/`：运行入口、受限文件读取、解析、SQLite投影、显式扫描、任务、HTTP及检索。先绑端口、取独占运行权，再打开数据库。
 - `tests/core/`、`tests/contracts/`：Vitest 配置/HTTP/运行所有权/独立CLI/契约验证；`tests/helpers/` 为隔离目录工具。
-- `docs/`：决定记录与冻结契约。
+- `docs/`：维护的使用与开发说明；本地验证证据位于`.local/p1/`。
 
-运行后检查：启动后 health 应503且不含路径；未认证 `/v1/status` 应401；同端口第二Core应失败；关闭后可重新启动；隔离Vault文件与目录不变。当前限制和技术版本见 [决定记录](docs/p1-decisions.md)，冻结含义见 [契约说明](docs/p1-contracts.md)。
+运行后检查：health返回ready且不含路径；未认证status为401；第二实例被拒绝；显式扫描后才能检索文件；关闭后可重新启动；普通扫描与读取保持文件哈希不变。API操作与限制见[Core说明](docs/core.md)。

@@ -119,10 +119,12 @@ export const PaginationQuerySchema = object({
 const page = <T extends TSchema>(item: T) => ({ items: Type.Array(item), total: count, limit: Type.Integer({ minimum: 1, maximum: LIMITS.max_limit }), offset: count });
 const indexed = { index_generation: count, indexed_at: nullable(instant) };
 export const JobsResponseSchema = object(page(JobSchema));
+export type PaginationQuery = Static<typeof PaginationQuerySchema>;
 export const SourcesQuerySchema = object({ ...PaginationQuerySchema.properties,
   state: Type.Optional(DocumentStateSchema), source_type: Type.Optional(nonempty), path_prefix: Type.Optional(VaultPathSchema),
 });
 export const SourcesResponseSchema = object({ ...page(SourceSchema), ...indexed });
+export type SourcesQuery = Static<typeof SourcesQuerySchema>;
 export const SearchQuerySchema = object({ ...PaginationQuerySchema.properties,
   scope: Type.Optional(enumeration(['knowledge', 'sources', 'all'])),
   q: Type.Optional(Type.String({ maxLength: LIMITS.query_characters })),
@@ -132,6 +134,7 @@ export const SearchQuerySchema = object({ ...PaginationQuerySchema.properties,
 export type SearchQuery = Static<typeof SearchQuerySchema>;
 export const SearchResponseSchema = object({ ...page(SearchResultSchema), ...indexed });
 export const ScanRequestSchema = object({ mode: ScanModeSchema });
+export type ScanRequest = Static<typeof ScanRequestSchema>;
 export const ScanResponseSchema = object({ job: JobSchema, reused: Type.Boolean() });
 export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: Type.String({ minLength: 1 }) });
 export const CaptureResponseSchema = object({ path: CapturePathSchema, revision: RevisionSchema, created: Type.Boolean(), scan_required: Type.Literal(true) });

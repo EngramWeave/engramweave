@@ -17,15 +17,15 @@ describe('real runtime ownership', () => {
     const token = await readFile(path.join(config.data_dir, 'token'), 'utf8');
     expect(token).toMatch(/^[a-f0-9]{64}$/);
     const health = await fetch(`http://127.0.0.1:${config.port}/v1/health`);
-    expect(health.status).toBe(503);
-    expect(await health.json()).toMatchObject({ status: 'degraded' });
+    expect(health.status).toBe(200);
+    expect(await health.json()).toMatchObject({ status: 'ready' });
     await first.close();
     const second = await startCore(config);
     cleanups.push(second.close);
     expect(second.instance_id).not.toBe(first.instance_id);
     expect(await readFile(path.join(config.data_dir, 'token'), 'utf8')).toBe(token);
     expect(await readdir(config.vault_path)).toEqual([]);
-    expect(await readdir(config.data_dir)).toEqual(['instance.lock', 'token']);
+    expect(await readdir(config.data_dir)).toEqual(['core.sqlite', 'instance.lock', 'token']);
   });
   it('rejects second instances on both the same port and a different port before modifying ownership', async () => {
     const { config } = await fixture();
@@ -37,7 +37,7 @@ describe('real runtime ownership', () => {
     await expect(startCore({ ...config, port: await unusedPort() })).rejects.toMatchObject({ code: 'INSTANCE_BUSY' });
     expect(await readFile(path.join(config.data_dir, 'instance.lock'), 'utf8')).toBe(lock);
     expect(await readFile(path.join(config.data_dir, 'token'), 'utf8')).toBe(token);
-    expect((await fetch(`http://127.0.0.1:${config.port}/v1/health`)).status).toBe(503);
+    expect((await fetch(`http://127.0.0.1:${config.port}/v1/health`)).status).toBe(200);
   });
   it('does not write data files if an unrelated service owns the HTTP port', async () => {
     const { config } = await fixture();

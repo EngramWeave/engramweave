@@ -1,7 +1,7 @@
 import type { ErrorCode } from '@engramweave/contracts';
 
 export class CoreError extends Error {
-  constructor(public readonly code: ErrorCode, message: string, public readonly status = 500) {
+  constructor(public readonly code: ErrorCode, message: string, public readonly status = 500, public readonly details: Record<string, unknown> | null = null) {
     super(message);
   }
 }

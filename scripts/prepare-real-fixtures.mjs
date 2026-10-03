@@ -33,7 +33,7 @@ for (const [name, size, expected, newline] of samples) {
   if (hash(await readFile(target)) !== expected) throw new Error(`Fixture differs: ${target}`);
   if (hash(await readFile(original)) !== expected) throw new Error(`Original changed: ${original}`);
   evidence.push({ path: relative, bytes: size, sha256: expected, encoding: 'UTF-8 without BOM', newline, crlf, lf, original_unchanged: true, copy_identical: true });
-  // This verifies supplied fixture expectations with YAML itself; T02 owns the product parser.
+  // Baseline verification uses YAML directly and is independent of the product parser.
   const parts = content.split(/^---\r?$/m);
   assert.equal(parts.length, 3);
   const metadata = parseDocument(parts[1], { version: '1.2', schema: 'core', uniqueKeys: true }).toJS({ maxAliasCount: 50 });
@@ -67,7 +67,7 @@ const evidenceDir = path.resolve('.local/p1/evidence');
 await mkdir(evidenceDir, { recursive: true });
 await writeFile(path.join(evidenceDir, 't00-fixture-hashes.json'), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(path.join(evidenceDir, 't00-baseline.json'), `${JSON.stringify({
-  verification: 'T00 fixture baseline with installed YAML library; not the T02 product parser',
+  verification: 'Original fixture baseline with installed YAML library, independent of the product parser',
   expected_source_count: 2, expected_knowledge_count: 0, actual_scan_executed: false, records: baselines,
 }, null, 2)}\n`);
 console.log(JSON.stringify(report, null, 2));
