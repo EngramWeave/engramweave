@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TypeCompiler } from '@sinclair/typebox/compiler';
 import { Value } from '@sinclair/typebox/value';
 import type { TSchema } from '@sinclair/typebox';
-import { API, CaptureRequestSchema, DocumentSchema, JobSchema, SearchQuerySchema, VaultPathSchema } from '@engramweave/contracts';
+import { API, CaptureRequestSchema, DocumentSchema, JobSchema, ProcessingStatusSchema, SearchQuerySchema, VaultPathSchema } from '@engramweave/contracts';
 import type { Document, Job } from '@engramweave/contracts';
 
 describe('frozen P1 contracts', () => {
@@ -32,7 +32,7 @@ describe('frozen P1 contracts', () => {
       revision: 'a'.repeat(64), indexed_revision: null, indexed_at: null, index_generation: 0, index_stale: true,
       metadata: { description: 'extension', author: ['Name'], published: '2026-10-03' },
       annotation: '', diagnostics: [], original_references: [], source_type: 'web',
-      original_locator: 'https://example.com', captured_at: '2026-10-03', body: null,
+      original_locator: 'https://example.com', captured_at: '2026-10-03', processing_status: null, body: null,
       asset: { kind: 'inline_markdown', locator: '20_Sources/web.md', availability: 'available' },
       source_content: 'Original body', record_body: null,
     };
@@ -40,6 +40,15 @@ describe('frozen P1 contracts', () => {
     expect(Value.Check(DocumentSchema, { ...document, body: 'Duplicated body' })).toBe(false);
     expect(Value.Check(DocumentSchema, { ...document, record_body: 'Asset text' })).toBe(false);
     expect(Value.Check(DocumentSchema, { ...document, asset: { ...document.asset, kind: 'vault_file' } })).toBe(false);
+    expect(Value.Check(DocumentSchema, { ...document, processing_status: 'archived' })).toBe(true);
+    expect(Value.Check(DocumentSchema, { ...document, processing_status: 'ready' })).toBe(false);
+    const record = { ...document, asset: { kind: 'vault_file', locator: '20_Sources/asset.pdf', availability: 'unsupported' }, source_content: null, record_body: 'Record notes', processing_status: 'archived' };
+    expect(Value.Check(DocumentSchema, record)).toBe(true);
+  });
+  it('requires an explicit nullable archive property in Source responses', () => {
+    expect(Value.Check(ProcessingStatusSchema, null)).toBe(true);
+    expect(Value.Check(ProcessingStatusSchema, 'archived')).toBe(true);
+    for (const value of [undefined, '', 'ready', 'running', true, ['archived']]) expect(Value.Check(ProcessingStatusSchema, value)).toBe(false);
   });
   it('freezes search limits, fields and pagination boundaries', () => {
     expect(Value.Check(SearchQuerySchema, { q: 'counter++', scope: 'sources', fields: 'body,annotation', limit: 20, offset: 0 })).toBe(true);

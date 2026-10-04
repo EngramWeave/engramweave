@@ -14,7 +14,7 @@ import { copyRealSamples, realSamples, sha256, manualSource, writeDocument } fro
 vi.mock('node:fs/promises', { spy: true });
 
 const cleanups: (() => Promise<void>)[] = [];
-afterEach(async () => { vi.restoreAllMocks(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 async function fixture() {
   const isolated = await isolatedRuntime(); cleanups.push(isolated.cleanup);
   await mkdir(isolated.config.data_dir); await copyRealSamples(isolated.config.vault_path);
@@ -68,15 +68,20 @@ describe('explicit full scan publication', () => {
     expect(allDocuments(db)).toEqual(previous); expect(indexMeta(db)).toEqual(meta);
   });
   it('publishes an unstable file as invalid without retaining its preceding body', async () => {
-    const { db, scan } = await fixture();
+    const { db, scan, config } = await fixture();
     await scan();
+    const previousTime = allDocuments(db).find(row => row.path === realSamples[0]!.path)!.indexed_at;
+    await writeDocument(config.vault_path, '20_Sources/never-read.md', manualSource());
     const original = reading.readMarkdown;
     vi.spyOn(reading, 'readMarkdown').mockImplementation(async (...args) => {
-      if (args[1] === realSamples[0]!.path) throw new reading.FileProblem('FILE_UNSTABLE', 'invalid', 'Document changed during both attempts');
+      if (args[1] === realSamples[0]!.path || args[1] === '20_Sources/never-read.md') throw new reading.FileProblem('FILE_UNSTABLE', 'invalid', 'Document changed during both attempts');
       return original(...args);
     });
-    expect(await scan()).toMatchObject({ invalid: 1, source_count: 1 });
-    expect(allDocuments(db).find(row => row.path === realSamples[0]!.path)).toMatchObject({ state: 'invalid', body_markdown: '' });
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    expect(await scan()).toMatchObject({ invalid: 2, source_count: 1, unchanged: 1 });
+    expect(allDocuments(db).find(row => row.path === realSamples[0]!.path)).toMatchObject({ state: 'invalid', body_markdown: '', indexed_at: previousTime });
+    expect(allDocuments(db).find(row => row.path === '20_Sources/never-read.md')).toMatchObject({ state: 'invalid', indexed_at: null });
+    expect(indexMeta(db).last_scan_at).toBe('2030-01-01T00:00:00.000Z');
   });
   it('fails without publishing when more than 10,000 real candidate files are enumerated', async () => {
     const { db, config, scan } = await fixture();

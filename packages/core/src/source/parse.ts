@@ -8,10 +8,12 @@ export type Diagnostic = Source['diagnostics'][number];
 export interface ParsedDocument {
   kind: 'source' | 'knowledge'; state: 'ready' | 'invalid' | 'unsupported';
   title: string; source_type: string | null; captured_at: string | null; original_locator: string | null;
+  processing_status: Source['processing_status'];
   metadata: Record<string, unknown>; annotation: string; body_markdown: string;
   asset: Asset | null; diagnostics: Diagnostic[];
 }
 export const normalizeText = (text: string) => text.normalize('NFC').toLowerCase();
+export const processingStatus = (value: unknown): Source['processing_status'] => value === 'archived' ? 'archived' : null;
 export const stringList = (value: unknown): string[] => typeof value === 'string' ? [value] : Array.isArray(value) && value.every(item => typeof item === 'string') ? value : [];
 const validList = (value: unknown) => value == null || typeof value === 'string' || (Array.isArray(value) && value.every(item => typeof item === 'string'));
 const datePattern = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/;
@@ -50,9 +52,9 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
   const diagnostics: Diagnostic[] = [];
   const report = (code: string, message: string) => diagnostics.push({ code, message, path: relative });
   const result: ParsedDocument = { kind, state: 'ready', title: path.posix.basename(relative, path.posix.extname(relative)), source_type: null,
-    captured_at: null, original_locator: null, metadata: {}, annotation: '', body_markdown: '', asset: null, diagnostics };
+    captured_at: null, original_locator: null, processing_status: null, metadata: {}, annotation: '', body_markdown: '', asset: null, diagnostics };
   const fail = (code: string, message: string, state: 'invalid' | 'unsupported' = 'invalid') => {
-    result.state = state; result.metadata = {}; result.annotation = ''; result.body_markdown = ''; result.asset = null;
+    result.state = state; result.processing_status = null; result.metadata = {}; result.annotation = ''; result.body_markdown = ''; result.asset = null;
     report(code, message); return result;
   };
   let text: string;
@@ -82,6 +84,10 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
   if (metadata.title != null && typeof metadata.title !== 'string') return fail('INVALID_TITLE', 'Title must be a string');
   if (!validList(metadata.author) || !validList(metadata.tags)) return fail('INVALID_LIST', 'Author and tags must be strings or string lists');
   if (kind === 'source') {
+    if (metadata.processing_status != null && metadata.processing_status !== '' && metadata.processing_status !== 'archived') {
+      return fail('INVALID_PROCESSING_STATUS', 'Processing status must be archived, empty or null');
+    }
+    result.processing_status = processingStatus(metadata.processing_status);
     if (typeof metadata.source_type !== 'string' || !metadata.source_type.trim()) return fail('INVALID_SOURCE_TYPE', 'Source type must be a nonempty string');
     result.source_type = metadata.source_type;
     if (metadata.source != null && typeof metadata.source !== 'string') return fail('INVALID_LOCATOR', 'Source locator must be a string');
@@ -114,7 +120,7 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
 export function problemDocument(relative: string, error: unknown): ParsedDocument {
   const problem = error instanceof FileProblem ? error : new FileProblem('FILE_READ_ERROR', 'invalid', 'Document could not be read safely');
   return { kind: relative.startsWith('20_Sources/') ? 'source' : 'knowledge', state: problem.state,
-    title: path.posix.basename(relative), source_type: null, captured_at: null, original_locator: null,
+    title: path.posix.basename(relative), source_type: null, captured_at: null, original_locator: null, processing_status: null,
     metadata: {}, annotation: '', body_markdown: '', asset: null,
     diagnostics: [{ code: problem.code, message: problem.message, path: relative }] };
 }

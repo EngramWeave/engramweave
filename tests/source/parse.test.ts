@@ -8,6 +8,8 @@ describe('Source and Knowledge parsing', () => {
     const result = parseMarkdown(sample.path, bytes);
     expect(result.state).toBe('ready');
     expect(result.annotation).toBe('');
+    expect(result.processing_status).toBeNull();
+    expect(result.metadata).not.toHaveProperty('processing_status');
     expect(result.metadata).not.toHaveProperty('annotation');
     expect(result.metadata.author).toEqual([sample.author]);
     expect(result.metadata.published).toBe('2026-10-03');

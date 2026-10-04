@@ -51,6 +51,8 @@ export const DiagnosticsSchema = Type.Array(DiagnosticSchema);
 export const HealthSchema = object({ status: enumeration(['starting', 'ready', 'degraded']), core_version: nonempty, api_version: Type.Literal(API_VERSION) });
 export type Health = Static<typeof HealthSchema>;
 export const DocumentStateSchema = enumeration(['ready', 'invalid', 'missing', 'unsupported']);
+/** A read-only Source property; Registry readiness does not imply archival. */
+export const ProcessingStatusSchema = nullable(Type.Literal('archived'));
 export const DocumentKindSchema = enumeration(['source', 'knowledge']);
 export const ScanModeSchema = enumeration(['refresh', 'rebuild']);
 export const JobStatusSchema = enumeration(['queued', 'running', 'succeeded', 'failed', 'interrupted']);
@@ -77,6 +79,7 @@ export const ReferenceSchema = object({
 export const MetadataSchema = Type.Record(text, Type.Unknown());
 export const SourceSchema = object({
   id: nonempty, path: VaultPathSchema, title: text, source_type: nullable(text), state: DocumentStateSchema,
+  processing_status: ProcessingStatusSchema,
   revision: nullable(RevisionSchema), original_locator: nullable(text), captured_at: nullable(text),
   asset: nullable(AssetSchema), diagnostics: DiagnosticsSchema,
 });
@@ -88,7 +91,8 @@ const documentCommon = {
   original_references: Type.Array(ReferenceSchema),
 };
 const sourceCommon = { ...documentCommon, kind: Type.Literal('source'), record_path: VaultPathSchema,
-  source_type: nonempty, original_locator: nullable(text), captured_at: nullable(text), body: Type.Null() };
+  source_type: nonempty, original_locator: nullable(text), captured_at: nullable(text),
+  processing_status: ProcessingStatusSchema, body: Type.Null() };
 export const DocumentSchema = Type.Union([
   object({ ...sourceCommon,
     asset: object({ ...AssetSchema.properties, kind: Type.Literal('inline_markdown') }),

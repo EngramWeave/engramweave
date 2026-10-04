@@ -28,6 +28,8 @@ npm run core -- --config D:/path/to/config.json
 
 SQLite 缺失时建立空库，generation=0。health 在数据库初始化成功后返回200 ready；初始化期间返回503。ready 表示运行和数据库可用，不代表已扫描。损坏、版本或约束不匹配、Vault 绑定不同的数据库明确报错，保留文件，不自动删除或恢复。
 
+初始 SQLite schema_version=1，只有documents/jobs/meta三张表。documents.indexed_at允许null，以表示文件尚未成功读取校验；归档属性保存在metadata_json中，没有独立列或状态机。带indexed_at NOT NULL等不匹配约束的数据库返回SCHEMA_UNSUPPORTED，不自动转换或删除。验证不同布局时使用独立data_dir并保留旧库。
+
 Ctrl+C 正常停止；宿主持有的 Node IPC 可发送 `{type:"stop"}` 请求停止。正常停止等待当前扫描结束，移除本实例描述，保留数据库和 token；不开放 shutdown HTTP。遗留活动扫描在新进程启动时标 interrupted，须显式重试。
 
 ## 认证和请求
@@ -51,6 +53,10 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/search?scope=sources&q=counter
 ## 文档和查询
 
 GET `/v1/documents?path=...` 只读取受限路径的当前文件。metadata、annotation、source_content/record_body或Knowledge body分别返回。无登记时 indexed_revision/indexed_at=null、index_stale=true；登记后根据当前原始字节revision与索引revision判断新鲜度。搜索结果代表最后一次成功扫描，不实时刷新。
+
+Source列表与Source详情分别返回已发布投影和当前文件的processing_status，仅有archived/null。missing、null或空字符串按未归档读取；metadata保留原始表示，不自动添加字段。其他非空值或类型使Source invalid。该属性与ready独立：已归档和未归档Source都参与扫描与搜索，P1不提供归档动作或编译候选筛选。
+
+文件的indexed_at只在扫描实际稳定读取并计算revision后刷新，refresh复用解析也须重新读取字节；读取失败或missing保留先前校验时间，首次读取失败为null。列表indexed_at和status.last_scan_at表示一代投影发布完成，不能代表每条异常文件都读取成功。unchanged表示本轮读取后Record字节未变；Asset状态另行判断。详情读取不更新索引、时间或归档投影。
 
 Search默认scope=knowledge，可选sources/all。q按空白拆成最多8词，AND字面子串匹配，统一NFC和Unicode小写。字段为title/body/annotation/metadata；metadata只索引URL、source_type、tags，description等扩展字段不进入检索。支持source_type、单tag和按目录段匹配的path_prefix过滤；空q至少需一个过滤。
 

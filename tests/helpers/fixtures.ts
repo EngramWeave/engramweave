@@ -8,6 +8,15 @@ export const realSamples = [
 ].map(sample => ({ ...sample, path: `20_Sources/Web/2026-10/${sample.name}` }));
 export const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 export async function realBytes(relative: string) { return readFile(path.resolve('.local/fixtures/r1-vault', relative)); }
+/** R3 is a derived test input: one archive line inserted into an unchanged R1 copy. */
+export async function archivedSample(sample = realSamples[0]!) {
+  const original = await realBytes(sample.path);
+  if (sha256(original) !== sample.hash) throw new Error('Real fixture differs from its baseline');
+  const newline = original.subarray(0, 5).toString('utf8') === '---\r\n' ? '\r\n' : '\n';
+  const opening = Buffer.from(`---${newline}`);
+  if (!original.subarray(0, opening.length).equals(opening)) throw new Error('Real fixture has no Frontmatter');
+  return Buffer.concat([opening, Buffer.from(`processing_status: archived${newline}`), original.subarray(opening.length)]);
+}
 export async function copyRealSamples(vault: string) {
   for (const sample of realSamples) {
     const target = path.join(vault, sample.path);

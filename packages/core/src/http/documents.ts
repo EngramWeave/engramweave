@@ -33,7 +33,7 @@ export function registerDocumentRoutes(server: FastifyInstance, config: Config, 
       return document;
     }
     const source = { ...common, kind: 'source' as const, record_path: relative, source_type: parsed.source_type!,
-      original_locator: parsed.original_locator, captured_at: parsed.captured_at, body: null };
+      original_locator: parsed.original_locator, captured_at: parsed.captured_at, processing_status: parsed.processing_status, body: null };
     const asset = parsed.asset!;
     if (asset.kind === 'inline_markdown') {
       const document: Document = { ...source, asset: { ...asset, kind: 'inline_markdown' }, source_content: parsed.body_markdown, record_body: null };

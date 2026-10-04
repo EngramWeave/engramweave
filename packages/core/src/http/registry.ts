@@ -26,7 +26,7 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
     const { db } = services();
     const query = request.query as SourcesQuery;
     const { limit, offset } = pagination(query);
-    let rows = db.prepare("SELECT id,path_key,path,title,source_type,state,revision,original_locator,captured_at,asset_json,diagnostics_json FROM documents WHERE kind='source' AND state=? AND (? IS NULL OR source_type=?) ORDER BY path_key")
+    let rows = db.prepare("SELECT id,path_key,path,title,source_type,state,revision,original_locator,captured_at,metadata_json,asset_json,diagnostics_json FROM documents WHERE kind='source' AND state=? AND (? IS NULL OR source_type=?) ORDER BY path_key")
       .all(query.state ?? 'ready', query.source_type ?? null, query.source_type ?? null) as DocumentRow[];
     if (query.path_prefix !== undefined) rows = rows.filter(row => inPathPrefix(row.path, query.path_prefix!));
     const meta = indexMeta(db);

@@ -31,13 +31,14 @@ it('finds unchanged real Clipper files through the built standalone Core and rea
     }
     for (const sample of realSamples) {
       const document = await (await core.request(`/v1/documents?path=${encodeURIComponent(sample.path)}`)).json();
-      expect(document).toMatchObject({ kind: 'source', annotation: '', original_locator: sample.url, index_stale: false, revision: sample.hash, indexed_revision: sample.hash, record_body: null, body: null });
+      expect(document).toMatchObject({ kind: 'source', processing_status: null, annotation: '', original_locator: sample.url, index_stale: false, revision: sample.hash, indexed_revision: sample.hash, record_body: null, body: null });
       expect(document.metadata.author).toEqual([sample.author]);
       expect(document.metadata).not.toHaveProperty('annotation');
       expect(document.source_content).not.toContain(document.metadata.description);
       (evidence.document_checks as unknown[]).push({ path: document.path, revision: document.revision, indexed_revision: document.indexed_revision,
         index_stale: document.index_stale, annotation: document.annotation, original_locator: document.original_locator,
         dates_preserved: document.captured_at === '2026-10-03' && document.metadata.published === '2026-10-03',
+        processing_status: document.processing_status, processing_status_absent_in_metadata: !Object.hasOwn(document.metadata, 'processing_status'),
         author: document.metadata.author, description_separate: !document.source_content.includes(document.metadata.description) });
     }
     expect(await (await core.request('/v1/search?scope=sources&q=volatile&fields=annotation')).json()).toMatchObject({ total: 0 });

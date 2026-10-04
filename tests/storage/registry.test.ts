@@ -1,15 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
-import { mkdir, link } from 'node:fs/promises';
+import { mkdir, link, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openDatabase, indexMeta } from '../../packages/core/src/storage/database.js';
-import { allDocuments, publishScan } from '../../packages/core/src/storage/registry.js';
-import { parseMarkdown } from '../../packages/core/src/source/parse.js';
+import { allDocuments, publishScan, sourceItem } from '../../packages/core/src/storage/registry.js';
+import { parseMarkdown, problemDocument } from '../../packages/core/src/source/parse.js';
+import { FileProblem } from '../../packages/core/src/files/read.js';
 import { isolatedRuntime } from '../helpers/runtime.js';
 import { manualSource, sha256 } from '../helpers/fixtures.js';
 
 const cleanups: (() => Promise<void>)[] = [];
-afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
+afterEach(async () => { vi.useRealTimers(); for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 async function fixture() {
   const isolated = await isolatedRuntime(); cleanups.push(isolated.cleanup);
   await mkdir(isolated.config.data_dir);
@@ -48,6 +49,29 @@ describe('real SQLite projection and transactions', () => {
     expect(allDocuments(db)).toEqual(previous); expect(indexMeta(db)).toEqual(meta);
     expect(db.prepare("SELECT status FROM jobs WHERE id='b'").get()).toEqual({ status: 'running' });
   });
+  it('derives archival from metadata and advances file timestamps only after a successful content read', async () => {
+    const { db } = await fixture();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const firstTime = '2026-10-04T01:00:00.000Z';
+    const secondTime = '2026-10-04T02:00:00.000Z';
+    const archived = projection('20_Sources/archived.md', manualSource('archive body', 'processing_status: archived\n'));
+    vi.setSystemTime(new Date(firstTime));
+    job(db, 'a'); publishScan(db, 'a', [archived, projection('20_Sources/later-missing.md')], ['20_Sources'], []);
+    expect(sourceItem(allDocuments(db)[0]!)).toMatchObject({ state: 'ready', processing_status: 'archived' });
+    expect(JSON.parse(allDocuments(db)[0]!.metadata_json).processing_status).toBe('archived');
+    expect(db.prepare('PRAGMA table_info(documents)').all().map(column => (column as { name: string }).name)).not.toContain('processing_status');
+    const failedRead = (relative: string) => ({ path: relative, parsed: problemDocument(relative, new FileProblem('FILE_UNSTABLE', 'invalid', 'Unstable file')), revision: null, size: null, mtime: null });
+    vi.setSystemTime(new Date(secondTime));
+    job(db, 'b');
+    expect(publishScan(db, 'b', [archived, failedRead('20_Sources/never-read.md')], ['20_Sources'], [])).toMatchObject({ unchanged: 1, invalid: 1, missing: 1 });
+    expect(allDocuments(db).map(row => [row.path, row.indexed_at])).toEqual([
+      ['20_Sources/archived.md', secondTime], ['20_Sources/later-missing.md', firstTime], ['20_Sources/never-read.md', null],
+    ]);
+    expect(indexMeta(db).last_scan_at).toBe(secondTime);
+    vi.setSystemTime(new Date('2026-10-04T03:00:00.000Z'));
+    job(db, 'c'); publishScan(db, 'c', [failedRead(archived.path)], ['20_Sources'], []);
+    expect(allDocuments(db)[0]).toMatchObject({ state: 'invalid', indexed_at: secondTime, body_markdown: '' });
+  });
   it('refuses Vault mismatch and unsupported versions without changing the original database', async () => {
     const { db, config, root } = await fixture();
     db.close();
@@ -64,5 +88,14 @@ describe('real SQLite projection and transactions', () => {
     await expect(openDatabase(config)).rejects.toMatchObject({ code: 'SCHEMA_UNSUPPORTED' });
     await link(path.join(config.data_dir, 'core.sqlite'), path.join(root, 'database-alias.sqlite'));
     await expect(openDatabase(config)).rejects.toMatchObject({ code: 'DATABASE_ERROR' });
+  });
+  it('preserves an incompatible non-nullable timestamp database instead of silently changing it', async () => {
+    const { db, config } = await fixture();
+    const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE name='documents'").get() as { sql: string }).sql;
+    db.exec('DROP TABLE documents'); db.exec(ddl.replace('indexed_at TEXT', 'indexed_at TEXT NOT NULL')); db.close();
+    const filename = path.join(config.data_dir, 'core.sqlite');
+    const previousHash = sha256(await readFile(filename));
+    await expect(openDatabase(config)).rejects.toMatchObject({ code: 'SCHEMA_UNSUPPORTED' });
+    expect(sha256(await readFile(filename))).toBe(previousHash);
   });
 });

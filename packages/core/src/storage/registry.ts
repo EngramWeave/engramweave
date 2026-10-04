@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { Job, Source } from '@engramweave/contracts';
 import { documentPathKey } from '../files/paths.js';
-import { normalizeText, stringList, type ParsedDocument } from '../source/parse.js';
+import { normalizeText, processingStatus, stringList, type ParsedDocument } from '../source/parse.js';
 import { indexMeta } from './database.js';
 
 export interface DocumentRow {
@@ -10,7 +10,7 @@ export interface DocumentRow {
   revision: string | null; size: number | null; mtime: number | null; title: string; source_type: string | null;
   captured_at: string | null; original_locator: string | null; metadata_json: string; asset_json: string | null;
   diagnostics_json: string; annotation: string; body_markdown: string; title_norm: string; body_norm: string;
-  annotation_norm: string; metadata_norm: string; indexed_at: string;
+  annotation_norm: string; metadata_norm: string; indexed_at: string | null;
 }
 export interface Projection { path: string; parsed: ParsedDocument; revision: string | null; size: number | null; mtime: number | null }
 export const getDocument = (db: Database.Database, relative: string) => db.prepare('SELECT * FROM documents WHERE path_key=?').get(documentPathKey(relative)) as DocumentRow | undefined;
@@ -18,11 +18,14 @@ export const allDocuments = (db: Database.Database) => db.prepare('SELECT * FROM
 export function sourceItem(row: DocumentRow): Source {
   return { id: row.id, path: row.path, title: row.title, source_type: row.source_type, state: row.state, revision: row.revision,
     original_locator: row.original_locator, captured_at: row.captured_at,
+    processing_status: processingStatus((JSON.parse(row.metadata_json) as Record<string, unknown>).processing_status),
     asset: row.asset_json === null ? null : JSON.parse(row.asset_json), diagnostics: JSON.parse(row.diagnostics_json) };
 }
 export function parsedRow(row: DocumentRow): ParsedDocument {
+  const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
   return { kind: row.kind, state: row.state === 'missing' ? 'invalid' : row.state, title: row.title, source_type: row.source_type,
-    captured_at: row.captured_at, original_locator: row.original_locator, metadata: JSON.parse(row.metadata_json),
+    captured_at: row.captured_at, original_locator: row.original_locator, metadata,
+    processing_status: processingStatus(metadata.processing_status),
     annotation: row.annotation, body_markdown: row.body_markdown, asset: row.asset_json ? JSON.parse(row.asset_json) : null,
     diagnostics: JSON.parse(row.diagnostics_json) };
 }
@@ -60,14 +63,15 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
         diagnostics_json: JSON.stringify(parsed.diagnostics), annotation, body_markdown: body,
         title_norm: searchable ? normalizeText(parsed.title) : '', body_norm: normalizeText(body), annotation_norm: normalizeText(annotation),
         metadata_norm: normalizeText([parsed.original_locator ?? '', parsed.source_type ?? '', ...stringList(metadata.tags)].join('\n')),
-        indexed_at: indexedAt };
+        // Publication alone is not a successful content read or hash validation.
+        indexed_at: projection.revision !== null ? indexedAt : old?.indexed_at ?? null };
       if (!searchable) row.metadata_norm = '';
       insert.run(row);
     }
     for (const old of allDocuments(db)) {
       if (seen.has(old.path_key) || old.state === 'missing') continue;
-      db.prepare("UPDATE documents SET state='missing', metadata_json='{}',asset_json=NULL,annotation='',body_markdown='',title_norm='',body_norm='',annotation_norm='',metadata_norm='',diagnostics_json=?,indexed_at=? WHERE id=?")
-        .run(JSON.stringify([{ code: 'FILE_MISSING', message: 'Document is absent from the completed scan', path: old.path }]), indexedAt, old.id);
+      db.prepare("UPDATE documents SET state='missing', metadata_json='{}',asset_json=NULL,annotation='',body_markdown='',title_norm='',body_norm='',annotation_norm='',metadata_norm='',diagnostics_json=? WHERE id=?")
+        .run(JSON.stringify([{ code: 'FILE_MISSING', message: 'Document is absent from the completed scan', path: old.path }]), old.id);
       summary.missing++;
     }
     db.prepare('UPDATE meta SET index_generation=?,last_scan_at=?,known_scan_roots=? WHERE id=1').run(generation, indexedAt, JSON.stringify(knownRoots));

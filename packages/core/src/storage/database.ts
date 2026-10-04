@@ -14,7 +14,7 @@ CREATE TABLE documents (
   captured_at TEXT, original_locator TEXT, metadata_json TEXT NOT NULL, asset_json TEXT,
   diagnostics_json TEXT NOT NULL, annotation TEXT NOT NULL, body_markdown TEXT NOT NULL,
   title_norm TEXT NOT NULL, body_norm TEXT NOT NULL, annotation_norm TEXT NOT NULL,
-  metadata_norm TEXT NOT NULL, indexed_at TEXT NOT NULL
+  metadata_norm TEXT NOT NULL, indexed_at TEXT
 );
 CREATE TABLE jobs (
   id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind='scan_vault'),
