@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { createInterface } from 'node:readline';
 import { loadConfig, validateConfig } from './config.js';
 import { CoreError, errorCode } from './errors.js';
 import { createHttp, type HttpRuntime } from './http.js';
@@ -75,6 +76,12 @@ async function main() {
   if (process.send) process.on('message', message => {
     if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'stop') requestStop();
   });
+  // Only a native host-created private pipe opts into this lifecycle protocol.
+  if (process.env.ENGRAMWEAVE_HOST_STDIN === '1') {
+    const control = createInterface({ input: process.stdin });
+    control.on('line', line => { if (line === '{"type":"stop"}') { control.close(); process.stdin.destroy(); requestStop(); } });
+    control.once('close', requestStop);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

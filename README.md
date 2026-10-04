@@ -1,6 +1,6 @@
 # EngramWeave P1
 
-本地单 Vault Core，文件为真相源，SQLite 保存可重建投影。支持显式扫描、Source 登记、当前文件读取、扫描任务查询、基础关键词检索、受限的本地 Asset 与来源引用解析、web/manual Capture 和离线数据库隔离恢复。Desktop 尚未实现。
+本地单 Vault Core，文件为真相源，SQLite 保存可重建投影。支持显式扫描、Source 登记、当前文件读取、扫描任务查询、基础关键词检索、受限的本地 Asset 与来源引用解析、web/manual Capture 和离线数据库隔离恢复。Tauri Desktop 提供受限 Core 启停、连接、状态、Sources/Jobs、Search 和原生打开。
 
 Source的processing_status是只读的长期归档属性：archived或null，与登记ready独立。已归档资料照常扫描和检索；Core不生成或写入归档标记。文件indexed_at只在扫描成功读取并计算hash后更新，详情读取不刷新投影。
 
@@ -50,6 +50,7 @@ Capture只按请求创建20_Sources下的目标父目录，接收完整web/manua
 
 - `packages/contracts/`：唯一 JSON Schema、推导类型、限额和九个 P1 API 契约。
 - `packages/core/src/`：运行入口、受限文件读取、解析、SQLite投影、显式扫描、任务、HTTP及检索。先绑端口、取独占运行权，再打开数据库。
+- `apps/desktop/`：React 展示与 Rust 原生宿主；不直接扫描、解析或操作 SQLite。使用说明见 [Desktop](docs/desktop.md)。
 - `tests/core/`、`tests/contracts/`：Vitest 配置/HTTP/运行所有权/独立CLI/契约验证；`tests/helpers/` 为隔离目录工具。
 - `docs/`：维护的使用与开发说明；本地验证证据位于`.local/p1/`。
 

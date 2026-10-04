@@ -2,6 +2,8 @@
 
 Core 只处理一个 Vault，通过显式扫描登记 `20_Sources/**/*.md` 和 `40_Knowledge/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、文本检索投影和扫描任务。启动不自动扫描，不执行 AI，也不写知识文件。
 
+Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop.md)。Native Host 创建的 Core 通过 `ENGRAMWEAVE_HOST_STDIN=1` 启用私有 stdin 生命周期控制：固定一行 `{"type":"stop"}` 或父管道关闭触发正常停止；普通独立 CLI 不读取 stdin 命令，也不开放 HTTP 停止路由。
+
 ## 运行
 
 使用 Windows 本地 NTFS、Node 24.x 和 npm 11.x；项目验证版本为 `.node-version` 与 package-lock.json 中的版本。PowerShell 用于固定的 Windows 文件属性查询，以识别 Node Stats 未暴露的 Hidden 与 ReparsePoint 属性；它不执行用户命令或读取正文。

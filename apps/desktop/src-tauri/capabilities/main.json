@@ -1,0 +1,13 @@
+{
+  "identifier": "main",
+  "description": "Local P1 window with fixed native host commands only",
+  "windows": ["main"],
+  "permissions": [
+    "allow-host-info",
+    "allow-core-connect",
+    "allow-core-start",
+    "allow-core-stop",
+    "allow-core-request",
+    "allow-open-document"
+  ]
+}
