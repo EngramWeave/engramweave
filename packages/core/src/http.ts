@@ -6,6 +6,7 @@ import type { CoreServices } from './http/context.js';
 import { registerRegistryRoutes } from './http/registry.js';
 import { registerDocumentRoutes } from './http/documents.js';
 import { registerSearchRoute } from './http/search.js';
+import { registerCaptureRoute } from './http/captures.js';
 
 export interface HttpRuntime {
   token: string | null;
@@ -32,11 +33,17 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
       throw new CoreError('UNAUTHORIZED', 'Local authentication is required', 401);
     }
   });
-  server.setErrorHandler((error, _request, reply) => {
+  server.setErrorHandler((error, request, reply) => {
     if (error instanceof CoreError) return reply.code(error.status).send({ error: { code: error.code, message: error.message, details: error.details } });
     const failure = error as FastifyError;
     if (failure.validation) return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Request does not match the API schema', details: null } });
-    if (failure.statusCode === 413) return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request exceeds the size limit', details: null } });
+    if (failure.statusCode === 413) {
+      // Fastify closes parser failures before a large upload finishes, which can reset
+      // the client instead of delivering 413. Discard the rest without buffering it.
+      reply.removeHeader('connection');
+      request.raw.resume();
+      return reply.code(413).send({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request exceeds the size limit', details: null } });
+    }
     if (failure.statusCode === 400 || failure.statusCode === 415) return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON request', details: null } });
     return reply.code(500).send({ error: { code: 'IO_ERROR', message: 'Core operation failed', details: null } });
   });
@@ -49,6 +56,7 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
     registerRegistryRoutes(server, config, services);
     registerDocumentRoutes(server, config, services);
     registerSearchRoute(server, services);
+    registerCaptureRoute(server, config, runtime);
   }
   return server;
 }

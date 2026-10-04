@@ -1,8 +1,16 @@
-import { fork } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
+import { promisify } from 'node:util';
 import { once } from 'node:events';
 import { writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Config } from '@engramweave/contracts';
+
+export async function recoverCore(root: string, config: Config) {
+  const filename = path.join(root, 'config.json');
+  await writeFile(filename, JSON.stringify(config));
+  const result = await promisify(execFile)(process.execPath, [path.resolve('packages/core/dist/main.js'), '--recover', '--config', filename], { windowsHide: true, timeout: 40_000 });
+  return { stdout: result.stdout, stderr: result.stderr, result: JSON.parse(result.stdout) };
+}
 
 export async function standaloneCore(root: string, config: Config) {
   const filename = path.join(root, 'config.json');

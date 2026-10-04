@@ -7,6 +7,7 @@ import type { Config } from '@engramweave/contracts';
 import { openDatabase } from './storage/database.js';
 import { ScanJobs } from './jobs/scans.js';
 import type { CoreServices } from './http/context.js';
+import { recoverDatabase } from './storage/recover.js';
 
 export async function startCore(input: Config) {
   const config = await validateConfig(input);
@@ -46,8 +47,13 @@ export async function startCore(input: Config) {
 }
 
 async function main() {
+  if (process.argv.length === 5 && process.argv[2] === '--recover' && process.argv[3] === '--config' && process.argv[4]) {
+    const result = await recoverDatabase(await loadConfig(process.argv[4]));
+    console.log(JSON.stringify({ event: 'core_recovered', ...result }));
+    return;
+  }
   if (process.argv.length !== 4 || process.argv[2] !== '--config' || !process.argv[3]) {
-    throw new CoreError('CONFIG_ERROR', 'Usage: node packages/core/dist/main.js --config <absolute config.json>', 400);
+    throw new CoreError('CONFIG_ERROR', 'Usage: node packages/core/dist/main.js [--recover] --config <absolute config.json>', 400);
   }
   const core = await startCore(await loadConfig(process.argv[3]));
   console.log(JSON.stringify({ event: 'core_started', instance_id: core.instance_id, port: core.config.port, status: 'ready', database_initialized: true }));
@@ -60,7 +66,7 @@ async function main() {
     if (process.connected) process.disconnect();
   };
   const requestStop = () => { void stop().catch(error => {
-    console.error(JSON.stringify({ event: 'core_failed', code: errorCode(error) }));
+    console.error(JSON.stringify({ event: 'core_failed', code: errorCode(error), ...(error instanceof CoreError && error.details ? { details: error.details } : {}) }));
     process.exitCode = 1;
     if (process.connected) process.disconnect();
   }); };
@@ -73,7 +79,7 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   void main().catch(error => {
-    console.error(JSON.stringify({ event: 'core_failed', code: errorCode(error) }));
+    console.error(JSON.stringify({ event: 'core_failed', code: errorCode(error), ...(error instanceof CoreError && error.details ? { details: error.details } : {}) }));
     process.exitCode = 1;
   });
 }

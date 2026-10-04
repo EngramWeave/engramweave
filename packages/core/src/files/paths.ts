@@ -32,17 +32,26 @@ export async function resolveMarkdown(vault: string, input: string, nativeAttrib
 
 /** Asset checks share the same containment and native attribute boundary as documents. */
 export async function resolveVaultFile(vault: string, input: string, nativeAttributesChecked = false): Promise<string> {
-  const relative = normalizeVaultPath(input);
+  return resolveVaultEntry(vault, input, false, nativeAttributesChecked);
+}
+
+export async function resolveVaultDirectory(vault: string, input: string): Promise<string> {
+  return resolveVaultEntry(vault, input, true, false);
+}
+
+async function resolveVaultEntry(vault: string, input: string, directory: boolean, nativeAttributesChecked: boolean): Promise<string> {
+  const relative = directory && input === '' ? '' : normalizeVaultPath(input);
   if (relative.split('/').some(excludedName)) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Excluded paths are not permitted', 403);
-  const absolute = path.join(vault, ...relative.split('/'));
+  const parts = relative === '' ? [] : relative.split('/');
+  const absolute = path.join(vault, ...parts);
   if (!containsPath(vault, absolute)) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Path escapes the Vault', 403);
   const segments: string[] = [vault];
   let current = vault;
-  for (const part of relative.split('/')) { current = path.join(current, part); segments.push(current); }
+  for (const part of parts) { current = path.join(current, part); segments.push(current); }
   try {
     for (const [index, segment] of segments.entries()) {
       const info = await lstat(segment);
-      if (info.isSymbolicLink() || (index < segments.length - 1 ? !info.isDirectory() : !info.isFile())) {
+      if (info.isSymbolicLink() || (directory || index < segments.length - 1 ? !info.isDirectory() : !info.isFile())) {
         throw new CoreError('PATH_OUTSIDE_SCOPE', 'Linked or special paths are not permitted', 403);
       }
       if (!nativeAttributesChecked && index > 0 && (await readdir(path.dirname(segment))).filter(name => name.toLowerCase() === path.basename(segment).toLowerCase()).length > 1) {

@@ -142,6 +142,8 @@ export type ScanRequest = Static<typeof ScanRequestSchema>;
 export const ScanResponseSchema = object({ job: JobSchema, reused: Type.Boolean() });
 export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: Type.String({ minLength: 1 }) });
 export const CaptureResponseSchema = object({ path: CapturePathSchema, revision: RevisionSchema, created: Type.Boolean(), scan_required: Type.Literal(true) });
+export type CaptureRequest = Static<typeof CaptureRequestSchema>;
+export type CaptureResponse = Static<typeof CaptureResponseSchema>;
 export const StatusSchema = object({
   ...HealthSchema.properties, instance_id: nonempty, vault_path: nonempty, data_dir: nonempty,
   database_initialized: Type.Boolean(), active_job: nullable(JobSchema),

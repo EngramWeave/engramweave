@@ -11,6 +11,7 @@ import { parseMarkdown, problemDocument } from '../source/parse.js';
 import { getDocument, parsedRow, publishScan, type Projection } from '../storage/registry.js';
 import { indexMeta } from '../storage/database.js';
 import { resolveDocumentReferences } from '../source/references.js';
+import { isCaptureTemporaryName } from '../files/publication.js';
 
 class ScanFailure extends CoreError { constructor(message: string) { super('IO_ERROR', message); } }
 export interface Enumeration { paths: string[]; roots: string[]; warnings: Source['diagnostics'] }
@@ -23,6 +24,7 @@ export async function enumerateMarkdown(vault: string, knownRoots: string[]): Pr
     const visit = async (relative: string) => {
       const absolute = path.join(vault, relative);
       const names = await readdir(absolute);
+      for (const name of names.filter(isCaptureTemporaryName)) result.warnings.push({ code: 'CAPTURE_TEMPORARY_REMAINS', message: 'Capture temporary name remains; no automatic cleanup was performed', path: `${relative}/${name}` });
       const children = names.filter(name => !excludedName(name));
       const attrs = await windowsAttributes(children.map(name => path.join(absolute, name)));
       const seen = new Set<string>();

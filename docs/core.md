@@ -74,7 +74,33 @@ Wiki Link保留raw、alias和anchor。无`./`或`../`前缀的目标按Vault相�
 
 Knowledge的metadata.sources和Source的source/asset原字符串均通过original_references返回解析结果。Asset状态为available/missing/unverified/unsupported；引用歧义或越界通过original_references的ambiguous/outside_scope及Asset诊断表达，登记state仍可为ready。详情检查当前资产可访问性，列表保存最后成功扫描的状态；两种扫描模式都会重新检查Asset，Record字节不变也不跳过。index_stale仅比较Record字节投影，不表示资产检查时间。
 
-本版本尚未实现Capture API、完整数据库恢复入口、Desktop或性能验收。API使用[共享契约](../packages/contracts/src/index.ts)。
+本版本尚未实现Desktop或性能验收。API使用[共享契约](../packages/contracts/src/index.ts)。
+
+## Capture
+
+POST `/v1/captures` 接收path和markdown，拒绝未知字段和非字符串值。path只允许20_Sources内安全Markdown路径；Core仅按请求创建目标父目录。输入须为完整的web/manual inline Raw Source，具有非空正文；不接受Knowledge、独立Asset Record、其他Source类型或正文编辑。URL只作为metadata读取，不抓取网页。已有合法processing_status按原字节保留，不生成归档属性。
+
+JSON请求最多8MiB，UTF-8 Markdown最多5MiB，均按字节限制，超限413；流式请求同样受限制。输入验证后，目标同目录排他创建`.engramweave-capture-<UUID>.tmp`，完整写入、flush、关闭，再以NTFS硬链接创建最终路径。已有目标无法被硬链接替换；不支持硬链接时明确失败，没有rename/copy覆盖回退。清理仅删除本次请求创建且仍能确认身份的临时文件。
+
+首次创建201、created=true；目标路径和全部字节相同的重放200、created=false；不同字节409 PATH_CONFLICT。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
+
+进程在发布前退出，最终路径不存在，可重新提交；发布后响应丢失，同字节重试返回200。残留临时名字不被扫描为文档；扫描对严格匹配Core临时命名的残留报告CAPTURE_TEMPORARY_REMAINS，不自动删除残留或其他文件。临时名字的存在本身不构成允许自动删除的证明。
+
+## 数据库恢复
+
+正常rebuild由POST scans的mode=rebuild执行；新代事务发布前仍查询上一代，失败不会暴露部分结果。缺库启动会建立generation=0的空库，不自动扫描；当前文件仍可读，需显式扫描恢复登记。损坏、较新schema或不匹配约束报错，原库保留。
+
+需要隔离旧库时，先停止Core，再执行离线命令：
+
+```powershell
+npm run core -- --recover --config D:/path/to/config.json
+```
+
+命令使用与Core一致的data_dir命名管道独占锁，不对任意PID发送信号；活动Core、无法确认退出的旧实例描述都会阻止恢复。它重新校验Vault/data_dir边界，仅操作配置应用数据目录内的core.sqlite、core.sqlite-journal、core.sqlite-wal、core.sqlite-shm，预检全部成员必须是非链接的普通文件，硬链接别名也被拒绝。token、其他数据文件、Vault资产不参与隔离。
+
+每次以独立recovery-时间-UUID目录保留旧数据库家族，再创建新库并执行一次rebuild。成功输出core_recovered、backup_dir、isolated_files与成功Job。备份不会自动删除；缺库也可直接按普通启动/扫描流程恢复，不必先隔离。
+
+文件隔离由逐个文件移动完成；如果中途失败，已移入备份的文件和仍在原位的成员都保留，错误输出backup_dir和isolated_files。新库创建或扫描失败也保留旧备份、新库及可持久化的失败Job诊断，不自动回滚覆盖文件。确认原因后可以再次显式恢复；每次使用新备份目录。恢复允许内部ID/Job历史变化，path/revision、Annotation、已有归档属性、正文与支持的语义查询均从文件重建。
 
 ## 验证
 
@@ -87,6 +113,7 @@ npm test
 npm exec vitest run tests/source tests/files tests/storage tests/discovery
 npm exec vitest run tests/http tests/e2e/source-slice.test.ts
 npm exec vitest run tests/jobs tests/source/references.test.ts tests/http/assets.test.ts tests/files/publication.test.ts
+npm exec -- vitest run tests/capture tests/http/captures.test.ts tests/storage/recovery.test.ts tests/storage/recovery-failures.test.ts tests/discovery/rebuild.test.ts tests/e2e/capture-recovery.test.ts
 ```
 
 采集可在Core关闭时由现有Clipper直接落盘。验证这条路径应实际剪藏后启动Core、检查尚未扫描时列表为空，再显式扫描、读详情、用真实正文词查询、重复扫描并比较文件哈希。仓库模板版本不等于浏览器实际安装版本，应分别记录。

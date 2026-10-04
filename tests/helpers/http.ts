@@ -1,4 +1,4 @@
-import type { Job } from '@engramweave/contracts';
+import type { Config, Job } from '@engramweave/contracts';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -8,11 +8,15 @@ import { isolatedRuntime } from './runtime.js';
 export async function httpRuntime(prepare?: (vault: string) => Promise<void>) {
   const isolated = await isolatedRuntime();
   if (prepare) await prepare(isolated.config.vault_path);
-  const core = await startCore(isolated.config);
-  const token = await readFile(path.join(isolated.config.data_dir, 'token'), 'utf8');
-  const request = (route: string, init: RequestInit = {}) => fetch(`http://127.0.0.1:${isolated.config.port}${route}`, { ...init,
+  const connected = await httpCore(isolated.config);
+  return { ...isolated, ...connected, async cleanup() { await connected.core.close(); await isolated.cleanup(); } };
+}
+export async function httpCore(config: Config) {
+  const core = await startCore(config);
+  const token = await readFile(path.join(config.data_dir, 'token'), 'utf8');
+  const request = (route: string, init: RequestInit = {}) => fetch(`http://127.0.0.1:${config.port}${route}`, { ...init,
     headers: { authorization: `Bearer ${token}`, ...init.headers } });
-  return { ...isolated, core, request, async cleanup() { await core.close(); await isolated.cleanup(); } };
+  return { core, request };
 }
 export async function finishedJob(request: (route: string) => Promise<Response>, id: string): Promise<Job> {
   const deadline = Date.now() + 12_000;
