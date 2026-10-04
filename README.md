@@ -1,6 +1,6 @@
 # EngramWeave P1
 
-本地单 Vault Core，文件为真相源，SQLite 保存可重建投影。支持显式扫描、Source 登记、当前文件读取、扫描任务查询和基础关键词检索。Capture、资产引用解析、完整恢复入口和 Desktop 尚未实现。
+本地单 Vault Core，文件为真相源，SQLite 保存可重建投影。支持显式扫描、Source 登记、当前文件读取、扫描任务查询、基础关键词检索，以及受限的本地 Asset 与来源引用解析。Capture、完整恢复入口和 Desktop 尚未实现。
 
 Source的processing_status是只读的长期归档属性：archived或null，与登记ready独立。已归档资料照常扫描和检索；Core不生成或写入归档标记。文件indexed_at只在扫描成功读取并计算hash后更新，详情读取不刷新投影。
 

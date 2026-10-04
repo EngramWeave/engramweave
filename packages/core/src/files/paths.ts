@@ -27,7 +27,13 @@ export function markdownPath(input: string): string {
 
 /** Both scans and detail reads check each path segment without following links. */
 export async function resolveMarkdown(vault: string, input: string, nativeAttributesChecked = false): Promise<string> {
-  const relative = markdownPath(input);
+  return resolveVaultFile(vault, markdownPath(input), nativeAttributesChecked);
+}
+
+/** Asset checks share the same containment and native attribute boundary as documents. */
+export async function resolveVaultFile(vault: string, input: string, nativeAttributesChecked = false): Promise<string> {
+  const relative = normalizeVaultPath(input);
+  if (relative.split('/').some(excludedName)) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Excluded paths are not permitted', 403);
   const absolute = path.join(vault, ...relative.split('/'));
   if (!containsPath(vault, absolute)) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Path escapes the Vault', 403);
   const segments: string[] = [vault];
@@ -40,7 +46,7 @@ export async function resolveMarkdown(vault: string, input: string, nativeAttrib
         throw new CoreError('PATH_OUTSIDE_SCOPE', 'Linked or special paths are not permitted', 403);
       }
       if (!nativeAttributesChecked && index > 0 && (await readdir(path.dirname(segment))).filter(name => name.toLowerCase() === path.basename(segment).toLowerCase()).length > 1) {
-        throw new CoreError('PATH_OUTSIDE_SCOPE', 'Case-folded path is ambiguous', 403);
+        throw new CoreError('PATH_OUTSIDE_SCOPE', 'Case-folded path is ambiguous', 403, { reason: 'ambiguous' });
       }
     }
     if (!nativeAttributesChecked && (await windowsAttributes(segments)).some(item => item.reparse || item.hidden)) {

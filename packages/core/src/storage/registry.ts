@@ -4,6 +4,7 @@ import type { Job, Source } from '@engramweave/contracts';
 import { documentPathKey } from '../files/paths.js';
 import { normalizeText, processingStatus, stringList, type ParsedDocument } from '../source/parse.js';
 import { indexMeta } from './database.js';
+import { retainFinishedJobs } from '../jobs/retention.js';
 
 export interface DocumentRow {
   id: string; path_key: string; path: string; kind: 'source' | 'knowledge'; state: Source['state'];
@@ -77,6 +78,7 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
     db.prepare('UPDATE meta SET index_generation=?,last_scan_at=?,known_scan_roots=? WHERE id=1').run(generation, indexedAt, JSON.stringify(knownRoots));
     const changed = db.prepare("UPDATE jobs SET status='succeeded',finished_at=?,summary_json=?,error_json=NULL WHERE id=? AND status='running'").run(indexedAt, JSON.stringify(summary), jobId);
     if (changed.changes !== 1) throw new Error('Publishing scan has no running Job');
+    retainFinishedJobs(db);
     return summary;
   })();
 }

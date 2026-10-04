@@ -32,6 +32,8 @@ SQLite 缺失时建立空库，generation=0。health 在数据库初始化成功
 
 Ctrl+C 正常停止；宿主持有的 Node IPC 可发送 `{type:"stop"}` 请求停止。正常停止等待当前扫描结束，移除本实例描述，保留数据库和 token；不开放 shutdown HTTP。遗留活动扫描在新进程启动时标 interrupted，须显式重试。
 
+仅保留最近100个结束Job，按finished_at降序、created_at降序、ID升序确定边界；queued/running不参与清理。启动中断标记和清理在同一事务完成，成功扫描的清理属于发布事务，失败Job的清理属于错误状态事务。清理只删除Job行，不触碰文件资产。
+
 ## 认证和请求
 
 GET health 不需要认证，也不含 Vault 路径。其他 API 使用 data_dir 中的 token；不在浏览器存储或日志中保存 token。Host 必须精确匹配配置的 `127.0.0.1:port`；所有浏览器 Origin 被拒绝，Desktop 应使用原生桥接。
@@ -66,7 +68,13 @@ Search默认scope=knowledge，可选sources/all。q按空白拆成最多8词，A
 
 Source必须具有type=raw_source、非空source_type。日期保持原精度；annotation缺失/null读取为空字符串；author/tags接受字符串或字符串数组；未知JSON兼容metadata保留。Knowledge允许无Frontmatter。非法YAML、重复键、未知tag、非UTF-8、目录/类型冲突不参与查询。内部ID不写入Markdown。
 
-本版本尚未实现Capture API、Asset/Provenance本地解析、完整数据库恢复入口、Desktop或性能验收。非inline资产仅保留引用与unverified/unsupported状态，不提取内容。未来实现必须继续使用[共享契约](../packages/contracts/src/index.ts)。
+普通Source没有asset时，正文是inline Markdown；`.source.md`必须有asset，或有可识别的外部source locator。非inline的source_content为null，record_body只表示Record自身描述，不能当作附件正文。Asset检查不读取二进制内容。
+
+Wiki Link保留raw、alias和anchor。无`./`或`../`前缀的目标按Vault相对路径解析；显式相对路径以当前Record目录为起点，规范化后仍必须位于Vault内。来源文档链接限于20_Sources和40_Knowledge，可省略`.md`；省略时检查原目标和追加`.md`的候选，两者都存在则ambiguous，不搜索全Vault同名文件。锚点不验证段落。隐藏/临时路径、Windows设备名/ADS、symlink/junction和大小写冲突均被拒绝。允许的外部http/https/zotero URI只标unverified，不联网或执行scheme。
+
+Knowledge的metadata.sources和Source的source/asset原字符串均通过original_references返回解析结果。Asset状态为available/missing/unverified/unsupported；引用歧义或越界通过original_references的ambiguous/outside_scope及Asset诊断表达，登记state仍可为ready。详情检查当前资产可访问性，列表保存最后成功扫描的状态；两种扫描模式都会重新检查Asset，Record字节不变也不跳过。index_stale仅比较Record字节投影，不表示资产检查时间。
+
+本版本尚未实现Capture API、完整数据库恢复入口、Desktop或性能验收。API使用[共享契约](../packages/contracts/src/index.ts)。
 
 ## 验证
 
@@ -78,6 +86,7 @@ npm run typecheck
 npm test
 npm exec vitest run tests/source tests/files tests/storage tests/discovery
 npm exec vitest run tests/http tests/e2e/source-slice.test.ts
+npm exec vitest run tests/jobs tests/source/references.test.ts tests/http/assets.test.ts tests/files/publication.test.ts
 ```
 
 采集可在Core关闭时由现有Clipper直接落盘。验证这条路径应实际剪藏后启动Core、检查尚未扫描时列表为空，再显式扫描、读详情、用真实正文词查询、重复扫描并比较文件哈希。仓库模板版本不等于浏览器实际安装版本，应分别记录。

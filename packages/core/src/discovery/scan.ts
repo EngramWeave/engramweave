@@ -10,6 +10,7 @@ import { readMarkdown } from '../files/read.js';
 import { parseMarkdown, problemDocument } from '../source/parse.js';
 import { getDocument, parsedRow, publishScan, type Projection } from '../storage/registry.js';
 import { indexMeta } from '../storage/database.js';
+import { resolveDocumentReferences } from '../source/references.js';
 
 class ScanFailure extends CoreError { constructor(message: string) { super('IO_ERROR', message); } }
 export interface Enumeration { paths: string[]; roots: string[]; warnings: Source['diagnostics'] }
@@ -78,6 +79,7 @@ export async function scanVault(db: Database.Database, vault: string, jobId: str
       const previous = getDocument(db, relative);
       const parsed = mode === 'refresh' && previous?.state === 'ready' && previous.revision === file.revision
         ? parsedRow(previous) : parseMarkdown(relative, file.bytes);
+      await resolveDocumentReferences(vault, relative, parsed);
       projection = { path: relative, parsed, revision: file.revision, size: file.size, mtime: file.mtime };
     } catch (error) {
       if (error instanceof ScanFailure) throw error;

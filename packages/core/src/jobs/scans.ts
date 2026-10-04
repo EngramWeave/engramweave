@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import type { Job } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { scanVault } from '../discovery/scan.js';
+import { retainFinishedJobs } from './retention.js';
 
 interface JobRow { id: string; kind: Job['kind']; mode: Job['mode']; status: Job['status']; created_at: string; started_at: string | null;
   finished_at: string | null; processed_files: number; summary_json: string | null; error_json: string | null }
@@ -15,8 +16,11 @@ export class ScanJobs {
   private stopping = false;
   constructor(private readonly db: Database.Database, private readonly vault: string) {
     // Persisted activity is not runnable after a process restart; never pretend it is live.
-    db.prepare("UPDATE jobs SET status='interrupted',finished_at=?,error_json=? WHERE status IN ('queued','running')")
-      .run(new Date().toISOString(), JSON.stringify({ code: 'CORE_UNAVAILABLE', message: 'Core exited before this scan completed', details: null }));
+    db.transaction(() => {
+      db.prepare("UPDATE jobs SET status='interrupted',finished_at=?,error_json=? WHERE status IN ('queued','running')")
+        .run(new Date().toISOString(), JSON.stringify({ code: 'CORE_UNAVAILABLE', message: 'Core exited before this scan completed', details: null }));
+      retainFinishedJobs(db);
+    })();
   }
   get(id: string): Job | undefined { const row = this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id) as JobRow | undefined; return row ? asJob(row) : undefined; }
   active(): Job | null { const row = this.db.prepare("SELECT * FROM jobs WHERE status IN ('queued','running')").get() as JobRow | undefined; return row ? asJob(row) : null; }
@@ -46,7 +50,10 @@ export class ScanJobs {
       const safe = error instanceof CoreError ? { code: error.code, message: error.message, details: null }
         : { code: 'IO_ERROR', message: 'Scan could not be completed', details: null };
       try {
-        this.db.prepare("UPDATE jobs SET status='failed',finished_at=?,error_json=? WHERE id=?").run(new Date().toISOString(), JSON.stringify(safe), id);
+        this.db.transaction(() => {
+          this.db.prepare("UPDATE jobs SET status='failed',finished_at=?,error_json=? WHERE id=?").run(new Date().toISOString(), JSON.stringify(safe), id);
+          retainFinishedJobs(this.db);
+        })();
       } catch {
         throw new CoreError('DATABASE_ERROR', 'Scan failure could not be persisted');
       }

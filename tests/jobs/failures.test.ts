@@ -17,11 +17,17 @@ async function fixture() {
 describe('scan database failure boundaries', () => {
   it('records a failed Job when the running transition fails, without publishing an index', async () => {
     const { db, jobs } = await fixture();
+    const insert = db.prepare("INSERT INTO jobs(id,kind,mode,status,created_at,finished_at) VALUES(?,'scan_vault','refresh','succeeded',?,?)");
+    for (let index = 0; index < 100; index++) {
+      const time = new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString();
+      insert.run(`old-${index}`, time, time);
+    }
     db.exec("CREATE TRIGGER reject_running BEFORE UPDATE OF status ON jobs WHEN NEW.status='running' BEGIN SELECT RAISE(ABORT,'injected write failure'); END;");
     const { job } = jobs.submit('refresh');
     await jobs.close();
     expect(jobs.get(job.id)).toMatchObject({ status: 'failed', summary: null, error: { code: 'IO_ERROR' } });
     expect(indexMeta(db).index_generation).toBe(0);
+    expect(jobs.list(100, 0).total).toBe(100); expect(jobs.get('old-0')).toBeUndefined();
   });
   it('handles a background rejection and reports an unwritable failure status during shutdown', async () => {
     const { db, jobs } = await fixture();

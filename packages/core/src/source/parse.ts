@@ -102,11 +102,10 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
     else if (!datePattern.test(result.captured_at) || Number.isNaN(Date.parse(result.captured_at))) report('CAPTURED_AT_FORMAT', 'Captured date has an unrecognized format');
     if (metadata.asset != null && (typeof metadata.asset !== 'string' || !metadata.asset.trim())) return fail('INVALID_ASSET', 'Asset must be a nonempty reference string');
     if (typeof metadata.asset === 'string' && !externalLocator(metadata.asset) && !/^\[\[.+\]\]$/.test(metadata.asset)) return fail('INVALID_ASSET', 'Asset must be a Wiki Link or an allowed external URI');
-    const locator = typeof metadata.asset === 'string' ? metadata.asset : /\.source\.md$/i.test(relative) ? result.original_locator : null;
+    const locator = typeof metadata.asset === 'string' ? metadata.asset : /\.source\.md$/i.test(relative) && result.original_locator && externalLocator(result.original_locator) ? result.original_locator : null;
     if (/\.source\.md$/i.test(relative) && (!locator || !externalLocator(locator) && !/^\[\[.+\]\]$/.test(locator))) return fail('ASSET_REQUIRED', 'Source Record requires an asset reference');
     result.asset = locator ? { kind: externalLocator(locator) ? 'external_ref' : 'vault_file', locator, availability: externalLocator(locator) ? 'unverified' : 'unsupported' }
       : { kind: 'inline_markdown', locator: relative, availability: 'available' };
-    // Local resolution and provenance are intentionally deferred to T08.
   } else if (!validList(metadata.sources)) report('UNSUPPORTED_PROVENANCE', 'Complex provenance is preserved but not resolved');
   const heading = firstHeading(body);
   result.title = typeof metadata.title === 'string' && metadata.title.trim() ? metadata.title : heading || result.title;
