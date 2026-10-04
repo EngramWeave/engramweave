@@ -79,7 +79,21 @@ fn native_open_builds_encoded_obsidian_uri_and_allows_only_original_webpage() {
     )
     .unwrap();
     assert!(uri.starts_with("obsidian://open?"));
+    assert!(uri.contains("vault=vault"));
     assert!(uri.contains("file=20_Sources%2Fr1.md"));
+    fs::write(
+        fixture.root.join("vault/20_Sources/spaced name.md"),
+        "---\ntype: raw_source\nsource_type: manual\ncaptured_at: 2026-10-03\n---\nbody",
+    )
+    .unwrap();
+    let spaced_uri = document_uri(
+        &mut desktop,
+        "20_Sources/spaced name.md".into(),
+        OpenTarget::Obsidian,
+    )
+    .unwrap();
+    assert!(spaced_uri.contains("file=20_Sources%2Fspaced%20name.md"));
+    assert!(!spaced_uri.contains('+'));
     let original = document_uri(
         &mut desktop,
         "20_Sources/r1.md".into(),

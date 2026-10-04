@@ -22,11 +22,17 @@ pub fn document_uri(host: &mut Host, path: String, target: OpenTarget) -> Result
             let vault = status["vault_path"]
                 .as_str()
                 .ok_or_else(|| Failure::new("INSTANCE_UNCERTAIN", "Vault is unavailable"))?;
+            let vault_name = std::path::Path::new(
+                vault.trim_start_matches(r"\\?\").trim_end_matches(['/', '\\']),
+            )
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| Failure::new("INSTANCE_UNCERTAIN", "Vault name is unavailable"))?;
             let mut uri = Url::parse("obsidian://open").unwrap();
             uri.query_pairs_mut()
-                .append_pair("vault", vault.trim_start_matches(r"\\?\"))
+                .append_pair("vault", vault_name)
                 .append_pair("file", &path);
-            Ok(uri.to_string())
+            Ok(uri.to_string().replace('+', "%20"))
         }
         OpenTarget::Original => {
             let locator = document["original_locator"].as_str().ok_or_else(|| {
