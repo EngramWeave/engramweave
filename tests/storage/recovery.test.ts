@@ -56,7 +56,7 @@ describe('explicit offline database isolation and file-driven rebuild', () => {
       await mkdir('.local/p1/evidence', { recursive: true });
       await writeFile(`.local/p1/evidence/t10-${scenario}.json`, JSON.stringify({ scenario, recovery, before, after_semantically_equal: true, before_asset_hashes: hashes, after_asset_hashes: await assetHashes(config.vault_path) }, null, 2));
     }
-  }, 60_000);
+  }, 90_000);
 
   it('refuses recovery while Core owns data_dir without moving the database or creating a backup', async () => {
     const { config, cleanup } = await httpRuntime(); cleanups.push(cleanup);

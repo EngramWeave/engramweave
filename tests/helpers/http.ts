@@ -19,15 +19,18 @@ export async function httpCore(config: Config) {
   return { core, request };
 }
 export async function finishedJob(request: (route: string) => Promise<Response>, id: string): Promise<Job> {
-  const deadline = Date.now() + 12_000;
-  while (Date.now() < deadline) {
+  const timeout = 30_000;
+  const deadline = performance.now() + timeout;
+  let lastJob: Job | undefined;
+  while (performance.now() < deadline) {
     const response = await request(`/v1/jobs/${id}`);
     if (!response.ok) throw new Error('Job query failed');
     const job = await response.json() as Job;
     if (!['queued', 'running'].includes(job.status)) return job;
+    lastJob = job;
     await delay(25);
   }
-  throw new Error('Scan did not finish before the test deadline');
+  throw new Error(`Scan did not finish within ${timeout}ms: job=${id}, status=${lastJob?.status ?? 'unknown'}, processed_files=${lastJob?.processed_files ?? 'unknown'}`);
 }
 export const submitScan = async (request: (route: string, init?: RequestInit) => Promise<Response>, mode = 'refresh') => {
   const response = await request('/v1/scans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) });

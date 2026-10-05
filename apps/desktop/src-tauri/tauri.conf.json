@@ -15,8 +15,8 @@
         "label": "main",
         "title": "EngramWeave",
         "create": false,
-        "width": 1240,
-        "height": 850,
+        "width": 1440,
+        "height": 960,
         "minWidth": 800,
         "minHeight": 600
       }

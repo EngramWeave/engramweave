@@ -1,11 +1,5 @@
-import type { JobPage, SearchPage, SourcePage } from './client';
+import type { JobPage, SearchPage } from './client';
 
-const states: Record<string, string> = {
-  ready: '可读取',
-  invalid: '无效',
-  missing: '文件缺失',
-  unsupported: '不支持',
-};
 const contexts: Record<string, string> = {
   source_content: '原文内容',
   record_body: 'Record 说明',
@@ -14,65 +8,6 @@ const contexts: Record<string, string> = {
   metadata: '元数据',
   title: '标题',
 };
-export function Sources({
-  page,
-  select,
-}: {
-  page: SourcePage | null;
-  select: (path: string) => void;
-}) {
-  if (!page?.items.length)
-    return (
-      <p className="empty">
-        没有符合条件的 Source。空库需要先显式扫描；也可更改登记状态筛选。
-      </p>
-    );
-  return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>标题 / 路径</th>
-            <th>来源类型</th>
-            <th>登记状态</th>
-            <th>归档属性</th>
-            <th>Asset</th>
-          </tr>
-        </thead>
-        <tbody>
-          {page.items.map((source) => (
-            <tr key={source.id}>
-              <td>
-                <button
-                  className="text-button"
-                  onClick={() => select(source.path)}
-                >
-                  {source.title || source.path}
-                </button>
-                <span className="path">{source.path}</span>
-                {source.diagnostics.map((item, index) => (
-                  <span className="diagnostic" key={index}>
-                    {item.code}: {item.message}
-                  </span>
-                ))}
-              </td>
-              <td>{source.source_type ?? '未知'}</td>
-              <td>{states[source.state]}</td>
-              <td>
-                {source.processing_status === 'archived' ? '已归档' : '未归档'}
-              </td>
-              <td>
-                {source.asset
-                  ? `${source.asset.kind} · ${source.asset.availability}`
-                  : '无'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 export function Jobs({ page }: { page: JobPage | null }) {
   if (!page?.items.length)
     return <p className="empty">没有扫描任务。扫描与重建均由用户显式触发。</p>;

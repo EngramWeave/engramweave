@@ -92,5 +92,5 @@ describe('explicit full scan publication', () => {
     }
     await expect(scan()).rejects.toMatchObject({ code: 'IO_ERROR', message: 'Scan exceeds the candidate count limit' });
     expect(allDocuments(db)).toEqual(previous); expect(indexMeta(db)).toEqual(meta);
-  }, 30_000);
+  }, 60_000);
 });

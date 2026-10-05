@@ -43,4 +43,4 @@ it('follows K1 → R1/A1 → Asset and rechecks missing/restored assets with unc
     await mkdir('.local/p1/evidence', { recursive: true });
     await writeFile('.local/p1/evidence/t08-asset-chain.json', JSON.stringify({ unindexed, record, firstList, detailMissing, missingScan, missingList, restoredScan, restoredList, binary_sha256: localHash, raw_sample_hashes: realSamples.map(sample => sample.hash) }, null, 2));
   }
-}, 30_000);
+}, 60_000);

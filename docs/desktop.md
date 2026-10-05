@@ -29,9 +29,11 @@ $env:ENGRAMWEAVE_CONFIG = 'D:/path/to/config.json'
 
 正常停止通过宿主私有 stdin 管道发送固定停止请求；Core 同时接受父管道关闭。超过 8 秒才通过自有子进程句柄强制终止。Rust 不根据残留 PID 发送信号，不删除数据库、Vault、token 或不确定的锁文件。启动、认证或实例校验失败后需显式重连；没有后台任务重提。
 
-扫描与重建分别提交 `refresh`/`rebuild`。只有活动任务期间轮询状态和 Jobs；结束或断线即停止。空闲时显示上次确认状态，可点击“刷新状态”检查外部进程。扫描后列表更新至新代次，搜索结果若来自旧代次会提示重新搜索。
+左下角“Refresh workspace”显式扫描整个配置范围，登记 Sources 和已有 Knowledge；不只是刷新当前列表。扫描与重建分别提交 `refresh`/`rebuild`，重建入口位于 Settings。只有活动任务期间轮询状态和 Jobs；结束或断线即停止。左下角状态卡中的 Jobs 和主页 Recent Activity 可查看任务记录。空闲时显示上次确认状态，可在 Settings 点击“刷新状态”检查外部进程。扫描后列表更新至新代次，搜索结果若来自旧代次会提示重新搜索。
 
-Sources 将登记状态与已归档/未归档分列显示；详情只读展示元数据、Annotation、Asset 和原始引用。缺失、不支持、无效资产通过状态和诊断表达。详情比较当前字节与登记 revision 提示索引过时，不更新数据库。Search 支持 Knowledge、Sources、全部，默认 Knowledge；Annotation 片段明确标为用户上下文。
+主页展示真实索引统计、Sources 与扫描任务。Review、ChangeSets 等规划区域仅作视觉展示，示例内容明确标记且操作不可用；知识图谱只作结构示意，不表示真实关联。
+
+Sources 使用列表与属性预览并排的布局。顶部统计和筛选表示真实登记状态：All、Ready、Invalid、Missing、Unsupported；可读取不表示已整合，归档属性单独显示。统计针对所有来源，不随类型筛选变化。类型筛选与分页使用 Core 接口，列表搜索框进入范围为 Sources 的全文搜索。选中资料后，右侧只读展示 Properties/元数据、标签、Annotation、Asset 和原始引用；不提供标签编辑、状态修改或正文编辑。缺失、不支持、无效资产通过状态和诊断表达。详情比较当前字节与登记 revision 提示索引过时，不更新数据库。Search 支持 Knowledge、Sources、全部，默认 Knowledge；Annotation 片段明确标为用户上下文。
 
 “在 Obsidian 中打开”由已验证的 Vault 与文档路径生成编码 URI；“打开原网页”只接受该文档的 HTTP/HTTPS 定位且拒绝嵌入凭证。不能由前端提供 URI。Zotero 等定位仅显示。所有打开操作由用户点击触发；需要系统注册 Obsidian URI 和默认浏览器。未注册的隔离 Vault 可能需要先在 Obsidian 中手工打开。
 
