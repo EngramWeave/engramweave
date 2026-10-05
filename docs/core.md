@@ -76,7 +76,7 @@ Wiki Link保留raw、alias和anchor。无`./`或`../`前缀的目标按Vault相�
 
 Knowledge的metadata.sources和Source的source/asset原字符串均通过original_references返回解析结果。Asset状态为available/missing/unverified/unsupported；引用歧义或越界通过original_references的ambiguous/outside_scope及Asset诊断表达，登记state仍可为ready。详情检查当前资产可访问性，列表保存最后成功扫描的状态；两种扫描模式都会重新检查Asset，Record字节不变也不跳过。index_stale仅比较Record字节投影，不表示资产检查时间。
 
-本版本尚未实现Desktop或性能验收。API使用[共享契约](../packages/contracts/src/index.ts)。
+API 使用[共享契约](../packages/contracts/src/index.ts)，文件和接口边界见[契约交接](p1-contracts.md)。Desktop 调用同一 Core；性能基准的可复现命令见本文末尾。
 
 ## Capture
 
@@ -85,6 +85,26 @@ POST `/v1/captures` 接收path和markdown，拒绝未知字段和非字符串值
 JSON请求最多8MiB，UTF-8 Markdown最多5MiB，均按字节限制，超限413；流式请求同样受限制。输入验证后，目标同目录排他创建`.engramweave-capture-<UUID>.tmp`，完整写入、flush、关闭，再以NTFS硬链接创建最终路径。已有目标无法被硬链接替换；不支持硬链接时明确失败，没有rename/copy覆盖回退。清理仅删除本次请求创建且仍能确认身份的临时文件。
 
 首次创建201、created=true；目标路径和全部字节相同的重放200、created=false；不同字节409 PATH_CONFLICT。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
+
+以下命令沿用前面的 `$coreHeaders`，只在隔离测试 Vault 中创建新的 Manual Source；网页 Source 可读取已有完整 Markdown 后使用同一接口提交。
+
+```powershell
+$manualMarkdown = @'
+---
+type: raw_source
+source_type: manual
+title: Manual capture
+captured_at: 2026-10-05
+annotation: User context
+---
+Original captured text.
+'@
+$captureBody = @{ path = '20_Sources/Manual/example.md'; markdown = $manualMarkdown } | ConvertTo-Json
+Invoke-RestMethod -Uri http://127.0.0.1:43127/v1/captures -Method Post -Headers $coreHeaders -ContentType 'application/json; charset=utf-8' -Body $captureBody
+$scan = Invoke-RestMethod -Uri http://127.0.0.1:43127/v1/scans -Method Post -Headers $coreHeaders -ContentType application/json -Body '{"mode":"refresh"}'
+Invoke-RestMethod -Uri "http://127.0.0.1:43127/v1/jobs/$($scan.job.id)" -Headers $coreHeaders
+Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/documents?path=20_Sources%2FManual%2Fexample.md' -Headers $coreHeaders
+```
 
 进程在发布前退出，最终路径不存在，可重新提交；发布后响应丢失，同字节重试返回200。残留临时名字不被扫描为文档；扫描对严格匹配Core临时命名的残留报告CAPTURE_TEMPORARY_REMAINS，不自动删除残留或其他文件。临时名字的存在本身不构成允许自动删除的证明。
 
@@ -119,3 +139,14 @@ npm exec -- vitest run tests/capture tests/http/captures.test.ts tests/storage/r
 ```
 
 采集可在Core关闭时由现有Clipper直接落盘。验证这条路径应实际剪藏后启动Core、检查尚未扫描时列表为空，再显式扫描、读详情、用真实正文词查询、重复扫描并比较文件哈希。仓库模板版本不等于浏览器实际安装版本，应分别记录。
+
+性能基准使用现有 Vitest、构建后的独立 Core、真实 loopback HTTP 和 SQLite。它构造 500 份、合计 25 MiB 的隔离 Markdown，其中两份 R1 保持原样；分别测首次 refresh、重复 refresh 和 rebuild，以及正文、Annotation、多词、元数据筛选五类查询。每类查询预热 3 次后测 30 次，以最近秩法计算 p95。扫描计时包含提交和完成轮询，查询计时包含 HTTP 和 JSON 解码；不清空 OS 文件缓存，不代表冷盘或最大限额性能。目标为每次扫描 ≤15 秒、每类热查询 p95≤1 秒，并比较所有文件前后哈希。
+
+```powershell
+npm run build
+$env:P1_PERFORMANCE = '1'
+try { npm exec -- vitest run tests/performance/p1.test.ts --maxWorkers=1 }
+finally { Remove-Item Env:P1_PERFORMANCE -ErrorAction SilentlyContinue }
+```
+
+性能测试默认跳过，不增加普通 `npm test` 的机器相关耗时。测量条件、逐次耗时和哈希保存在 gitignored `.local/p1/evidence/t13-performance.json`；与其他重负载任务同时运行会改变结果。

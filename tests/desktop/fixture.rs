@@ -53,16 +53,61 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
-        assert_eq!(
-            fs::read(self.root.join("vault/20_Sources/r1.md")).unwrap(),
-            self.original
+        // A second panic during unwinding aborts the whole MSVC test process.
+        // Preserve failed fixtures so the original failure remains diagnosable.
+        if std::thread::panicking() {
+            eprintln!("Preserving failed Desktop fixture: {}", self.root.display());
+            return;
+        }
+        assert!(
+            fs::read(self.root.join("vault/20_Sources/r1.md")).unwrap() == self.original,
+            "Desktop fixture asset bytes changed"
         );
-        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../.local/test-runs")
-            .canonicalize()
+        remove_isolated_fixture(&self.root);
+    }
+}
+
+fn remove_isolated_fixture(root: &std::path::Path) {
+    let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../.local/test-runs")
+        .canonicalize()
+        .unwrap();
+    let root = root.canonicalize().unwrap();
+    assert!(root.starts_with(&parent) && root != parent);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn failed_fixture_cleanup_preserves_the_original_panic_and_success_still_checks_bytes() {
+    for already_panicking in [true, false] {
+        let fixture = Fixture::new();
+        let root = fixture.root.clone();
+        let result = std::panic::catch_unwind(move || {
+            fs::write(
+                fixture.root.join("vault/20_Sources/r1.md"),
+                b"isolated injected edit",
+            )
             .unwrap();
-        let root = self.root.canonicalize().unwrap();
-        assert!(root.starts_with(&parent) && root != parent);
-        fs::remove_dir_all(root).unwrap();
+            if already_panicking {
+                panic!("injected original test failure");
+            }
+            drop(fixture);
+        });
+        assert!(result.is_err());
+        if already_panicking {
+            assert_eq!(
+                result.unwrap_err().downcast_ref::<&str>(),
+                Some(&"injected original test failure")
+            );
+        }
+        assert!(
+            root.exists(),
+            "Failed fixture must remain available for inspection"
+        );
+        assert_eq!(
+            fs::read(root.join("vault/20_Sources/r1.md")).unwrap(),
+            b"isolated injected edit"
+        );
+        remove_isolated_fixture(&root);
     }
 }

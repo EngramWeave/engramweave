@@ -1,3 +1,5 @@
+
+
 # EngramWeave P1
 
 本地单 Vault Core，文件为真相源，SQLite 保存可重建投影。支持显式扫描、Source 登记、当前文件读取、扫描任务查询、基础关键词检索、受限的本地 Asset 与来源引用解析、web/manual Capture 和离线数据库隔离恢复。Tauri Desktop 提供受限 Core 启停、连接、状态、Sources/Jobs、Search 和原生打开。
@@ -56,4 +58,4 @@ Capture只按请求创建20_Sources下的目标父目录，接收完整web/manua
 - `tests/core/`、`tests/contracts/`：Vitest 配置/HTTP/运行所有权/独立CLI/契约验证；`tests/helpers/` 为隔离目录工具。
 - `docs/`：维护的使用与开发说明；本地验证证据位于`.local/p1/`。
 
-运行后检查：health返回ready且不含路径；未认证status为401；第二实例被拒绝；显式扫描后才能检索文件；关闭后可重新启动；普通扫描与读取保持文件哈希不变。API操作与限制见[Core说明](docs/core.md)。
+运行后检查：health返回ready且不含路径；未认证status为401；第二实例被拒绝；显式扫描后才能检索文件；关闭后可重新启动；普通扫描与读取保持文件哈希不变。API操作与限制见[Core说明](docs/core.md)，文件 Schema、九个接口及恢复边界见[契约交接](docs/p1-contracts.md)。500份/25 MiB性能基准按Core说明单独运行，默认不加入普通回归耗时。
