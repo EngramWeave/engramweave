@@ -247,9 +247,6 @@ export function Dashboard({
   select: (path: string) => void;
 }) {
   const counts = status?.counts;
-  const issues = counts
-    ? counts.invalid + counts.missing + counts.unsupported
-    : '—';
   const overview = [
     {
       title: 'Notes',
@@ -294,12 +291,11 @@ export function Dashboard({
           tone="orange"
         />
         <StatCard
-          title="Maintenance"
-          value={issues}
-          caption="Vault registration diagnostics"
+          title="Knowledge Maintenance"
+          value="—"
+          caption="规划展示 · Knowledge upkeep"
           icon="layers"
           tone="green"
-          action={() => navigate('settings')}
         />
       </div>
       <div className="dashboard-middle">
@@ -446,31 +442,27 @@ export function Dashboard({
           </div>
         </Panel>
         <Panel
-          title="Maintenance Summary"
+          title="Knowledge Maintenance"
           icon="layers"
-          action={() => navigate('settings')}
+          planned
           className="maintenance-panel"
         >
           {[
             [
               'red',
-              `${counts?.invalid ?? '—'} invalid records`,
-              '登记无效 · 查看诊断信息',
+              'Potential duplicate notes',
+              '规划展示 · Similar content across sources',
             ],
             [
               'orange',
-              `${counts?.missing ?? '—'} missing files`,
-              '文件缺失 · 以扫描结果为准',
+              'Stale notes',
+              '规划展示 · Review or archive older notes',
             ],
-            [
-              'blue',
-              `${counts?.unsupported ?? '—'} unsupported records`,
-              '不支持的格式或资产',
-            ],
+            ['blue', 'Isolated notes', '规划展示 · Connections to explore'],
             [
               'violet',
-              'Knowledge organization',
-              '规划展示 · Future suggestions',
+              'Taxonomy suggestions',
+              '规划展示 · Improve organization',
             ],
           ].map(([tone, title, caption]) => (
             <div className="maintenance-row" key={title}>

@@ -31,7 +31,9 @@ $env:ENGRAMWEAVE_CONFIG = 'D:/path/to/config.json'
 
 左下角“Refresh workspace”显式扫描整个配置范围，登记 Sources 和已有 Knowledge；不只是刷新当前列表。扫描与重建分别提交 `refresh`/`rebuild`，重建入口位于 Settings。只有活动任务期间轮询状态和 Jobs；结束或断线即停止。左下角状态卡中的 Jobs 和主页 Recent Activity 可查看任务记录。空闲时显示上次确认状态，可在 Settings 点击“刷新状态”检查外部进程。扫描后列表更新至新代次，搜索结果若来自旧代次会提示重新搜索。
 
-主页展示真实索引统计、Sources 与扫描任务。Review、ChangeSets 等规划区域仅作视觉展示，示例内容明确标记且操作不可用；知识图谱只作结构示意，不表示真实关联。
+窗口保留系统原生标题栏和窗口控制，Windows 11 标题栏及边框颜色与应用背景统一；不支持该颜色 API 的系统保留原生颜色。侧栏、标题区和底部状态保持固定，内容区和 Sources 的列表、属性预览独立滚动。较小窗口压缩侧栏间距，必要时仅导航区域滚动；底部刷新和状态卡片开关始终可用。侧栏底部菜单按钮收起或展开 System Status 卡片。
+
+主页展示真实索引统计、Sources 与扫描任务。Review、ChangeSets、Knowledge Maintenance 等规划区域仅作视觉展示，示例内容明确标记且操作不可用；知识维护不表示 Core 连接配置或 Vault 登记诊断。知识图谱只作结构示意，不表示真实关联。文档详情在 Sources 属性栏或 Search 中展示，离开这些页面后不保留详情卡片。
 
 Sources 使用列表与属性预览并排的布局。顶部统计和筛选表示真实登记状态：All、Ready、Invalid、Missing、Unsupported；可读取不表示已整合，归档属性单独显示。统计针对所有来源，不随类型筛选变化。类型筛选与分页使用 Core 接口，列表搜索框进入范围为 Sources 的全文搜索。选中资料后，右侧只读展示 Properties/元数据、标签、Annotation、Asset 和原始引用；不提供标签编辑、状态修改或正文编辑。缺失、不支持、无效资产通过状态和诊断表达。详情比较当前字节与登记 revision 提示索引过时，不更新数据库。Search 支持 Knowledge、Sources、全部，默认 Knowledge；Annotation 片段明确标为用户上下文。
 

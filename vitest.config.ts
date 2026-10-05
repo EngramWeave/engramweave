@@ -8,6 +8,6 @@ export default defineConfig({
     // Real NTFS, PowerShell attribute checks and Core restarts need bounded I/O budgets.
     testTimeout: 60_000,
     hookTimeout: 30_000,
-    maxWorkers: 2,
+    maxWorkers: 4,
   },
 });

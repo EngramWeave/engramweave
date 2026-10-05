@@ -224,9 +224,16 @@ export function App() {
   const scan = (mode: 'refresh' | 'rebuild') =>
     action(async () => {
       await client.scan(mode);
-      if (mode === 'rebuild') setView('jobs');
+      if (mode === 'rebuild') navigate('jobs');
       await refresh();
     });
+  const navigate = (next: View) => {
+    if (next !== view) {
+      selection.current++;
+      setDocument(null);
+    }
+    setView(next);
+  };
   const select = (path: string) => {
     if (view === 'dashboard') setView('sources');
     const current = ++selection.current;
@@ -243,7 +250,9 @@ export function App() {
   };
   const search = (event: FormEvent, offset = 0) => {
     event.preventDefault();
-    setView('search');
+    navigate('search');
+    selection.current++;
+    setDocument(null);
     void action(async () => {
       const input: SearchQuery = { scope, q: query, offset };
       const page = await client.search(input);
@@ -256,7 +265,7 @@ export function App() {
   return (
     <Shell
       view={view}
-      navigate={setView}
+      navigate={navigate}
       status={status}
       host={host}
       query={query}
@@ -285,7 +294,7 @@ export function App() {
               ? '启动或连接 Core，加载你的 Vault 数据。'
               : '界面预览 · 真实数据和操作需在 Desktop 中连接 Core。'}
           </span>
-          <button className="view-all" onClick={() => setView('settings')}>
+          <button className="view-all" onClick={() => navigate('settings')}>
             连接与状态
           </button>
         </div>
@@ -295,7 +304,7 @@ export function App() {
           status={status}
           sources={sources}
           jobs={jobs}
-          navigate={setView}
+          navigate={navigate}
           select={select}
         />
       )}
@@ -442,7 +451,7 @@ export function App() {
             search={(term) => {
               setQuery(term);
               setScope('sources');
-              setView('search');
+              navigate('search');
               void action(async () => {
                 const input: SearchQuery = {
                   scope: 'sources',
@@ -546,7 +555,7 @@ export function App() {
             )}
           </section>
         )}
-        {document && view !== 'sources' && (
+        {document && view === 'search' && (
           <Detail
             document={document}
             close={() => {

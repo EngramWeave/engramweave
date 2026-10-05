@@ -12,6 +12,29 @@ use std::{
 use tauri::{Manager, State};
 
 type HostState = Arc<Mutex<Host>>;
+
+#[cfg(target_os = "windows")]
+fn blend_window_frame(window: &tauri::WebviewWindow) {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+    };
+    let Ok(hwnd) = window.hwnd() else { return };
+    // COLORREF uses 0x00BBGGRR. Older Windows versions retain their native colors.
+    for (attribute, color) in [
+        (DWMWA_BORDER_COLOR, 0x00fff8f4u32),
+        (DWMWA_CAPTION_COLOR, 0x00fff8f4u32),
+        (DWMWA_TEXT_COLOR, 0x00401410u32),
+    ] {
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd.0,
+                attribute as u32,
+                (&color as *const u32).cast(),
+                std::mem::size_of::<u32>() as u32,
+            );
+        }
+    }
+}
 async fn with_host<T: Send + 'static>(
     state: &HostState,
     operation: impl FnOnce(&mut Host) -> Result<T> + Send + 'static,
@@ -81,16 +104,19 @@ pub fn run() {
             open_document
         ])
         .setup(|app| {
-            tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
-                .on_navigation(|url| {
-                    url.scheme() == "tauri"
-                        || url.scheme() == "http"
-                            && (url.host_str() == Some("tauri.localhost")
-                                || cfg!(dev)
-                                    && url.host_str() == Some("127.0.0.1")
-                                    && url.port() == Some(1420))
-                })
-                .build()?;
+            let window =
+                tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                    .on_navigation(|url| {
+                        url.scheme() == "tauri"
+                            || url.scheme() == "http"
+                                && (url.host_str() == Some("tauri.localhost")
+                                    || cfg!(dev)
+                                        && url.host_str() == Some("127.0.0.1")
+                                        && url.port() == Some(1420))
+                    })
+                    .build()?;
+            #[cfg(target_os = "windows")]
+            blend_window_frame(&window);
             Ok(())
         })
         .build(tauri::generate_context!())

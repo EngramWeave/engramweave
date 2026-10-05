@@ -1,4 +1,4 @@
-import type { ReactNode, FormEvent } from 'react';
+import { useState, type ReactNode, type FormEvent } from 'react';
 import type { Status } from '@engramweave/contracts';
 import type { HostInfo } from './client';
 import { Icon, type IconName } from './Icon';
@@ -19,7 +19,11 @@ const navigation: {
   { label: 'Sources', icon: 'file', view: 'sources' },
   { label: 'Review', icon: 'list', note: '规划展示，尚未实现' },
   { label: 'Changes', icon: 'branch', note: '规划展示，尚未实现' },
-  { label: 'Maintenance', icon: 'layers', note: '规划展示，尚未实现' },
+  {
+    label: 'Maintenance',
+    icon: 'layers',
+    note: 'Knowledge Maintenance · 规划展示，尚未实现',
+  },
   { label: 'Search', icon: 'search', view: 'search' },
 ];
 
@@ -48,6 +52,7 @@ export function Shell({
   refreshVault: () => void;
   active: boolean;
 }) {
+  const [systemExpanded, setSystemExpanded] = useState(true);
   const now = new Date();
   const hour = now.getHours();
   const greeting =
@@ -55,11 +60,6 @@ export function Shell({
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="window-dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </div>
         <div className="brand">
           <img src="/engramweave-mark.png" alt="" width="50" height="50" />
           <div>
@@ -67,35 +67,40 @@ export function Shell({
             <span>Knowledge Operating Layer</span>
           </div>
         </div>
-        <nav className="navigation" aria-label="Main navigation">
-          {navigation.map((item) => (
-            <button
-              key={item.label}
-              className={view === item.view ? 'nav-item selected' : 'nav-item'}
-              onClick={item.view ? () => navigate(item.view!) : undefined}
-              disabled={!item.view}
-              aria-current={view === item.view ? 'page' : undefined}
-              title={item.note}
-            >
-              <Icon name={item.icon} />
-              <span>{item.label}</span>
-              {item.view === 'sources' && status ? (
-                <span className="nav-count">{status.counts.sources}</span>
-              ) : !item.view ? (
-                <span className="nav-planned">Soon</span>
-              ) : null}
-            </button>
-          ))}
-        </nav>
-        <div className="nav-divider" />
-        <button
-          className={`nav-item ${view === 'settings' ? 'selected' : ''}`}
-          onClick={() => navigate('settings')}
-          aria-current={view === 'settings' ? 'page' : undefined}
-        >
-          <Icon name="settings" />
-          <span>Settings</span>
-        </button>
+        <div className="sidebar-navigation">
+          <nav className="navigation" aria-label="Main navigation">
+            {navigation.map((item) => (
+              <button
+                key={item.label}
+                className={
+                  view === item.view ? 'nav-item selected' : 'nav-item'
+                }
+                onClick={item.view ? () => navigate(item.view!) : undefined}
+                disabled={!item.view}
+                aria-label={item.label}
+                aria-current={view === item.view ? 'page' : undefined}
+                title={item.note ?? item.label}
+              >
+                <Icon name={item.icon} />
+                <span>{item.label}</span>
+                {item.view === 'sources' && status ? (
+                  <span className="nav-count">{status.counts.sources}</span>
+                ) : !item.view ? (
+                  <span className="nav-planned">Soon</span>
+                ) : null}
+              </button>
+            ))}
+          </nav>
+          <div className="nav-divider" />
+          <button
+            className={`nav-item ${view === 'settings' ? 'selected' : ''}`}
+            onClick={() => navigate('settings')}
+            aria-current={view === 'settings' ? 'page' : undefined}
+          >
+            <Icon name="settings" />
+            <span>Settings</span>
+          </button>
+        </div>
         <div className="sidebar-bottom">
           <button
             className="global-refresh"
@@ -106,10 +111,15 @@ export function Shell({
             <Icon name="refresh" />
             <span>{active ? 'Refreshing vault…' : 'Refresh workspace'}</span>
           </button>
-          <div className="system-card">
+          <div
+            className="system-card"
+            id="system-status"
+            hidden={!systemExpanded}
+          >
             <button
               className="system-heading"
               onClick={() => navigate('settings')}
+              title="查看连接与状态"
             >
               <i className={`status-dot ${status ? 'online' : ''}`} />
               <span>
@@ -153,9 +163,15 @@ export function Shell({
             <Icon name="settings" />
             <span>v0.1.0</span>
             <button
-              title="连接与配置"
-              aria-label="连接与配置"
-              onClick={() => navigate('settings')}
+              title={
+                systemExpanded ? '收起 System Status' : '展开 System Status'
+              }
+              aria-label={
+                systemExpanded ? '收起 System Status' : '展开 System Status'
+              }
+              aria-expanded={systemExpanded}
+              aria-controls="system-status"
+              onClick={() => setSystemExpanded((expanded) => !expanded)}
             >
               <Icon name="menu" />
             </button>
@@ -271,7 +287,14 @@ export function Shell({
             </div>
           </div>
         </header>
-        {children}
+        <div
+          className="workspace-content"
+          role="region"
+          aria-label="Workspace content"
+          tabIndex={0}
+        >
+          {children}
+        </div>
         <footer className="workspace-footer">
           <span>
             <i className={`status-dot ${status ? 'online' : ''}`} />

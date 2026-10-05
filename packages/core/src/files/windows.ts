@@ -5,7 +5,7 @@ import { CoreError } from '../errors.js';
 interface Attributes { path: string; reparse: boolean; hidden: boolean }
 // Node's Stats does not expose every Windows reparse tag or the Hidden attribute.
 // A fixed native query inspects metadata only; no caller text enters executable code.
-const query = `$ErrorActionPreference = 'Stop'; [Console]::InputEncoding = New-Object Text.UTF8Encoding($false); [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false); $paths = [Console]::In.ReadToEnd() | ConvertFrom-Json; $result = @(foreach ($p in $paths) { $item = Get-Item -LiteralPath $p -Force -ErrorAction Stop; @{ path = $p; reparse = [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint); hidden = [bool]($item.Attributes -band [IO.FileAttributes]::Hidden) } }); ConvertTo-Json -InputObject $result -Compress`;
+const query = `$ErrorActionPreference = 'Stop'; [Console]::InputEncoding = New-Object Text.UTF8Encoding($false); [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false); $paths = [Console]::In.ReadToEnd() | ConvertFrom-Json; $result = @(foreach ($p in $paths) { $attributes = [IO.File]::GetAttributes($p); @{ path = $p; reparse = [bool]($attributes -band [IO.FileAttributes]::ReparsePoint); hidden = [bool]($attributes -band [IO.FileAttributes]::Hidden) } }); ConvertTo-Json -InputObject $result -Compress`;
 
 export async function windowsAttributes(paths: string[]): Promise<Attributes[]> {
   if (!paths.length) return [];

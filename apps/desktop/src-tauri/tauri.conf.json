@@ -14,6 +14,7 @@
       {
         "label": "main",
         "title": "EngramWeave",
+        "backgroundColor": "#f4f8ff",
         "create": false,
         "width": 1440,
         "height": 960,
