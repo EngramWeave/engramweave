@@ -14,6 +14,7 @@
 
 ### Language and Style
 
-- Write prose in Chinese for project-authored documentation except `AGENTS.md` files. Commands, field names, JSON keys, code blocks, and paths keep their original English form.
+- Write prose in Chinese for project-authored documentation except `AGENTS.md`, `CONTEXT.md`, `CONTEXT-MAP.md`, and ADRs, which must be written in English. Commands, field names, JSON keys, code blocks, and paths keep their original English form.
+- `CONTEXT.md`, `CONTEXT-MAP.md`, and ADRs must preserve the location, naming, structure, and formatting conventions defined by the skill that creates or maintains them.
 - Prefer concise, direct prose. Match the terminology and style of existing documentation unless it conflicts with this file, and avoid unnecessary duplication between documents.
 - Ensure commands, paths, configuration examples, and described behavior match the current implementation before treating the documentation as complete.

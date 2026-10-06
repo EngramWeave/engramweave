@@ -12,7 +12,7 @@
 - Do not create empty future packages, generic frameworks, compatibility layers, or abstractions without a current concrete use case.
 - Avoid unrelated refactors while implementing a scoped task.
 - Keep modules cohesive; split code when a file begins to own multiple unrelated responsibilities.
-- New dependencies must have a clear current-purpose justification
+- New dependencies must have a clear current-purpose justification.
 
 ## Local conventions
 
@@ -24,9 +24,9 @@
 ## Testing
 
 - Add or update tests when needed to protect behavior, contracts, safety, persistence, recovery, or meaningful regressions.
+- Keep automated tests and test-only fixtures/helpers under `tests/`.
 - For test changes or changes to the code they cover, follow `tests/AGENTS.md`, even when no test edit is planned.
-- Follow `tests/AGENTS.md` for detailed testing rules.
 
 ## Documentation
 
-- All `README.md` files and committed project documentation should follow the documentation principles in `docs/AGENTS.md`, even when they are outside `docs/`.
+- All committed project documentation, including all `README.md` files, should follow the documentation principles in `docs/AGENTS.md`, even when it is outside `docs/`.
