@@ -32,6 +32,8 @@ The normal workflow enters Human Review only after Knowledge Compiler has finish
 
 The API path prepares context in Core and performs separate model calls without an initial dynamic tool loop. The Agent path reuses the runner loop with Core Tools/MCP. Relation may reuse Review input context, Review output as reference, or neither. Core-built tool loops and broader orchestration are deferred; human approval and deterministic Executor boundaries remain intact.
 
+Compiler, Review Analyzer, Relation Analyzer, and Integration Planner each offer API or Codex execution in the first useful release. Basic semantic recall spans Knowledge, Ideas, and Research; advanced relation retrieval follows later. These are planned extensions of the P1 implementation, not already delivered capabilities.
+
 ## Intended lifecycle operations
 
 Source Record discard stops processing without replacing its stage. Related Draft marks and formal references are displayed; formal files are marked only through explicit user selection. ChangeSet is a temporary plan, not a lifecycle-marked trash item. User file actions confirm a target list, while AI proposals use ChangeSet. Physical deletion is separate cleanup after marking.
@@ -53,6 +55,8 @@ Review Complete changes compiled to reviewed without binding to an exact Draft v
 Candidate review compares proposed files with current local files. Users choose or edit the final approved contents, or request replanning from current local content. Generating and editing unapproved candidates never changes formal files. Approval immediately starts deterministic application of the final approved contents, with target precondition checks and without dependence on later Draft edits. No review-version binding or real-time Draft watcher is required.
 
 A canceled or missing candidate with a usable reviewed Draft returns planned to reviewed for a new round and new approval. Recovery of interrupted approved execution remains an implementation responsibility rather than an extra product confirmation flow.
+
+Planner is one unified knowledge-reorganization capability. Creation, modification, splitting, merging, reorganization, and discard are possible proposal outcomes, not independent user modes or workflows. One candidate ChangeSet uses the common review/edit/reject/replan/approve mechanism; implementation-level execution primitives must not narrow those outcomes.
 
 ## Intended Vault Git behavior
 
