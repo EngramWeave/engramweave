@@ -2,7 +2,7 @@
 
 ### Content
 
-- Write for the intended audience: users, contributors, developers, or maintainers. Clearly distinguish current supported behavior from planned, proposed, or future behavior.
+- Write for the intended audience: users, contributors, developers, or maintainers. 
 - Document durable behavior, architecture, interfaces, setup, usage, maintenance, and reproducible verification procedures — how to verify something, not the result of one run.
 - Preserve useful technical facts from development work, but rewrite them as stable project documentation rather than session history.
 
@@ -16,5 +16,5 @@
 
 - Write prose in Chinese for project-authored documentation except `AGENTS.md`, `CONTEXT.md`, `CONTEXT-MAP.md`, and ADRs, which must be written in English. Commands, field names, JSON keys, code blocks, and paths keep their original English form.
 - `CONTEXT.md`, `CONTEXT-MAP.md`, and ADRs must preserve the location, naming, structure, and formatting conventions defined by the skill that creates or maintains them.
-- Prefer concise, direct prose. Match the terminology and style of existing documentation unless it conflicts with this file, and avoid unnecessary duplication between documents.
-- Ensure commands, paths, configuration examples, and described behavior match the current implementation before treating the documentation as complete.
+- Prefer clear, natural, and engaging prose. Preserve the terminology, tone, and level of detail of existing documentation, and avoid unnecessary verbosity or duplication between documents.
+- Keep the README readable and product-oriented. Preserve its established narrative where appropriate; put detailed engineering documentation in `docs/` and link to it where useful.
