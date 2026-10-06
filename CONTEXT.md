@@ -24,12 +24,36 @@ Each round re-reads file stage and lifecycle. Temporary failures permit finite c
 
 ## Intended model task separation
 
-Body compilation consumes submitted material and Annotation and returns title and body. Core separately orchestrates Draft Analyzer as Review Analyzer followed by Relation Analyzer. Analysis Profiles combine templates, models, and execution paths; the sub-tasks bind the same Source/Draft versions, obtain template-specific context, and store independent sidebar-only results.
+Knowledge Compiler comprises Compiler and Draft Analyzer. Compiler consumes submitted material and Annotation and returns title and body. Draft Analyzer then orchestrates Review Analyzer followed by Relation Analyzer. Both are AI tasks before Human Review, bind the same Source/Draft versions, and save separate sidebar results without editing the body.
+
+Desktop configures Analysis Profiles, templates, models, and routes before capture. Capture chooses Review/Relation presets; users may change selection before execution, which uses current configuration.
+
+The normal workflow enters Human Review only after Knowledge Compiler has finished its analysis attempts, with allowed failures clearly displayed. Body presence or `compiled` alone does not imply that active Analyzer Jobs have finished.
 
 The API path prepares context in Core and performs separate model calls without an initial dynamic tool loop. The Agent path reuses the runner loop with Core Tools/MCP. Relation may reuse Review input context, Review output as reference, or neither. Core-built tool loops and broader orchestration are deferred; human approval and deterministic Executor boundaries remain intact.
 
 ## Intended lifecycle operations
 
-Source discard stops further processing without replacing its stage. Before archival it also marks related Draft/ChangeSet discarded; archived Source references to formal knowledge are checked for user-selected marking. Restoration and physical cleanup must have explicit dependency and confirmation rules.
+Source Record discard stops processing without replacing its stage. Related Draft marks and formal references are displayed; formal files are marked only through explicit user selection. ChangeSet is a temporary plan, not a lifecycle-marked trash item. User file actions confirm a target list, while AI proposals use ChangeSet. Physical deletion is separate cleanup after marking.
 
 Successful integration marks related Drafts discarded for user-managed cleanup. Source, Annotation, and formal content are not discarded by that Draft cleanup.
+
+One Source Record has one Draft work line with revisions, not parallel candidates; Planner can integrate it into multiple formal files. Capture-owned Assets under `20_Sources` are dedicated to individual Records. Source Record deletion removes its associated derived data and dedicated Asset; external shared Assets are never modified or deleted. Default cleanup skips Sources referenced by active formal content; explicit reference confirmation permits user override without repairing broken links.
+
+Restoration defaults to Source only and offers related-object selection. Old Drafts discarded after successful integration are not automatically reactivated. ChangeSets do not participate in generic restoration.
+
+## Intended temporary plan retention
+
+Persist ChangeSets for review, approval, version/precondition-checked execution, and unresolved-operation recovery. Clean successfully consumed or explicitly canceled plans, retaining necessary Job results and errors. Do not clean unfinished work until its outcome is clear, especially archival-marker recovery. Formal content history belongs to Git rather than permanent copies of every ChangeSet.
+
+## Intended user-controlled review and planning
+
+Review Complete changes compiled to reviewed without binding to an exact Draft version. Draft edits do not automatically revoke review, trigger planning, or invalidate candidates. Each Planner round reads the current Draft and current local library at startup, fixing its input for that round. Users can cancel Review Complete before planning to return to compiled, or cancel an unapproved generated ChangeSet and return planned to compiled before confirming again.
+
+Candidate review compares proposed files with current local files. Users choose or edit the final approved contents, or request replanning from current local content. Generating and editing unapproved candidates never changes formal files. Approval immediately starts deterministic application of the final approved contents, with target precondition checks and without dependence on later Draft edits. No review-version binding or real-time Draft watcher is required.
+
+A canceled or missing candidate with a usable reviewed Draft returns planned to reviewed for a new round and new approval. Recovery of interrupted approved execution remains an implementation responsibility rather than an extra product confirmation flow.
+
+## Intended Vault Git behavior
+
+Track Ideas, Knowledge, Research, Projects, selected user System configuration, and Source Record Markdown files. Exclude independent Source Assets, Derived Representations, Drafts, and Inbox. After successful approved application, Core commits only the tracked files involved in that integration, including their earlier uncommitted user edits. It does not commit unrelated changes or require pre-planning commits. Users may manually commit edits or configure periodic commits. P1 does not implement Vault Git management; scoped commit and failure recovery belong to the integration extension.
