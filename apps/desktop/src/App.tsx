@@ -25,6 +25,7 @@ import {
   type SourceCounts,
 } from './SourceBrowser';
 import { Jobs, Results } from './Lists';
+import { DocumentFailure, ErrorNotice, ErrorToast, type ErrorPlacement } from './Feedback';
 
 export function App() {
   const [host, setHost] = useState<HostInfo | null>(null);
@@ -33,7 +34,8 @@ export function App() {
   const [jobs, setJobs] = useState<JobPage | null>(null);
   const [results, setResults] = useState<SearchPage | null>(null);
   const [document, setDocument] = useState<Document | null>(null);
-  const [error, setError] = useState<Failure | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<ErrorPlacement, Failure>>>({});
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>('dashboard');
   const [sourceState, setSourceState] = useState<SourceState>('all');
@@ -46,15 +48,25 @@ export function App() {
   const [searchInput, setSearchInput] = useState<SearchQuery | null>(null);
   const selection = useRef(0);
   const connectionEpoch = useRef(0);
+  const pageEpoch = useRef(0);
   const connected = status !== null;
   const active =
     status?.active_job?.id ??
     jobs?.items.find((job) => ['queued', 'running'].includes(job.status))?.id ??
     null;
 
-  const report = useCallback((error: unknown) => {
+  const clearError = useCallback((placement: ErrorPlacement) => {
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[placement];
+      return next;
+    });
+  }, []);
+  const dismissToast = useCallback(() => clearError('toast'), [clearError]);
+  const report = useCallback((error: unknown, placement: ErrorPlacement = 'toast', epoch = connectionEpoch.current) => {
+    if (epoch !== connectionEpoch.current) return;
     const value = failure(error);
-    setError(value);
+    setErrors((current) => ({ ...current, [placement]: value }));
     if (
       ['CORE_UNAVAILABLE', 'INSTANCE_UNCERTAIN', 'UNAUTHORIZED'].includes(
         value.code,
@@ -70,14 +82,16 @@ export function App() {
       setResults(null);
     }
   }, []);
-  const action = async (work: () => Promise<void>) => {
+  const action = async (work: () => Promise<void>, placement: ErrorPlacement = 'toast') => {
     if (busy) return;
     setBusy(true);
-    setError(null);
+    clearError(placement);
+    const currentPage = pageEpoch.current;
+    const currentSelection = selection.current;
     try {
       await work();
     } catch (error) {
-      report(error);
+      if (currentPage === pageEpoch.current && (placement !== 'document' || currentSelection === selection.current)) report(error, placement);
     } finally {
       if (nativeAvailable) {
         try {
@@ -92,13 +106,14 @@ export function App() {
   useEffect(() => {
     if (!nativeAvailable) return;
     let cancelled = false;
+    const epoch = connectionEpoch.current;
     void client
       .info()
       .then((value) => {
         if (!cancelled) setHost(value);
       })
       .catch((error) => {
-        if (!cancelled) report(error);
+        if (!cancelled) report(error, 'toast', epoch);
       });
     return () => {
       cancelled = true;
@@ -117,6 +132,7 @@ export function App() {
   }, []);
   useEffect(() => {
     if (!connected || !active) return;
+    const epoch = connectionEpoch.current;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
@@ -127,7 +143,7 @@ export function App() {
             void poll();
           }, 1000);
       } catch (error) {
-        if (!cancelled) report(error);
+        if (!cancelled) report(error, 'toast', epoch);
       }
     };
     timer = setTimeout(() => {
@@ -140,6 +156,7 @@ export function App() {
   }, [connected, active, refresh, report]);
   useEffect(() => {
     if (!connected || (view !== 'sources' && view !== 'dashboard')) return;
+    const epoch = connectionEpoch.current;
     let cancelled = false;
     void client
       .sources({
@@ -154,10 +171,13 @@ export function App() {
         offset: view === 'dashboard' ? 0 : sourceOffset,
       })
       .then((value) => {
-        if (!cancelled) setSources(value);
+        if (!cancelled) {
+          setSources(value);
+          clearError('sources');
+        }
       })
       .catch((error) => {
-        if (!cancelled) report(error);
+        if (!cancelled) report(error, view === 'sources' ? 'sources' : 'toast', epoch);
       });
     return () => {
       cancelled = true;
@@ -170,9 +190,11 @@ export function App() {
     sourceType,
     status?.index_generation,
     report,
+    clearError,
   ]);
   useEffect(() => {
     if (!connected || view !== 'sources') return;
+    const epoch = connectionEpoch.current;
     setSourceCounts(null);
     let cancelled = false;
     const states = [
@@ -193,25 +215,29 @@ export function App() {
           pages.every(
             (page) => page.index_generation === pages[0]?.index_generation,
           )
-        )
+        ) {
           setSourceCounts(
             Object.fromEntries(
               states.map((state, index) => [state, pages[index]!.total]),
             ) as SourceCounts,
           );
+          clearError('counts');
+        }
       })
       .catch((error) => {
-        if (!cancelled) report(error);
+        if (!cancelled) report(error, 'counts', epoch);
       });
     return () => {
       cancelled = true;
     };
-  }, [connected, view, status?.index_generation, report]);
+  }, [connected, view, status?.index_generation, report, clearError]);
   const connect = (start: boolean) =>
     action(async () => {
       connectionEpoch.current++;
       selection.current++;
       setDocument(null);
+      setSelectedPath(null);
+      setErrors({});
       setSources(null);
       setSourceCounts(null);
       setResults(null);
@@ -220,32 +246,37 @@ export function App() {
       setHost(value.host);
       setStatus(value.status);
       await refresh();
-    });
+    }, 'connection');
   const scan = (mode: 'refresh' | 'rebuild') =>
     action(async () => {
+      const currentPage = pageEpoch.current;
       await client.scan(mode);
-      if (mode === 'rebuild') navigate('jobs');
       await refresh();
-    });
+      if (mode === 'rebuild' && currentPage === pageEpoch.current) navigate('jobs');
+    }, view === 'settings' ? 'operations' : 'toast');
   const navigate = (next: View) => {
     if (next !== view) {
+      pageEpoch.current++;
       selection.current++;
       setDocument(null);
+      setSelectedPath(null);
+      setErrors({});
     }
     setView(next);
   };
   const select = (path: string) => {
-    if (view === 'dashboard') setView('sources');
+    if (view === 'dashboard') navigate('sources');
     const current = ++selection.current;
     setDocument(null);
-    setError(null);
+    setSelectedPath(path);
+    clearError('document');
     void client
       .document(path)
       .then((value) => {
         if (selection.current === current) setDocument(value);
       })
       .catch((error) => {
-        if (selection.current === current) report(error);
+        if (selection.current === current) report(error, 'document');
       });
   };
   const search = (event: FormEvent, offset = 0) => {
@@ -253,12 +284,15 @@ export function App() {
     navigate('search');
     selection.current++;
     setDocument(null);
+    setSelectedPath(null);
+    clearError('document');
+    if (offset === 0) setResults(null);
     void action(async () => {
       const input: SearchQuery = { scope, q: query, offset };
       const page = await client.search(input);
       setSearchInput(input);
       setResults(page);
-    });
+    }, 'search');
   };
   const staleSearch =
     results && status && results.index_generation !== status.index_generation;
@@ -277,15 +311,7 @@ export function App() {
       }}
       active={Boolean(active)}
     >
-      {error && (
-        <div className="notice warning" role="alert">
-          <strong>{error.code}</strong>
-          <p>{error.message}</p>
-          {error.details !== undefined && (
-            <pre>{JSON.stringify(error.details, null, 2)}</pre>
-          )}
-        </div>
-      )}
+      <ErrorToast error={errors.toast} dismiss={dismissToast} />
       {!connected && (
         <div className="connection-banner">
           <span>
@@ -354,12 +380,14 @@ export function App() {
                     setJobs(null);
                     setResults(null);
                     setDocument(null);
-                  });
+                    setSelectedPath(null);
+                  }, 'connection');
                 }}
               >
                 停止自身 Core
               </button>
             </div>
+            {errors.connection && <ErrorNotice error={errors.connection} />}
             <div className="rule" />
             <h3>显式操作</h3>
             <div className="connection-actions">
@@ -384,12 +412,13 @@ export function App() {
                 onClick={() => {
                   void action(async () => {
                     await refresh();
-                  });
+                  }, 'operations');
                 }}
               >
                 刷新状态
               </button>
             </div>
+            {errors.operations && <ErrorNotice error={errors.operations} />}
             <p className="hint">
               无活动任务时停止轮询。状态为上次确认结果；断线后需显式重新连接。
             </p>
@@ -423,35 +452,59 @@ export function App() {
             counts={sourceCounts}
             state={sourceState}
             setState={(value) => {
+              selection.current++;
+              setDocument(null);
+              setSelectedPath(null);
+              clearError('document');
+              clearError('sources');
               setSourceState(value);
               setSourceOffset(0);
               setSources(null);
             }}
             sourceType={sourceType}
             setSourceType={(value) => {
+              selection.current++;
+              setDocument(null);
+              setSelectedPath(null);
+              clearError('document');
+              clearError('sources');
               setSourceType(value);
               setSourceOffset(0);
               setSources(null);
             }}
             document={document}
+            selectedPath={selectedPath}
+            documentError={errors.document}
+            listError={errors.sources}
+            countsError={errors.counts}
             select={select}
             close={() => {
               selection.current++;
               setDocument(null);
+              setSelectedPath(null);
+              clearError('document');
             }}
             open={(target) => {
               if (document)
                 void action(async () => {
                   await client.open(document.path, target);
-                });
+                }, 'document');
             }}
             connected={connected}
             offset={sourceOffset}
-            setOffset={setSourceOffset}
+            setOffset={(offset) => {
+              selection.current++;
+              setDocument(null);
+              setSelectedPath(null);
+              clearError('document');
+              clearError('sources');
+              setSourceOffset(offset);
+            }}
             search={(term) => {
               setQuery(term);
               setScope('sources');
               navigate('search');
+              setResults(null);
               void action(async () => {
                 const input: SearchQuery = {
                   scope: 'sources',
@@ -460,7 +513,7 @@ export function App() {
                 };
                 setResults(await client.search(input));
                 setSearchInput(input);
-              });
+              }, 'search');
             }}
           />
         )}
@@ -509,6 +562,7 @@ export function App() {
                 搜索
               </button>
             </form>
+            {errors.search && <ErrorNotice error={errors.search} />}
             {results && (
               <p className={staleSearch ? 'notice warning' : 'hint'}>
                 共 {results.total} 项 · 结果代次 {results.index_generation} ·
@@ -522,6 +576,10 @@ export function App() {
                 <button
                   disabled={results.offset === 0 || busy || !connected}
                   onClick={() => {
+                    selection.current++;
+                    setDocument(null);
+                    setSelectedPath(null);
+                    clearError('document');
                     void action(async () => {
                       const input = {
                         ...searchInput,
@@ -529,7 +587,7 @@ export function App() {
                       };
                       setResults(await client.search(input));
                       setSearchInput(input);
-                    });
+                    }, 'search');
                   }}
                 >
                   上一页
@@ -539,6 +597,10 @@ export function App() {
                     results.offset + 20 >= results.total || busy || !connected
                   }
                   onClick={() => {
+                    selection.current++;
+                    setDocument(null);
+                    setSelectedPath(null);
+                    clearError('document');
                     void action(async () => {
                       const input = {
                         ...searchInput,
@@ -546,7 +608,7 @@ export function App() {
                       };
                       setResults(await client.search(input));
                       setSearchInput(input);
-                    });
+                    }, 'search');
                   }}
                 >
                   下一页
@@ -558,16 +620,26 @@ export function App() {
         {document && view === 'search' && (
           <Detail
             document={document}
+            error={errors.document}
             close={() => {
               selection.current++;
               setDocument(null);
+              setSelectedPath(null);
+              clearError('document');
             }}
             open={(target) => {
               void action(async () => {
                 await client.open(document.path, target);
-              });
+              }, 'document');
             }}
           />
+        )}
+        {!document && errors.document && view === 'search' && (
+          <DocumentFailure error={errors.document} path={selectedPath} close={() => {
+            selection.current++;
+            setSelectedPath(null);
+            clearError('document');
+          }} />
         )}
       </div>
     </Shell>

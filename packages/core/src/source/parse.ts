@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseDocument, visit } from 'yaml';
-import { LIMITS, type Asset, type Source } from '@engramweave/contracts';
+import { LIMITS, PROCESSING_STATUSES, type Asset, type Source } from '@engramweave/contracts';
 import { FileProblem } from '../files/read.js';
 import { markdownPath } from '../files/paths.js';
 
@@ -8,12 +8,15 @@ export type Diagnostic = Source['diagnostics'][number];
 export interface ParsedDocument {
   kind: 'source' | 'knowledge'; state: 'ready' | 'invalid' | 'unsupported';
   title: string; source_type: string | null; captured_at: string | null; original_locator: string | null;
-  processing_status: Source['processing_status'];
+  processing_status: Source['processing_status']; lifecycle_status: Source['lifecycle_status'];
   metadata: Record<string, unknown>; annotation: string; body_markdown: string;
   asset: Asset | null; diagnostics: Diagnostic[];
 }
 export const normalizeText = (text: string) => text.normalize('NFC').toLowerCase();
-export const processingStatus = (value: unknown): Source['processing_status'] => value === 'archived' ? 'archived' : null;
+export const processingStatus = (value: unknown): Source['processing_status'] =>
+  typeof value === 'string' && PROCESSING_STATUSES.includes(value as typeof PROCESSING_STATUSES[number]) ? value as NonNullable<Source['processing_status']> : null;
+export const lifecycleStatus = (value: unknown): Source['lifecycle_status'] =>
+  value == null || value === '' || value === 'active' ? 'active' : value === 'discarded' ? 'discarded' : null;
 export const stringList = (value: unknown): string[] => typeof value === 'string' ? [value] : Array.isArray(value) && value.every(item => typeof item === 'string') ? value : [];
 const validList = (value: unknown) => value == null || typeof value === 'string' || (Array.isArray(value) && value.every(item => typeof item === 'string'));
 const datePattern = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/;
@@ -52,9 +55,9 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
   const diagnostics: Diagnostic[] = [];
   const report = (code: string, message: string) => diagnostics.push({ code, message, path: relative });
   const result: ParsedDocument = { kind, state: 'ready', title: path.posix.basename(relative, path.posix.extname(relative)), source_type: null,
-    captured_at: null, original_locator: null, processing_status: null, metadata: {}, annotation: '', body_markdown: '', asset: null, diagnostics };
+    captured_at: null, original_locator: null, processing_status: null, lifecycle_status: null, metadata: {}, annotation: '', body_markdown: '', asset: null, diagnostics };
   const fail = (code: string, message: string, state: 'invalid' | 'unsupported' = 'invalid') => {
-    result.state = state; result.processing_status = null; result.metadata = {}; result.annotation = ''; result.body_markdown = ''; result.asset = null;
+    result.state = state; result.processing_status = null; result.lifecycle_status = null; result.metadata = {}; result.annotation = ''; result.body_markdown = ''; result.asset = null;
     report(code, message); return result;
   };
   let text: string;
@@ -83,9 +86,11 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
   if (metadata.annotation != null && typeof metadata.annotation !== 'string') return fail('INVALID_ANNOTATION', 'Annotation must be a string or null');
   if (metadata.title != null && typeof metadata.title !== 'string') return fail('INVALID_TITLE', 'Title must be a string');
   if (!validList(metadata.author) || !validList(metadata.tags)) return fail('INVALID_LIST', 'Author and tags must be strings or string lists');
+  result.lifecycle_status = lifecycleStatus(metadata.lifecycle_status);
+  if (result.lifecycle_status === null) return fail('INVALID_LIFECYCLE_STATUS', 'Lifecycle status must be active, discarded, empty or null');
   if (kind === 'source') {
-    if (metadata.processing_status != null && metadata.processing_status !== '' && metadata.processing_status !== 'archived') {
-      return fail('INVALID_PROCESSING_STATUS', 'Processing status must be archived, empty or null');
+    if (metadata.processing_status != null && metadata.processing_status !== '' && processingStatus(metadata.processing_status) === null) {
+      return fail('INVALID_PROCESSING_STATUS', 'Processing status must be pending, compiled, reviewed, planned, archived, empty or null');
     }
     result.processing_status = processingStatus(metadata.processing_status);
     if (typeof metadata.source_type !== 'string' || !metadata.source_type.trim()) return fail('INVALID_SOURCE_TYPE', 'Source type must be a nonempty string');
@@ -119,7 +124,7 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
 export function problemDocument(relative: string, error: unknown): ParsedDocument {
   const problem = error instanceof FileProblem ? error : new FileProblem('FILE_READ_ERROR', 'invalid', 'Document could not be read safely');
   return { kind: relative.startsWith('20_Sources/') ? 'source' : 'knowledge', state: problem.state,
-    title: path.posix.basename(relative), source_type: null, captured_at: null, original_locator: null, processing_status: null,
+    title: path.posix.basename(relative), source_type: null, captured_at: null, original_locator: null, processing_status: null, lifecycle_status: null,
     metadata: {}, annotation: '', body_markdown: '', asset: null,
     diagnostics: [{ code: problem.code, message: problem.message, path: relative }] };
 }

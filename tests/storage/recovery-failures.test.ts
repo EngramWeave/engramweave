@@ -16,7 +16,7 @@ async function fixture() {
   const isolated = await isolatedRuntime(); cleanups.push(isolated.cleanup);
   await mkdir(isolated.config.data_dir);
   await writeFile(path.join(isolated.config.data_dir, 'core.sqlite'), 'original corrupt database');
-  await writeDocument(isolated.config.vault_path, '20_Sources/item.md', manualSource('filetruth'));
+  await writeDocument(isolated.config.vault_path, '20_Sources/item.md', manualSource('filetruth', 'processing_status: pending\n'));
   return isolated;
 }
 

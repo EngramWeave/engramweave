@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { Document, SourcesQuery } from '@engramweave/contracts';
-import type { SourcePage } from './client';
+import type { Failure, SourcePage } from './client';
 import { Detail } from './Detail';
 import { Icon, type IconName } from './Icon';
+import { lifecycleLabel, processingLabel } from './status-labels';
+import { DocumentFailure, ErrorNotice } from './Feedback';
 
 export type SourceState = 'all' | NonNullable<SourcesQuery['state']>;
 export type SourceCounts = Record<SourceState, number>;
@@ -23,28 +25,28 @@ const categories: {
   {
     state: 'ready',
     title: 'Ready',
-    caption: '可读取 · 非处理进度',
+    caption: 'Readable · Not progress',
     tone: 'green',
     icon: 'check',
   },
   {
     state: 'invalid',
     title: 'Invalid',
-    caption: '登记无效',
+    caption: 'Invalid registration',
     tone: 'red',
     icon: 'help',
   },
   {
     state: 'missing',
     title: 'Missing',
-    caption: '文件缺失',
+    caption: 'File not found',
     tone: 'orange',
     icon: 'clock',
   },
   {
     state: 'unsupported',
     title: 'Unsupported',
-    caption: '不支持',
+    caption: 'Not supported',
     tone: 'violet',
     icon: 'file',
   },
@@ -57,6 +59,10 @@ export function SourceBrowser({
   sourceType,
   setSourceType,
   document,
+  selectedPath,
+  documentError,
+  listError,
+  countsError,
   select,
   close,
   open,
@@ -72,6 +78,10 @@ export function SourceBrowser({
   sourceType: string;
   setSourceType: (type: string) => void;
   document: Document | null;
+  selectedPath: string | null;
+  documentError?: Failure | undefined;
+  listError?: Failure | undefined;
+  countsError?: Failure | undefined;
   select: (path: string) => void;
   close: () => void;
   open: (target: 'obsidian' | 'original') => void;
@@ -196,6 +206,8 @@ export function SourceBrowser({
               ))}
             </select>
           </div>
+          {listError && <ErrorNotice error={listError} />}
+          {!listError && countsError && <ErrorNotice error={countsError} />}
           <div className="table-scroll">
             <table className="source-table">
               <thead>
@@ -204,7 +216,7 @@ export function SourceBrowser({
                   <th>Type</th>
                   <th>Asset</th>
                   <th>State</th>
-                  <th>Archived</th>
+                  <th><span>Stage</span><small>Lifecycle</small></th>
                   <th>Captured</th>
                 </tr>
               </thead>
@@ -212,7 +224,7 @@ export function SourceBrowser({
                 {page?.items.map((source) => (
                   <tr
                     key={source.id}
-                    className={document?.path === source.path ? 'selected' : ''}
+                    className={selectedPath === source.path ? 'selected' : ''}
                   >
                     <td>
                       <div className="source-title-cell">
@@ -302,10 +314,11 @@ export function SourceBrowser({
                             : 'row-meta'
                         }
                       >
-                        {source.processing_status === 'archived'
-                          ? '已归档'
-                          : '未归档'}
+                        {processingLabel(source.processing_status)}
                       </span>
+                      <small className={`row-meta ${source.lifecycle_status === 'discarded' ? 'lifecycle-discarded' : ''}`}>
+                        {lifecycleLabel(source.lifecycle_status)}
+                      </small>
                     </td>
                     <td>
                       <span
@@ -357,7 +370,9 @@ export function SourceBrowser({
         </section>
         <div className="source-inspector">
           {document ? (
-            <Detail document={document} close={close} open={open} />
+            <Detail document={document} close={close} open={open} error={documentError} />
+          ) : documentError ? (
+            <DocumentFailure error={documentError} path={selectedPath} close={close} />
           ) : (
             <aside className="panel inspector-empty">
               <span className="empty-symbol blue">

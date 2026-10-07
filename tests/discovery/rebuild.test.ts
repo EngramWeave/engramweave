@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as reading from '../../packages/core/src/files/read.js';
 import { httpRuntime, finishedJob, submitScan } from '../helpers/http.js';
@@ -25,6 +26,7 @@ it('keeps old queries during rebuild and after a publication failure, then publi
     expect(await (await request('/v1/search?scope=sources&q=newrebuildword')).json()).toMatchObject({ total: 0, index_generation: 1 });
   } finally { release(); }
   expect(await finishedJob(request, pending.job.id)).toMatchObject({ status: 'failed' });
+  expect(await readFile(path.join(config.vault_path, '20_Sources/item.md'), 'utf8')).toBe(manualSource('newrebuildword').replace('---\n', '---\nprocessing_status: pending\n'));
   expect(await (await request('/v1/search?scope=sources&q=oldrebuildword')).json()).toMatchObject({ total: 1, index_generation: 1 });
   spy.mockRestore(); db.exec('DROP TRIGGER fail_rebuild');
   const retry = await submitScan(request, 'rebuild'); expect(await finishedJob(request, retry.job.id)).toMatchObject({ status: 'succeeded', summary: { index_generation: 2, updated: 1 } });

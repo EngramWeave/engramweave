@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { Job, Source } from '@engramweave/contracts';
 import { documentPathKey } from '../files/paths.js';
-import { normalizeText, processingStatus, stringList, type ParsedDocument } from '../source/parse.js';
+import { lifecycleStatus, normalizeText, processingStatus, stringList, type ParsedDocument } from '../source/parse.js';
 import { indexMeta } from './database.js';
 import { retainFinishedJobs } from '../jobs/retention.js';
 
@@ -17,9 +17,11 @@ export interface Projection { path: string; parsed: ParsedDocument; revision: st
 export const getDocument = (db: Database.Database, relative: string) => db.prepare('SELECT * FROM documents WHERE path_key=?').get(documentPathKey(relative)) as DocumentRow | undefined;
 export const allDocuments = (db: Database.Database) => db.prepare('SELECT * FROM documents ORDER BY path_key').all() as DocumentRow[];
 export function sourceItem(row: DocumentRow): Source {
+  const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
   return { id: row.id, path: row.path, title: row.title, source_type: row.source_type, state: row.state, revision: row.revision,
     original_locator: row.original_locator, captured_at: row.captured_at,
-    processing_status: processingStatus((JSON.parse(row.metadata_json) as Record<string, unknown>).processing_status),
+    processing_status: processingStatus(metadata.processing_status),
+    lifecycle_status: row.state === 'ready' ? lifecycleStatus(metadata.lifecycle_status) : null,
     asset: row.asset_json === null ? null : JSON.parse(row.asset_json), diagnostics: JSON.parse(row.diagnostics_json) };
 }
 export function parsedRow(row: DocumentRow): ParsedDocument {
@@ -27,6 +29,7 @@ export function parsedRow(row: DocumentRow): ParsedDocument {
   return { kind: row.kind, state: row.state === 'missing' ? 'invalid' : row.state, title: row.title, source_type: row.source_type,
     captured_at: row.captured_at, original_locator: row.original_locator, metadata,
     processing_status: processingStatus(metadata.processing_status),
+    lifecycle_status: row.state === 'ready' ? lifecycleStatus(metadata.lifecycle_status) : null,
     annotation: row.annotation, body_markdown: row.body_markdown, asset: row.asset_json ? JSON.parse(row.asset_json) : null,
     diagnostics: JSON.parse(row.diagnostics_json) };
 }

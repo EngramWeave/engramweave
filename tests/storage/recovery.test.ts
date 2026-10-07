@@ -7,7 +7,7 @@ import { startCore } from '../../packages/core/src/main.js';
 import { httpRuntime, httpCore, finishedJob, submitScan } from '../helpers/http.js';
 import { submitCapture } from '../helpers/capture.js';
 import { recoveryAssets, assetHashes, semanticSnapshot } from '../helpers/recovery.js';
-import { manualSource, realBytes, realSamples, sha256 } from '../helpers/fixtures.js';
+import { pendingSample, manualSource, realBytes, realSamples, sha256 } from '../helpers/fixtures.js';
 import { isolatedRuntime } from '../helpers/runtime.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -22,7 +22,7 @@ describe('explicit offline database isolation and file-driven rebuild', () => {
     const first = await submitScan(request); expect(await finishedJob(request, first.job.id)).toMatchObject({ status: 'succeeded', summary: { source_count: 8, knowledge_count: 1 } });
     const before = await semanticSnapshot(request); const hashes = await assetHashes(config.vault_path);
     expect(before.documents['20_Sources/R3/archived.md']).toMatchObject({ processing_status: 'archived' });
-    expect(before.documents[realSamples[0]!.path]).toMatchObject({ processing_status: null });
+    expect(before.documents[realSamples[0]!.path]).toMatchObject({ processing_status: 'pending' });
     expect(before.documents['20_Sources/R2/annotated.md']).toMatchObject({ annotation: 'RecoveryContextR2' });
     await core.close();
     const database = path.join(config.data_dir, 'core.sqlite');
@@ -31,7 +31,7 @@ describe('explicit offline database isolation and file-driven rebuild', () => {
       await rm(database);
       const empty = await httpCore(config); cleanups.push(empty.core.close);
       expect(await (await empty.request('/v1/status')).json()).toMatchObject({ index_generation: 0, counts: { sources: 0, knowledge: 0 } });
-      expect(await (await empty.request(`/v1/documents?path=${encodeURIComponent(realSamples[0]!.path)}`)).json()).toMatchObject({ index_stale: true, revision: realSamples[0]!.hash });
+      expect(await (await empty.request(`/v1/documents?path=${encodeURIComponent(realSamples[0]!.path)}`)).json()).toMatchObject({ index_stale: true, revision: sha256(await pendingSample(realSamples[0]!)) });
       const scan = await submitScan(empty.request, 'rebuild'); expect(await finishedJob(empty.request, scan.job.id)).toMatchObject({ status: 'succeeded' });
       expect(await semanticSnapshot(empty.request)).toEqual(before); await empty.core.close();
       recovery = { missing_database_initialized_empty: true, explicit_rebuild: true };

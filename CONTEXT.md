@@ -1,18 +1,24 @@
 # EngramWeave Core and Desktop Context
 
-Shared product semantics belong in [the system context](../doc/CONTEXT.md). This document distinguishes current P1 contracts from planned extensions; it does not claim that compilation, review, or integration is implemented.
+Shared product semantics belong in [the system context](../doc/CONTEXT.md). This document distinguishes implemented contracts from planned extensions; it does not claim that compilation, review, or integration is implemented.
 
-## Current P1 boundary
+## Current Core and Desktop boundary
 
-Core runs independently and owns explicit scanning, Source registration, current file reads, basic search, Capture, and database projection recovery. Desktop hosts or connects to Core. [P1 contracts](docs/p1-contracts.md) define supported behavior.
+Core runs independently and owns explicit scanning, Source registration, current file reads, basic search, Capture, and database projection recovery. Desktop hosts or connects to Core. [File and API contracts](docs/p1-contracts.md) define supported behavior, including the P2 A extension.
 
-P1 accepts only `archived` or an empty/absent Source `processing_status`. Scanning does not write Source metadata, and Capture does not automatically scan or compile. The planned status contract below requires a coordinated extension of parsing, contracts, registration, projection recovery, and clients.
+P2 A extends P1 registration to all five Source processing stages and independent lifecycle properties on supported Sources and Knowledge. Registry fills absent/null/empty stages with `pending`, including historical and discarded Sources, without changing body, Annotation, other properties or independent Assets. Current-file GET remains read-only; Capture does not automatically scan or compile. Desktop displays processing, lifecycle and registration separately. Draft and Research registration, processing actions and model execution are not implemented yet.
 
-## Intended processing and runtime state ownership
+The existing `/v1` fields `Source.state` and `Job.status` represent registration and execution respectively. Stages and lifecycle are projected from `metadata_json`; schema version 1 is unchanged. Missing/empty lifecycle reads as active without writing a property. Invalid/missing/unsupported Registry entries expose no readable lifecycle. An unregistered current Source with no stage returns null until registration persists pending.
+
+Property normalization uses deterministic YAML-node byte edits and a locked Windows handle commit with same-directory original backup, temporary file and recovery manifest. Scans recover verified interrupted property writes before enumeration; conflicting current files and uncertain artifacts are preserved and reported. Arbitrary hard-link aliases are refused; recognizable Capture temporary links retain the original inode while only the Record name is replaced. Capture replay accepts exact request bytes or their exact pending-normalized form, returning the current revision; all other changes conflict.
+
+## Processing and runtime state ownership
 
 Source Record Properties own `processing_status`: `pending / compiled / reviewed / planned / archived`. Core stores a rebuildable projection. Source, Draft, and formal knowledge Properties independently own `lifecycle_status: active | discarded`, preserving the content stage. Core separately owns registration (`ready / invalid / missing / unsupported`) and Job execution (`queued / running / succeeded / failed / interrupted`). Error details and retry/recompile counts remain Core runtime data.
 
 Source Registry fills an absent or empty processing property with `pending`, preserving submitted body, Annotation, and other metadata. This includes historical material. Database rebuilding reads intact stage properties rather than resetting them; file damage is handled through file history or backup recovery.
+
+Current Jobs are still scan-only; their errors and retention remain Core data. Retry and recompile counters will be persisted by the components that actually produce them, not as empty future tables in A. Ordinary rebuild preserves existing Job history under retention; missing/corrupt database reconstruction does not promise recovery of runtime history or counters from user files.
 
 ## Intended scheduling and Recompile
 

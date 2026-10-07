@@ -5,7 +5,7 @@ import { isolatedRuntime } from '../helpers/runtime.js';
 import { recoverCore, standaloneCore } from '../helpers/cli.js';
 import { submitCapture } from '../helpers/capture.js';
 import { finishedJob, submitScan } from '../helpers/http.js';
-import { copyRealSamples, manualSource, realBytes, realSamples, sha256 } from '../helpers/fixtures.js';
+import { pendingSample, copyRealSamples, manualSource, realBytes, realSamples, sha256 } from '../helpers/fixtures.js';
 
 it('demonstrates both Capture paths and offline CLI recovery through the built standalone Core', async () => {
   const isolated = await isolatedRuntime();
@@ -32,7 +32,7 @@ it('demonstrates both Capture paths and offline CLI recovery through the built s
       .toEqual(previous.items.map((item: { path: string; revision: string; processing_status: string | null }) => [item.path, item.revision, item.processing_status]));
     expect(await (await core.request('/v1/search?scope=sources&q=standalonecaptureword')).json()).toMatchObject({ total: 1 });
     const replay = await submitCapture(core.request, manual.body.path, markdown); expect(replay).toMatchObject({ status: 200, body: { created: false, revision: manual.body.revision } });
-    for (const sample of realSamples) expect(sha256(await readFile(path.join(isolated.config.vault_path, sample.path)))).toBe(sample.hash);
+    for (const sample of realSamples) expect(sha256(await readFile(path.join(isolated.config.vault_path, sample.path)))).toBe(sha256(await pendingSample(sample)));
     if (process.env.P1_EVIDENCE === '1') {
       await mkdir('.local/p1/evidence', { recursive: true });
       await writeFile('.local/p1/evidence/checkpoint-b-standalone.json', JSON.stringify({ run_at: new Date().toISOString(), runtime: 'built standalone Core and offline CLI, real HTTP/SQLite', first_capture_origin: 'User-confirmed real Clipper artifacts copied while Core was absent', web, manual, recovery_cli: recovered.result, before_sources: previous, after_sources: current, replay, raw_hashes: realSamples.map(sample => sample.hash) }, null, 2));

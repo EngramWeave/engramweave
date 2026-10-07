@@ -158,7 +158,7 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 - web/manual Markdown Capture 和离线数据库投影恢复。
 - Tauri Desktop 的 Core 启停／连接、状态、Sources、扫描 Jobs、Search 与原生打开。
 
-当前扫描范围是 `20_Sources` 和 `40_Knowledge`；保存 Capture 后仍需显式扫描。`processing_status` 目前只读取 `archived` 或空值，不自动补 `pending` 或推进处理阶段。Desktop 中的 Review、ChangeSets 等规划区域仅作展示，不代表工作流已经实现。
+当前扫描范围是 `20_Sources` 和 `40_Knowledge`；保存 Capture 后仍需显式扫描。P2 A 已支持五个处理阶段和独立生命周期，登记时为缺失或空阶段补 `pending`，保护正文、Annotation 和其他属性。Desktop 分别显示登记、处理阶段和生命周期；编译、Review、ChangeSets 等后续工作流尚未实现。状态和恢复边界见 [Core 使用说明](docs/core.md)。
 
 P2 计划接入 Zotero 选段投递、状态与调度、基本语义召回、API／Codex 编译分析和 Obsidian 人工审阅。P3 完成统一 Planner、ChangeSet 审查与执行、Git 提交和再次找回，形成首个实用闭环。完整编译、语义检索、整合、维护与科研增强尚未交付。
 

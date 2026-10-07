@@ -9,8 +9,8 @@ import { assetHashes } from '../helpers/recovery.js';
 
 it('keeps user Draft, Knowledge and configuration bytes unchanged when a Source edit waits for explicit scanning', async () => {
   const isolated = await isolatedRuntime();
-  const initial = manualSource('Before edit');
-  const edited = manualSource('EditedSourceOnlyP1');
+  const initial = manualSource('Before edit', 'processing_status: pending\n');
+  const edited = manualSource('EditedSourceOnlyP1', 'processing_status: pending\n');
   await writeDocument(isolated.config.vault_path, '20_Sources/manual.md', initial);
   await writeDocument(isolated.config.vault_path, '40_Knowledge/K1.md', '---\ntags: [ExistingKnowledgeTag]\n---\n# Existing knowledge\nExistingKnowledgeWord');
   await writeDocument(isolated.config.vault_path, '30_Drafts/user-draft.md', '# User draft\nKeep exactly as written.\r\n');
@@ -30,7 +30,7 @@ it('keeps user Draft, Knowledge and configuration bytes unchanged when a Source 
     }
     await writeDocument(isolated.config.vault_path, '20_Sources/manual.md', edited);
     const current = await (await core.request('/v1/documents?path=20_Sources/manual.md')).json();
-    expect(current).toMatchObject({ revision: sha256(Buffer.from(edited)), indexed_revision: sha256(Buffer.from(initial)), index_stale: true, processing_status: null });
+    expect(current).toMatchObject({ revision: sha256(Buffer.from(edited)), indexed_revision: sha256(Buffer.from(initial)), index_stale: true, processing_status: 'pending' });
     expect(await (await core.request('/v1/search?scope=sources&q=EditedSourceOnlyP1&fields=body')).json()).toMatchObject({ total: 0 });
     expect((await (await core.request('/v1/status')).json()).index_generation).toBe(initialStatus.index_generation);
     expect((await (await core.request('/v1/jobs')).json()).total).toBe(initialJobs.total);

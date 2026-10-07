@@ -47,7 +47,7 @@ describe('scan restart and completed Job retention', () => {
     const core = await standaloneCore(isolated.root, isolated.config);
     try { const submitted = await submitScan(core.request); expect(await finishedJob(core.request, submitted.job.id)).toMatchObject({ status: 'succeeded' }); }
     finally { await core.close(); }
-    await writeDocument(isolated.config.vault_path, '20_Sources/item.md', manualSource('nextgeneration'));
+    await writeDocument(isolated.config.vault_path, '20_Sources/item.md', manualSource('nextgeneration', 'processing_status: pending\n'));
     const filename = path.join(isolated.config.vault_path, '20_Sources/item.md');
     const hash = sha256(await readFile(filename));
     const configFile = path.join(isolated.root, 'fault-config.json'); await writeFile(configFile, JSON.stringify(isolated.config));

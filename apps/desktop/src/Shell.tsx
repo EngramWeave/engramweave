@@ -160,7 +160,6 @@ export function Shell({
             </div>
           </div>
           <div className="sidebar-footer">
-            <Icon name="settings" />
             <span>v0.1.0</span>
             <button
               title={

@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http';
 import path from 'node:path';
 import { httpRuntime, finishedJob, submitScan } from '../helpers/http.js';
 import { submitCapture } from '../helpers/capture.js';
-import { manualSource, realBytes, realSamples, sha256 } from '../helpers/fixtures.js';
+import { pendingSample, manualSource, realBytes, realSamples, sha256 } from '../helpers/fixtures.js';
 import { LIMITS } from '@engramweave/contracts';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -28,7 +28,7 @@ describe('authenticated Raw Source Capture and explicit indexing', () => {
     const scan = await submitScan(request); const job = await finishedJob(request, scan.job.id);
     expect(job).toMatchObject({ status: 'succeeded', summary: { added: 2 } });
     const search = await (await request('/v1/search?scope=sources&q=manualcaptureword')).json(); expect(search.total).toBe(1);
-    expect(sha256(await readFile(path.join(config.vault_path, web.body.path)))).toBe(sample.hash);
+    expect(sha256(await readFile(path.join(config.vault_path, web.body.path)))).toBe(sha256(await pendingSample(sample)));
     if (process.env.P1_EVIDENCE === '1') {
       await mkdir('.local/p1/evidence', { recursive: true });
       await writeFile('.local/p1/evidence/t09-capture-api.json', JSON.stringify({ web, saved, job, search, web_file_sha256: sample.hash, manual_file_sha256: sha256(Buffer.from(manual)) }, null, 2));

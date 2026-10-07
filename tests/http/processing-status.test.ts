@@ -2,7 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { httpRuntime, finishedJob, submitScan } from '../helpers/http.js';
-import { archivedSample, copyRealSamples, manualSource, realSamples, sha256, writeDocument } from '../helpers/fixtures.js';
+import { pendingSample, archivedSample, copyRealSamples, manualSource, realSamples, sha256, writeDocument } from '../helpers/fixtures.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -27,7 +27,7 @@ it('returns current archival separately from the published Registry and checks a
   expect(firstJob).toMatchObject({ status: 'succeeded', summary: { added: 3, source_count: 3 } });
   let sources = await (await request('/v1/sources')).json();
   expect(sources.items.find((item: { path: string }) => item.path === relative)).toMatchObject({ state: 'ready', processing_status: 'archived' });
-  for (const sample of realSamples) expect(sources.items.find((item: { path: string }) => item.path === sample.path).processing_status).toBeNull();
+  for (const sample of realSamples) expect(sources.items.find((item: { path: string }) => item.path === sample.path).processing_status).toBe('pending');
   let indexed = await (await request(route)).json();
   expect(indexed).toMatchObject({ processing_status: 'archived', metadata: { processing_status: 'archived' }, revision: sha256(r3), index_stale: false });
   expect(indexed.indexed_at).toEqual(expect.any(String));
@@ -60,11 +60,12 @@ it('returns current archival separately from the published Registry and checks a
   const updatedJob = await finishedJob(request, next.job.id);
   expect(updatedJob).toMatchObject({ summary: { updated: 1, unchanged: 2, source_count: 3, index_generation: 3 } });
   const refreshed = await (await request(route)).json();
-  expect(refreshed).toMatchObject({ processing_status: null, index_stale: false, revision: sha256(edited), indexed_revision: sha256(edited) });
+  const normalizedEdited = Buffer.from(edited.toString('utf8').replace('processing_status: ""', 'processing_status: pending'));
+  expect(refreshed).toMatchObject({ processing_status: 'pending', index_stale: false, revision: sha256(normalizedEdited), indexed_revision: sha256(normalizedEdited) });
   expect(Date.parse(refreshed.indexed_at)).toBeGreaterThan(Date.parse(indexed.indexed_at));
   expect(await (await request('/v1/search?scope=sources&q=refresh_after_archival')).json()).toMatchObject({ total: 1, index_generation: 3 });
-  expect(sha256(await readFile(path.join(config.vault_path, relative)))).toBe(sha256(edited));
-  for (const sample of realSamples) expect(sha256(await readFile(path.join(config.vault_path, sample.path)))).toBe(sample.hash);
+  expect(sha256(await readFile(path.join(config.vault_path, relative)))).toBe(sha256(normalizedEdited));
+  for (const sample of realSamples) expect(sha256(await readFile(path.join(config.vault_path, sample.path)))).toBe(sha256(await pendingSample(sample)));
   if (process.env.P1_EVIDENCE === '1') {
     const directory = path.resolve('.local/p1/evidence'); await mkdir(directory, { recursive: true });
     const fields = (document: Record<string, unknown>) => ({ path: document.path, revision: document.revision, indexed_revision: document.indexed_revision,
@@ -80,7 +81,7 @@ it('returns current archival separately from the published Registry and checks a
 
 it('reports invalid archival values without returning a searchable Source or an archive state', async () => {
   const { request, cleanup } = await httpRuntime(async vault => {
-    await writeDocument(vault, '20_Sources/invalid.md', manualSource('never-index-this', 'processing_status: compiled\n'));
+    await writeDocument(vault, '20_Sources/invalid.md', manualSource('never-index-this', 'processing_status: failed\n'));
   });
   cleanups.push(cleanup);
   const response = await request('/v1/documents?path=20_Sources/invalid.md');

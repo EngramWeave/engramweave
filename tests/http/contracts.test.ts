@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { API } from '@engramweave/contracts';
 import { httpRuntime, finishedJob } from '../helpers/http.js';
-import { copyRealSamples, manualSource, realSamples, sha256 } from '../helpers/fixtures.js';
+import { pendingSample, copyRealSamples, manualSource, realSamples, sha256 } from '../helpers/fixtures.js';
 
 it('validates real wire responses for all nine P1 endpoints and rejects undeclared inputs without asset writes', async () => {
   const runtime = await httpRuntime(copyRealSamples);
@@ -70,11 +70,11 @@ it('validates real wire responses for all nine P1 endpoints and rejects undeclar
     }
     expect(new Set(checks.map(check => check.route)).size).toBe(9);
     expect((await (await runtime.request('/v1/jobs')).json()).total).toBe(1);
-    expect(await readFile(path.join(runtime.config.vault_path, capture.path), 'utf8')).toBe(capture.markdown);
+    expect(await readFile(path.join(runtime.config.vault_path, capture.path), 'utf8')).toBe(capture.markdown.replace('---\n', '---\nprocessing_status: pending\n'));
     const hashes = [];
     for (const sample of realSamples) {
       const actual = sha256(await readFile(path.join(runtime.config.vault_path, sample.path)));
-      expect(actual).toBe(sample.hash);
+      expect(actual).toBe(sha256(await pendingSample(sample)));
       hashes.push({ path: sample.path, before_sha256: sample.hash, after_sha256: actual });
     }
     if (process.env.P1_EVIDENCE === '1') {

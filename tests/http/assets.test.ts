@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { httpRuntime, finishedJob, submitScan } from '../helpers/http.js';
 import { assetBytes, assetChain, assetPath, knowledgePath, recordPath } from '../helpers/assets.js';
-import { realSamples, sha256 } from '../helpers/fixtures.js';
+import { pendingSample, realSamples, sha256 } from '../helpers/fixtures.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -26,7 +26,7 @@ it('follows K1 → R1/A1 → Asset and rechecks missing/restored assets with unc
   expect(localHash).toBe(sha256(assetBytes));
   await rm(path.join(config.vault_path, assetPath));
   const detailMissing = await document(recordPath);
-  expect(detailMissing).toMatchObject({ index_stale: false, revision: record.revision, asset: { availability: 'missing' }, diagnostics: [{ code: 'ASSET_MISSING' }] });
+  expect(detailMissing).toMatchObject({ index_stale: false, revision: firstItem.revision, asset: { availability: 'missing' }, diagnostics: [{ code: 'ASSET_MISSING' }] });
   expect((await (await request('/v1/sources')).json()).items.find((item: { path: string }) => item.path === recordPath).asset.availability).toBe('available');
   const missingScan = await scan();
   expect(missingScan).toMatchObject({ summary: { unchanged: 5, invalid: 0, warnings: [{ code: 'ASSET_MISSING', path: recordPath }] } });
@@ -38,7 +38,7 @@ it('follows K1 → R1/A1 → Asset and rechecks missing/restored assets with unc
   const restoredList = await (await request('/v1/sources')).json();
   expect(restoredList.items.find((item: { path: string }) => item.path === recordPath)).toMatchObject({ id: firstItem.id, asset: { availability: 'available' }, diagnostics: [] });
   expect(sha256(await readFile(path.join(config.vault_path, assetPath)))).toBe(localHash);
-  for (const sample of realSamples) expect(sha256(await readFile(path.join(config.vault_path, sample.path)))).toBe(sample.hash);
+  for (const sample of realSamples) expect(sha256(await readFile(path.join(config.vault_path, sample.path)))).toBe(sha256(await pendingSample(sample)));
   if (process.env.P1_EVIDENCE === '1') {
     await mkdir('.local/p1/evidence', { recursive: true });
     await writeFile('.local/p1/evidence/t08-asset-chain.json', JSON.stringify({ unindexed, record, firstList, detailMissing, missingScan, missingList, restoredScan, restoredList, binary_sha256: localHash, raw_sample_hashes: realSamples.map(sample => sample.hash) }, null, 2));

@@ -1,6 +1,9 @@
 import type { Document } from '@engramweave/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { lifecycleLabel, processingLabel } from './status-labels';
+import { ErrorNotice } from './Feedback';
+import type { Failure } from './client';
 
 function display(value: unknown): string {
   return typeof value === 'string' ? value : (JSON.stringify(value) ?? '—');
@@ -10,10 +13,12 @@ export function Detail({
   document,
   open,
   close,
+  error,
 }: {
   document: Document;
   open: (target: 'obsidian' | 'original') => void;
   close: () => void;
+  error?: Failure | undefined;
 }) {
   const panel = useRef<HTMLElement>(null);
   const [tab, setTab] = useState<'details' | 'annotation' | 'links'>('details');
@@ -108,19 +113,19 @@ export function Detail({
             <dd>{document.source_type ?? 'Knowledge'}</dd>
             <dt>
               <Icon name="layers" />
-              Archived
+              Processing
             </dt>
             <dd>
               {document.kind === 'source' ? (
                 <span className="state-tag green">
-                  {document.processing_status === 'archived'
-                    ? '已归档'
-                    : '未归档'}
+                  {processingLabel(document.processing_status)}
                 </span>
               ) : (
                 '—'
               )}
             </dd>
+            <dt><Icon name="file" />Lifecycle</dt>
+            <dd className={document.lifecycle_status === 'discarded' ? 'lifecycle-discarded' : ''}>{lifecycleLabel(document.lifecycle_status)}</dd>
             <dt>
               <Icon name="clock" />
               Captured
@@ -249,6 +254,7 @@ export function Detail({
           )}
         </div>
       </div>
+      {error && <div className="inspector-body"><ErrorNotice error={error} /></div>}
       {document.index_stale && (
         <div className="notice warning" role="status">
           索引已过时，请显式刷新 Vault。

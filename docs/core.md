@@ -6,7 +6,7 @@ Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop
 
 ## 运行
 
-使用 Windows 本地 NTFS、Node 24.x 和 npm 11.x；项目验证版本为 `.node-version` 与 package-lock.json 中的版本。PowerShell 用于固定的 Windows 文件属性查询，以识别 Node Stats 未暴露的 Hidden 与 ReparsePoint 属性；它不执行用户命令或读取正文。
+使用 Windows 本地 NTFS、Node 24.x 和 npm 11.x；项目验证版本为 `.node-version` 与 package-lock.json 中的版本。PowerShell 用于固定的 Windows 属性查询和 Source 属性提交，识别 Hidden/ReparsePoint 并取得受保护文件句柄。路径和版本通过 JSON 输入，不执行用户命令；属性提交会读取目标文件校验 hash。
 
 ```powershell
 npm ci
@@ -30,7 +30,7 @@ npm run core -- --config D:/path/to/config.json
 
 SQLite 缺失时建立空库，generation=0。health 在数据库初始化成功后返回200 ready；初始化期间返回503。ready 表示运行和数据库可用，不代表已扫描。损坏、版本或约束不匹配、Vault 绑定不同的数据库明确报错，保留文件，不自动删除或恢复。
 
-初始 SQLite schema_version=1，只有documents/jobs/meta三张表。documents.indexed_at允许null，以表示文件尚未成功读取校验；归档属性保存在metadata_json中，没有独立列或状态机。带indexed_at NOT NULL等不匹配约束的数据库返回SCHEMA_UNSUPPORTED，不自动转换或删除。验证不同布局时使用独立data_dir并保留旧库。
+SQLite schema_version=1，只有documents/jobs/meta三张表。documents.indexed_at允许null，以表示文件尚未成功读取校验；处理阶段和生命周期保存在metadata_json投影中，没有独立列或状态机。A 不需要数据库迁移；已有库的空阶段在下一次登记时补写。带indexed_at NOT NULL等不匹配约束的数据库返回SCHEMA_UNSUPPORTED，不自动转换或删除。验证不同布局时使用独立data_dir并保留旧库。
 
 Ctrl+C 正常停止；宿主持有的 Node IPC 可发送 `{type:"stop"}` 请求停止。正常停止等待当前扫描结束，移除本实例描述，保留数据库和 token；不开放 shutdown HTTP。遗留活动扫描在新进程启动时标 interrupted，须显式重试。
 
@@ -58,9 +58,11 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/search?scope=sources&q=counter
 
 GET `/v1/documents?path=...` 只读取受限路径的当前文件。metadata、annotation、source_content/record_body或Knowledge body分别返回。无登记时 indexed_revision/indexed_at=null、index_stale=true；登记后根据当前原始字节revision与索引revision判断新鲜度。搜索结果代表最后一次成功扫描，不实时刷新。
 
-Source列表与Source详情分别返回已发布投影和当前文件的processing_status，仅有archived/null。missing、null或空字符串按未归档读取；metadata保留原始表示，不自动添加字段。其他非空值或类型使Source invalid。该属性与ready独立：已归档和未归档Source都参与扫描与搜索，P1不提供归档动作或编译候选筛选。
+Source列表与Source详情分别返回已发布投影和当前文件的processing_status，支持pending/compiled/reviewed/planned/archived。Registry 为缺失、YAML null、空字符串补pending，包含历史和discarded材料；其他非空值或类型使Source invalid。GET不写属性，尚未登记的空阶段返回null。完整阶段在扫描及数据库重建中保持，不由普通正文编辑、登记或Job结果推断阶段。
 
-文件的indexed_at只在扫描实际稳定读取并计算revision后刷新，refresh复用解析也须重新读取字节；读取失败或missing保留先前校验时间，首次读取失败为null。列表indexed_at和status.last_scan_at表示一代投影发布完成，不能代表每条异常文件都读取成功。unchanged表示本轮读取后Record字节未变；Asset状态另行判断。详情读取不更新索引、时间或归档投影。
+Source和Knowledge独立返回lifecycle_status，active/discarded保留原值；缺失/null/空字符串读取为active，不补写。非法值使文件invalid；invalid/missing/unsupported列表项返回null。API中Source.state表示registration_status，Job.status表示job_status，沿用字段名。Job仍只执行扫描；错误、运行历史和后续重试/重编译次数属于Core，不回写文件。
+
+文件的indexed_at只在扫描实际稳定读取并计算revision后刷新，补属性后重新读取最终字节，refresh复用解析也须重新读取字节；读取失败或missing保留先前校验时间，首次读取失败为null。列表indexed_at和status.last_scan_at表示一代投影发布完成，不能代表每条异常文件都读取成功。unchanged表示本轮读取后Record字节未变；Asset状态另行判断。详情读取不更新索引、时间或阶段投影。
 
 Search默认scope=knowledge，可选sources/all。q按空白拆成最多8词，AND字面子串匹配，统一NFC和Unicode小写。字段为title/body/annotation/metadata；metadata只索引URL、source_type、tags，description等扩展字段不进入检索。支持source_type、单tag和按目录段匹配的path_prefix过滤；空q至少需一个过滤。
 
@@ -84,7 +86,7 @@ POST `/v1/captures` 接收path和markdown，拒绝未知字段和非字符串值
 
 JSON请求最多8MiB，UTF-8 Markdown最多5MiB，均按字节限制，超限413；流式请求同样受限制。输入验证后，目标同目录排他创建`.engramweave-capture-<UUID>.tmp`，完整写入、flush、关闭，再以NTFS硬链接创建最终路径。已有目标无法被硬链接替换；不支持硬链接时明确失败，没有rename/copy覆盖回退。清理仅删除本次请求创建且仍能确认身份的临时文件。
 
-首次创建201、created=true；目标路径和全部字节相同的重放200、created=false；不同字节409 PATH_CONFLICT。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
+首次创建201、created=true；目标路径和全部字节相同，或仅经同一Registry补pending规则形成精确相同字节的重放200、created=false，revision返回当前文件hash。正文、Annotation、其他属性、换行或既有有效阶段的变化仍返回409 PATH_CONFLICT，不做YAML语义宽松比较。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
 
 以下命令沿用前面的 `$coreHeaders`，只在隔离测试 Vault 中创建新的 Manual Source；网页 Source 可读取已有完整 Markdown 后使用同一接口提交。
 
@@ -108,6 +110,16 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/documents?path=20_Sources%2FMa
 
 进程在发布前退出，最终路径不存在，可重新提交；发布后响应丢失，同字节重试返回200。残留临时名字不被扫描为文档；扫描对严格匹配Core临时命名的残留报告CAPTURE_TEMPORARY_REMAINS，不自动删除残留或其他文件。临时名字的存在本身不构成允许自动删除的证明。
 
+## 属性补写与恢复
+
+属性编辑按YAML节点的字节范围插入或替换阶段，不重序列化Frontmatter。BOM、LF/CRLF、注释、正文、Annotation、未知属性和独立Asset保持。候选重新解析，只有processing_status可改变；阶段anchor被其他属性alias引用而产生联动时拒绝补写，报告PROPERTY_WRITE_UNSUPPORTED，保留原文件。补写使文件超过5MiB也会拒绝，不截断内容。
+
+固定Windows助手先保护从本地卷根到Vault及目标目录的绝对路径链，锁定目标句柄、核对原件hash，再在原目录排他创建并同步`.engramweave-properties-<UUID>.json`恢复记录和`.tmp`候选。恢复记录和候选重新核对hash；通过句柄把原件移到`.bak`，再无覆盖发布候选，并通过已锁定句柄清理确认过的恢复记录。目标被锁、只读、路径不安全、版本变化或任意硬链接别名均拒绝。Capture进程遗留的可识别临时硬链接保留原inode，只替换Record路径，不删除Capture残留。
+
+下一次显式扫描先处理恢复记录：目标缺失时恢复已验证原件；目标等于原件或候选时清理已验证补写残留。恢复记录最多4KiB、最多10,000条，恢复及原生hash读取计入本轮100MiB预算。目标存在其他内容、恢复记录损坏或身份不确定时不覆盖、不删除版本，整体扫描失败并保留上一代投影；需查看错误指向目录的原件、候选和恢复记录，明确处理冲突后重试。没有有效恢复记录的临时文件只报告PROPERTY_ARTIFACT_REMAINS，不自动删除。提交中短暂缺少最终路径时，详情读取可能返回404；扫描完成或恢复后重新读取即可。
+
+文件与SQLite不组成跨存储事务。属性已落盘而投影事务失败时，不撤销文件补写；下次扫描按当前文件修复投影。单文件补写失败登记为invalid且带诊断，不伪造ready/pending，不写failed内容阶段。该能力只维护缺失/空Source阶段，不修改Knowledge、Draft或附件。
+
 ## 数据库恢复
 
 正常rebuild由POST scans的mode=rebuild执行；新代事务发布前仍查询上一代，失败不会暴露部分结果。缺库启动会建立generation=0的空库，不自动扫描；当前文件仍可读，需显式扫描恢复登记。损坏、较新schema或不匹配约束报错，原库保留。
@@ -122,11 +134,11 @@ npm run core -- --recover --config D:/path/to/config.json
 
 每次以独立recovery-时间-UUID目录保留旧数据库家族，再创建新库并执行一次rebuild。成功输出core_recovered、backup_dir、isolated_files与成功Job。备份不会自动删除；缺库也可直接按普通启动/扫描流程恢复，不必先隔离。
 
-文件隔离由逐个文件移动完成；如果中途失败，已移入备份的文件和仍在原位的成员都保留，错误输出backup_dir和isolated_files。新库创建或扫描失败也保留旧备份、新库及可持久化的失败Job诊断，不自动回滚覆盖文件。确认原因后可以再次显式恢复；每次使用新备份目录。恢复允许内部ID/Job历史变化，path/revision、Annotation、已有归档属性、正文与支持的语义查询均从文件重建。
+文件隔离由逐个文件移动完成；如果中途失败，已移入备份的文件和仍在原位的成员都保留，错误输出backup_dir和isolated_files。新库创建或扫描失败也保留旧备份、新库及可持久化的失败Job诊断，不自动回滚覆盖文件。确认原因后可以再次显式恢复；每次使用新备份目录。恢复允许内部ID/Job历史变化，路径、完整阶段、生命周期、Annotation、正文与支持的语义查询均从文件重建。缺失/空阶段仍补pending并更新revision，其他文件保持原hash；不从文件推造旧错误或次数。
 
 ## 验证
 
-所有自动测试位于tests/。真实样本默认在本地私有副本中使用，fixture说明与运行报告保存在被Git忽略的`.local/p1/`。
+所有自动测试位于tests/。真实样本默认在本地私有副本中使用，fixture说明保存在被Git忽略的`.local/`；P2运行报告放`.local/p2/`。
 
 ```powershell
 npm run fixtures:prepare
@@ -138,9 +150,9 @@ npm exec vitest run tests/jobs tests/source/references.test.ts tests/http/assets
 npm exec -- vitest run tests/capture tests/http/captures.test.ts tests/storage/recovery.test.ts tests/storage/recovery-failures.test.ts tests/discovery/rebuild.test.ts tests/e2e/capture-recovery.test.ts
 ```
 
-采集可在Core关闭时由现有Clipper直接落盘。验证这条路径应实际剪藏后启动Core、检查尚未扫描时列表为空，再显式扫描、读详情、用真实正文词查询、重复扫描并比较文件哈希。仓库模板版本不等于浏览器实际安装版本，应分别记录。
+采集可在Core关闭时由现有Clipper直接落盘。验证这条路径应实际剪藏后启动Core、检查尚未扫描时列表为空，再显式扫描、读详情、用真实正文词查询、确认首次登记只补阶段，重复扫描后比较完整文件哈希。仓库模板版本不等于浏览器实际安装版本，应分别记录。
 
-性能基准使用现有 Vitest、构建后的独立 Core、真实 loopback HTTP 和 SQLite。它构造 500 份、合计 25 MiB 的隔离 Markdown，其中两份 R1 保持原样；分别测首次 refresh、重复 refresh 和 rebuild，以及正文、Annotation、多词、元数据筛选五类查询。每类查询预热 3 次后测 30 次，以最近秩法计算 p95。扫描计时包含提交和完成轮询，查询计时包含 HTTP 和 JSON 解码；不清空 OS 文件缓存，不代表冷盘或最大限额性能。目标为每次扫描 ≤15 秒、每类热查询 p95≤1 秒，并比较所有文件前后哈希。
+性能基准使用现有 Vitest、构建后的独立 Core、真实 loopback HTTP 和 SQLite。它构造 500 份、合计 25 MiB 的隔离 Markdown，其中两份 R1 仅预补 pending，其他 Source 也预填阶段，以测量登记吞吐而非批量属性写入；分别测首次 refresh、重复 refresh 和 rebuild，以及正文、Annotation、多词、元数据筛选五类查询。每类查询预热 3 次后测 30 次，以最近秩法计算 p95。扫描计时包含提交和完成轮询，查询计时包含 HTTP 和 JSON 解码；不清空 OS 文件缓存，不代表冷盘或最大限额性能。目标为每次扫描 ≤15 秒、每类热查询 p95≤1 秒，并比较所有文件前后哈希。
 
 ```powershell
 npm run build

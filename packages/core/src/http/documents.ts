@@ -26,6 +26,7 @@ export function registerDocumentRoutes(server: FastifyInstance, config: Config, 
       indexed_at: row?.indexed_at ?? null, index_generation: meta.index_generation,
       index_stale: !row || row.state !== 'ready' || row.revision !== file.revision,
       title: parsed.title, metadata: parsed.metadata, annotation: parsed.annotation, diagnostics: parsed.diagnostics,
+      lifecycle_status: parsed.lifecycle_status,
       original_references: references,
     };
     if (parsed.kind === 'knowledge') {

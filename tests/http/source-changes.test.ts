@@ -2,7 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { httpRuntime, finishedJob, submitScan } from '../helpers/http.js';
-import { copyRealSamples, realSamples, sha256, writeDocument } from '../helpers/fixtures.js';
+import { pendingSample, copyRealSamples, realSamples, sha256, writeDocument } from '../helpers/fixtures.js';
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -38,8 +38,8 @@ it('handles rename, same-URL copies, invalidation and repair through explicit sc
   expect(repaired).toMatchObject({ summary: { updated: 1, invalid: 0 } });
   expect(await (await request('/v1/sources')).json()).toMatchObject({ total: 3 });
   expect((await (await request('/v1/sources')).json()).items.find((item: { path: string }) => item.path === moved).id).toBe(movedId);
-  for (const relative of [moved, '20_Sources/Web/2026-10/same-url.md']) expect(sha256(await readFile(path.join(config.vault_path, relative)))).toBe(original.hash);
-  expect(sha256(await readFile(path.join(config.vault_path, realSamples[1]!.path)))).toBe(realSamples[1]!.hash);
+  for (const relative of [moved, '20_Sources/Web/2026-10/same-url.md']) expect(sha256(await readFile(path.join(config.vault_path, relative)))).toBe(sha256(await pendingSample(original)));
+  expect(sha256(await readFile(path.join(config.vault_path, realSamples[1]!.path)))).toBe(sha256(await pendingSample(realSamples[1]!)));
   if (process.env.P1_EVIDENCE === '1') {
     await mkdir('.local/p1/evidence', { recursive: true });
     await writeFile('.local/p1/evidence/t07-source-changes.json', JSON.stringify({ renamed, invalidated, repaired, distinct_path_count: sources.total, originalId, movedId, invalid_search_paths: search.items.map((item: { path: string }) => item.path), preserved_hashes: realSamples.map(sample => sample.hash) }, null, 2));

@@ -12,18 +12,34 @@ import { getDocument, parsedRow, publishScan, type Projection } from '../storage
 import { indexMeta } from '../storage/database.js';
 import { resolveDocumentReferences } from '../source/references.js';
 import { isCaptureTemporaryName } from '../files/publication.js';
+import { pendingSourceBytes } from '../source/properties.js';
+import { isPropertyArtifact, isPropertyJournal, recoverPropertyJournal, writeSourceProperties } from '../files/properties.js';
+import { PropertyNative } from '../files/property-native.js';
 
 class ScanFailure extends CoreError { constructor(message: string) { super('IO_ERROR', message); } }
 export interface Enumeration { paths: string[]; roots: string[]; warnings: Source['diagnostics'] }
 
-export async function enumerateMarkdown(vault: string, knownRoots: string[]): Promise<Enumeration> {
+export async function enumerateMarkdown(vault: string, knownRoots: string[], native?: PropertyNative, onBytes?: (count: number) => void): Promise<Enumeration> {
   const result: Enumeration = { paths: [], roots: [], warnings: [] };
+  let recoveryEntries = 0;
   try {
     const rootInfo = await lstat(vault);
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || pathKey(await realpath(vault)) !== pathKey(vault) || (await windowsAttributes([vault]))[0]?.reparse) throw new ScanFailure('Vault is unavailable or linked');
     const visit = async (relative: string) => {
       const absolute = path.join(vault, relative);
-      const names = await readdir(absolute);
+      let names = await readdir(absolute);
+      const journals = names.filter(isPropertyJournal);
+      recoveryEntries += journals.length;
+      if (recoveryEntries > LIMITS.scan_candidates) throw new ScanFailure('Scan exceeds the property recovery entry limit');
+      if (native) for (const name of journals) {
+        try { await recoverPropertyJournal(vault, relative, name, native, undefined, onBytes); }
+        catch (error) {
+          if (error instanceof ScanFailure) throw error;
+          throw new ScanFailure(`Property recovery refused at ${relative}/${name}; inspect preserved artifacts`);
+        }
+      }
+      if (names.some(isPropertyJournal) && native) names = await readdir(absolute);
+      for (const name of names.filter(isPropertyArtifact)) result.warnings.push({ code: 'PROPERTY_ARTIFACT_REMAINS', message: 'Unresolved property artifact was preserved', path: `${relative}/${name}` });
       for (const name of names.filter(isCaptureTemporaryName)) result.warnings.push({ code: 'CAPTURE_TEMPORARY_REMAINS', message: 'Capture temporary name remains; no automatic cleanup was performed', path: `${relative}/${name}` });
       const children = names.filter(name => !excludedName(name));
       const attrs = await windowsAttributes(children.map(name => path.join(absolute, name)));
@@ -67,20 +83,36 @@ export async function enumerateMarkdown(vault: string, knownRoots: string[]): Pr
 }
 
 export async function scanVault(db: Database.Database, vault: string, jobId: string, mode: Job['mode'], progress: (processed: number) => void): Promise<NonNullable<Job['summary']>> {
-  const previousRoots: string[] = JSON.parse(indexMeta(db).known_scan_roots);
-  const enumeration = await enumerateMarkdown(vault, previousRoots);
-  const projections: Projection[] = [];
   let totalBytes = 0;
+  const onBytes = (count: number) => {
+    totalBytes += count;
+    if (totalBytes > LIMITS.scan_total_bytes) throw new ScanFailure('Scan exceeds the cumulative read byte limit');
+  };
+  const native = new PropertyNative(onBytes);
+  try { return await scanWithProperties(db, vault, jobId, mode, progress, native, onBytes); }
+  finally { await native.close(); }
+}
+
+async function scanWithProperties(db: Database.Database, vault: string, jobId: string, mode: Job['mode'], progress: (processed: number) => void, native: PropertyNative, onBytes: (count: number) => void): Promise<NonNullable<Job['summary']>> {
+  const previousRoots: string[] = JSON.parse(indexMeta(db).known_scan_roots);
+  const enumeration = await enumerateMarkdown(vault, previousRoots, native, onBytes);
+  const projections: Projection[] = [];
   for (const relative of enumeration.paths) {
     let projection: Projection;
     try {
-      const file = await readMarkdown(vault, relative, true, count => {
-        totalBytes += count;
-        if (totalBytes > LIMITS.scan_total_bytes) throw new ScanFailure('Scan exceeds the cumulative read byte limit');
-      });
+      let file = await readMarkdown(vault, relative, true, onBytes);
       const previous = getDocument(db, relative);
-      const parsed = mode === 'refresh' && previous?.state === 'ready' && previous.revision === file.revision
+      let parsed = mode === 'refresh' && previous?.state === 'ready' && previous.revision === file.revision
         ? parsedRow(previous) : parseMarkdown(relative, file.bytes);
+      // P1 cached arbitrary lifecycle metadata; do not let the cache bypass P2 validation.
+      if (parsed.state === 'ready' && parsed.lifecycle_status === null) parsed = parseMarkdown(relative, file.bytes);
+      if (parsed.state === 'ready' && parsed.kind === 'source' && parsed.processing_status === null) {
+        const updated = pendingSourceBytes(relative, file.bytes);
+        await writeSourceProperties(vault, relative, file, updated, native, onBytes);
+        file = await readMarkdown(vault, relative, false, onBytes);
+        parsed = parseMarkdown(relative, file.bytes);
+        if (parsed.state === 'ready' && parsed.processing_status === null) throw new ScanFailure('Source changed after property normalization; retry the scan');
+      }
       await resolveDocumentReferences(vault, relative, parsed);
       projection = { path: relative, parsed, revision: file.revision, size: file.size, mtime: file.mtime };
     } catch (error) {

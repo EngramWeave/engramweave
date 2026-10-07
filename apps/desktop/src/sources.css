@@ -95,9 +95,10 @@
   color: #0056ff;
 }
 .source-stat small {
-  font-size: 10px;
+  font-size: 9px;
   color: #7a8fba;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.4;
 }
 .sources-layout {
   display: grid;
@@ -177,22 +178,36 @@
   padding: 9px 8px;
 }
 .source-table th:first-child {
-  width: 43%;
+  width: 40%;
 }
 .source-table th:nth-child(2) {
   width: 10%;
 }
 .source-table th:nth-child(3) {
-  width: 13%;
+  width: 12%;
 }
 .source-table th:nth-child(4) {
-  width: 14%;
+  width: 12%;
 }
 .source-table th:nth-child(5) {
-  width: 10%;
+  width: 14%;
 }
 .source-table th:last-child {
-  width: 10%;
+  width: 12%;
+}
+.source-table th:nth-child(5) span,
+.source-table th:nth-child(5) small {
+  display: block;
+  font-size: inherit;
+  line-height: 1.5;
+}
+.source-list > .error-notice {
+  margin-top: 12px;
+}
+.source-inspector .document-failure {
+  margin: 0;
+  padding: 0;
+  max-height: max(400px, calc(100vh - 305px));
 }
 .source-table td {
   padding: 7px 8px;
@@ -613,19 +628,19 @@
     display: none;
   }
   .source-table th:first-child {
-    width: 44%;
+    width: 40%;
   }
   .source-table th:nth-child(2) {
     width: 12%;
   }
   .source-table th:nth-child(4) {
-    width: 18%;
+    width: 16%;
   }
   .source-table th:nth-child(5) {
-    width: 13%;
+    width: 18%;
   }
   .source-table th:last-child {
-    width: 13%;
+    width: 14%;
   }
   .source-title-cell {
     gap: 8px;
@@ -704,21 +719,19 @@
     display: table-cell;
   }
   .source-table th:first-child {
-    width: 43%;
+    width: 38%;
   }
   .source-table th:nth-child(2) {
     width: 10%;
   }
   .source-table th:nth-child(3) {
-    width: 13%;
+    width: 12%;
   }
   .source-table th:nth-child(4) {
-    width: 14%;
+    width: 12%;
   }
-  .source-table th:nth-child(5),
-  .source-table th:last-child {
-    width: 10%;
-  }
+  .source-table th:nth-child(5) { width: 16%; }
+  .source-table th:last-child { width: 12%; }
   .source-inspector .detail {
     max-height: none;
   }
@@ -765,4 +778,7 @@
   .inspector-empty {
     min-height: 210px;
   }
+}
+.lifecycle-discarded {
+  color: #a24a30 !important;
 }

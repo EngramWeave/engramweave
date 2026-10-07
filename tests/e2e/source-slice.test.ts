@@ -4,9 +4,9 @@ import path from 'node:path';
 import { isolatedRuntime } from '../helpers/runtime.js';
 import { standaloneCore } from '../helpers/cli.js';
 import { finishedJob, submitScan } from '../helpers/http.js';
-import { copyRealSamples, realSamples, sha256, writeDocument } from '../helpers/fixtures.js';
+import { pendingSample, copyRealSamples, realSamples, sha256, writeDocument } from '../helpers/fixtures.js';
 
-it('finds unchanged real Clipper files through the built standalone Core and reads ordinary Knowledge', async () => {
+it('registers real Clipper files with only a pending property added through the built standalone Core and reads ordinary Knowledge', async () => {
   const isolated = await isolatedRuntime();
   // Real Clipper artifacts are copied while Core is absent. Browser capture itself is manual.
   await copyRealSamples(isolated.config.vault_path);
@@ -31,7 +31,7 @@ it('finds unchanged real Clipper files through the built standalone Core and rea
     }
     for (const sample of realSamples) {
       const document = await (await core.request(`/v1/documents?path=${encodeURIComponent(sample.path)}`)).json();
-      expect(document).toMatchObject({ kind: 'source', processing_status: null, annotation: '', original_locator: sample.url, index_stale: false, revision: sample.hash, indexed_revision: sample.hash, record_body: null, body: null });
+      expect(document).toMatchObject({ kind: 'source', processing_status: 'pending', lifecycle_status: 'active', annotation: '', original_locator: sample.url, index_stale: false, revision: sha256(await pendingSample(sample)), indexed_revision: sha256(await pendingSample(sample)), record_body: null, body: null });
       expect(document.metadata.author).toEqual([sample.author]);
       expect(document.metadata).not.toHaveProperty('annotation');
       expect(document.source_content).not.toContain(document.metadata.description);
@@ -56,7 +56,7 @@ it('finds unchanged real Clipper files through the built standalone Core and rea
     evidence.knowledge_priority_result = all;
     const knowledge = await (await core.request('/v1/documents?path=40_Knowledge/K1.md')).json();
     expect(knowledge).toMatchObject({ kind: 'knowledge', metadata: {}, source_content: null, record_body: null, asset: null, body: '# Existing knowledge\n\nvolatile counter++ 中文知识' });
-    for (const sample of realSamples) expect(sha256(await readFile(path.join(isolated.config.vault_path, sample.path)))).toBe(sample.hash);
+    for (const sample of realSamples) expect(sha256(await readFile(path.join(isolated.config.vault_path, sample.path)))).toBe(sha256(await pendingSample(sample)));
     evidence.final_asset_hashes = await Promise.all(realSamples.map(async sample => ({ path: sample.path, sha256: sha256(await readFile(path.join(isolated.config.vault_path, sample.path))), original_sha256: sample.hash })));
     verified = true;
   } finally {

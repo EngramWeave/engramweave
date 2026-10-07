@@ -20,7 +20,7 @@ it.each(['before_publish', 'after_publish'])('recovers an actual HTTP Capture pr
   const child = faultChild(path.resolve('tests/helpers/capture-fault-child.mjs'), [configFile, phase]); cleanups.push(child.kill);
   await child.phase('core_ready');
   const token = await readFile(path.join(config.data_dir, 'token'), 'utf8');
-  const markdown = manualSource('crashreplayword');
+  const markdown = manualSource('crashreplayword', 'processing_status: pending\n');
   const pending = fetch(`http://127.0.0.1:${config.port}/v1/captures`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ path: '20_Sources/replay.md', markdown }) }).then(response => response.status, () => 'response_lost');
   await child.phase(phase); await child.kill();
   expect(await pending).toBe('response_lost');

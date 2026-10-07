@@ -7,6 +7,7 @@ import { markdownPath, resolveVaultDirectory, resolveMarkdown } from '../files/p
 import { readMarkdown } from '../files/read.js';
 import { publishFile } from '../files/publication.js';
 import { parseMarkdown } from '../source/parse.js';
+import { pendingSourceBytes } from '../source/properties.js';
 
 async function ensureParent(vault: string, relative: string): Promise<void> {
   try { await resolveVaultDirectory(vault, relative); return; }
@@ -18,14 +19,17 @@ async function ensureParent(vault: string, relative: string): Promise<void> {
   await resolveVaultDirectory(vault, relative);
 }
 
-async function existingMatch(vault: string, relative: string, bytes: Buffer): Promise<boolean> {
+async function existingMatch(vault: string, relative: string, bytes: Buffer): Promise<string | null> {
   let filename;
   try { filename = await resolveMarkdown(vault, relative); }
-  catch (error) { if (error instanceof CoreError && error.code === 'DOCUMENT_NOT_FOUND') return false; throw error; }
-  if ((await lstat(filename)).size !== bytes.length) throw new CoreError('PATH_CONFLICT', 'Capture target already contains different bytes', 409);
+  catch (error) { if (error instanceof CoreError && error.code === 'DOCUMENT_NOT_FOUND') return null; throw error; }
+  const size = (await lstat(filename)).size;
+  // Keep conflict behavior for oversized existing files without attempting to read them.
+  if (size > LIMITS.markdown_bytes) throw new CoreError('PATH_CONFLICT', 'Capture target already contains different bytes', 409);
   const current = await readMarkdown(vault, relative);
-  if (!current.bytes.equals(bytes)) throw new CoreError('PATH_CONFLICT', 'Capture target already contains different bytes', 409);
-  return true;
+  if (current.bytes.equals(bytes)) return current.revision;
+  try { if (current.bytes.equals(pendingSourceBytes(relative, bytes))) return current.revision; } catch { /* Unsupported normalization does not broaden replay matching. */ }
+  throw new CoreError('PATH_CONFLICT', 'Capture target already contains different bytes', 409);
 }
 
 /** Save validated inline Source bytes; indexing is always a separate explicit scan. */
@@ -38,11 +42,13 @@ export async function createCapture(vault: string, input: CaptureRequest): Promi
   if (parsed.state !== 'ready' || !['web', 'manual'].includes(parsed.source_type ?? '') || parsed.asset?.kind !== 'inline_markdown' || !parsed.body_markdown.trim()) {
     throw new CoreError('INVALID_SOURCE', 'Capture requires a complete web or manual inline Raw Source', 422, { diagnostics: parsed.diagnostics });
   }
-  const response = (created: boolean): CaptureResponse => ({ path: relative, revision: createHash('sha256').update(bytes).digest('hex'), created, scan_required: true });
+  const response = (created: boolean, revision = createHash('sha256').update(bytes).digest('hex')): CaptureResponse => ({ path: relative, revision, created, scan_required: true });
   await ensureParent(vault, path.posix.dirname(relative));
-  if (await existingMatch(vault, relative, bytes)) return response(false);
+  let existing = await existingMatch(vault, relative, bytes);
+  if (existing) return response(false, existing);
   if (await publishFile(vault, relative, bytes)) return response(true);
   // Another publisher may have won after the initial existence check.
-  if (await existingMatch(vault, relative, bytes)) return response(false);
+  existing = await existingMatch(vault, relative, bytes);
+  if (existing) return response(false, existing);
   throw new CoreError('IO_ERROR', 'Capture target disappeared during publication');
 }

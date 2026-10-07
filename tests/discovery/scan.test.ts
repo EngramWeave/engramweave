@@ -10,7 +10,7 @@ import { allDocuments } from '../../packages/core/src/storage/registry.js';
 import * as reading from '../../packages/core/src/files/read.js';
 import * as promises from 'node:fs/promises';
 import { isolatedRuntime } from '../helpers/runtime.js';
-import { copyRealSamples, realSamples, sha256, manualSource, writeDocument } from '../helpers/fixtures.js';
+import { pendingSample, copyRealSamples, realSamples, sha256, manualSource, writeDocument } from '../helpers/fixtures.js';
 vi.mock('node:fs/promises', { spy: true });
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -37,7 +37,7 @@ describe('explicit full scan publication', () => {
     expect(await scan()).toMatchObject({ added: 0, unchanged: 2, index_generation: 2 });
     expect(await scan('rebuild')).toMatchObject({ unchanged: 2, index_generation: 3 });
     expect(allDocuments(db).map(row => row.id)).toEqual(ids);
-    for (const sample of realSamples) expect(sha256(await readFile(path.join(config.vault_path, sample.path)))).toBe(sample.hash);
+    for (const sample of realSamples) expect(sha256(await readFile(path.join(config.vault_path, sample.path)))).toBe(sha256(await pendingSample(sample)));
   });
   it('reports invalid/unsupported files and ignores temporary, hidden and linked directories', async () => {
     const { config, scan } = await fixture();
@@ -93,4 +93,12 @@ describe('explicit full scan publication', () => {
     await expect(scan()).rejects.toMatchObject({ code: 'IO_ERROR', message: 'Scan exceeds the candidate count limit' });
     expect(allDocuments(db)).toEqual(previous); expect(indexMeta(db)).toEqual(meta);
   }, 60_000);
+  it('bounds recovery journals before executing any recovery and retains the preceding generation', async () => {
+    const { db, scan } = await fixture();
+    await scan(); const previous = allDocuments(db); const meta = indexMeta(db);
+    const names = Array.from({ length: LIMITS.scan_candidates + 1 }, (_, index) => `.engramweave-properties-${index.toString(16).padStart(8, '0')}-0000-0000-0000-000000000000.json`);
+    vi.spyOn(promises, 'readdir').mockResolvedValueOnce(names as never);
+    await expect(scan()).rejects.toMatchObject({ code: 'IO_ERROR', message: 'Scan exceeds the property recovery entry limit' });
+    expect(allDocuments(db)).toEqual(previous); expect(indexMeta(db)).toEqual(meta);
+  });
 });

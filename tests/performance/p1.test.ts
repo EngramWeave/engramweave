@@ -5,7 +5,7 @@ import path from 'node:path';
 import { isolatedRuntime } from '../helpers/runtime.js';
 import { standaloneCore } from '../helpers/cli.js';
 import { finishedJob, submitScan } from '../helpers/http.js';
-import { copyRealSamples, realSamples, sha256, writeDocument, manualSource } from '../helpers/fixtures.js';
+import { copyRealSamples, pendingSample, realSamples, sha256, writeDocument, manualSource } from '../helpers/fixtures.js';
 
 // Explicit opt-in keeps machine-dependent timing out of ordinary regression runs.
 it.skipIf(process.env.P1_PERFORMANCE !== '1')('measures 500 Markdown files / 25 MiB through standalone HTTP without changing assets', async () => {
@@ -20,8 +20,10 @@ it.skipIf(process.env.P1_PERFORMANCE !== '1')('measures 500 Markdown files / 25 
     for (const sample of realSamples) {
       const bytes = await readFile(path.join(isolated.config.vault_path, sample.path));
       expect(sha256(bytes)).toBe(sample.hash);
-      sizes.set(sample.path, bytes.length);
-      hashes.set(sample.path, sample.hash);
+      const registered = await pendingSample(sample);
+      await writeDocument(isolated.config.vault_path, sample.path, registered);
+      sizes.set(sample.path, registered.length);
+      hashes.set(sample.path, sha256(registered));
     }
     const filler = 'common benchmark text with 中文内容 and literal symbols counter++ volatile.\n';
     for (let index = 2; index < count; index++) {
@@ -29,7 +31,7 @@ it.skipIf(process.env.P1_PERFORMANCE !== '1')('measures 500 Markdown files / 25 
       const relative = `${knowledge ? '40_Knowledge' : '20_Sources'}/Benchmark/item-${String(index).padStart(3, '0')}.md`;
       const header = knowledge
         ? `---\ntags: [benchmark]\n---\n# Existing knowledge ${index}\nunique-${index}\n`
-        : manualSource(`unique-${index}\n`, `title: Benchmark ${index}\ntags: [benchmark]\nannotation: User context ${index}\n`);
+        : manualSource(`unique-${index}\n`, `processing_status: pending\ntitle: Benchmark ${index}\ntags: [benchmark]\nannotation: User context ${index}\n`);
       const allocated = [...sizes.values()].reduce((sum, size) => sum + size, 0);
       const size = index === count - 1 ? totalBytes - allocated : Math.floor(totalBytes / count);
       const bytes = Buffer.alloc(size, 0x20);
@@ -83,7 +85,7 @@ it.skipIf(process.env.P1_PERFORMANCE !== '1')('measures 500 Markdown files / 25 
     await core.close(); core = undefined;
     const evidence = {
       run_at: new Date().toISOString(), machine: { platform: process.platform, os_release: release(), arch: process.arch, cpu: cpus()[0]?.model, logical_cpus: cpus().length, ram_bytes: totalmem(), node: process.version },
-      conditions: { filesystem: 'local NTFS (T00 environment)', candidates: count, markdown_bytes: totalBytes, sources: 400, knowledge: 100, fixture_origin: '2 unchanged private R1 files + 498 explicitly constructed benchmark files', concurrent_test_workers: 1, scan_timing: 'HTTP submit through succeeded Job polling (25ms interval), excludes fixture creation and Core startup', query_timing: 'real loopback HTTP through JSON decode, sequential warm queries', cache: 'OS cache not flushed; initial refresh is not a cold-disk guarantee' },
+      conditions: { filesystem: 'local NTFS (T00 environment)', candidates: count, markdown_bytes: totalBytes, sources: 400, knowledge: 100, fixture_origin: '2 private R1 files with only pending inserted + 498 constructed benchmark files; Source stages prefilled to measure projection throughput', concurrent_test_workers: 1, scan_timing: 'HTTP submit through succeeded Job polling (25ms interval), excludes fixture creation and Core startup', query_timing: 'real loopback HTTP through JSON decode, sequential warm queries', cache: 'OS cache not flushed; initial refresh is not a cold-disk guarantee' },
       scans, queries, asset_hashes: afterHashes,
       targets: { scan_ms: 15_000, query_p95_ms: 1_000 },
       passed: scans.every(scan => scan.elapsed_ms <= 15_000) && queries.every(query => query.p95_ms <= 1_000),

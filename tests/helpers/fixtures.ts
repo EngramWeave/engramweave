@@ -17,6 +17,10 @@ export async function archivedSample(sample = realSamples[0]!) {
   if (!original.subarray(0, opening.length).equals(opening)) throw new Error('Real fixture has no Frontmatter');
   return Buffer.concat([opening, Buffer.from(`processing_status: archived${newline}`), original.subarray(opening.length)]);
 }
+/** Expected registered R1: precisely one inserted stage line, no production writer involved. */
+export async function pendingSample(sample = realSamples[0]!) {
+  return Buffer.from((await archivedSample(sample)).toString('utf8').replace('processing_status: archived', 'processing_status: pending'));
+}
 export async function copyRealSamples(vault: string) {
   for (const sample of realSamples) {
     const target = path.join(vault, sample.path);

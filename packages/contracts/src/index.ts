@@ -50,9 +50,13 @@ export const DiagnosticSchema = object({ code: nonempty, message: nonempty, path
 export const DiagnosticsSchema = Type.Array(DiagnosticSchema);
 export const HealthSchema = object({ status: enumeration(['starting', 'ready', 'degraded']), core_version: nonempty, api_version: Type.Literal(API_VERSION) });
 export type Health = Static<typeof HealthSchema>;
+/** Registration state, independent of content stage and lifecycle. */
 export const DocumentStateSchema = enumeration(['ready', 'invalid', 'missing', 'unsupported']);
-/** A read-only Source property; Registry readiness does not imply archival. */
-export const ProcessingStatusSchema = nullable(Type.Literal('archived'));
+export const PROCESSING_STATUSES = ['pending', 'compiled', 'reviewed', 'planned', 'archived'] as const;
+/** Null means no readable stage, including a current file not yet normalized by Registry. */
+export const ProcessingStatusSchema = nullable(enumeration(PROCESSING_STATUSES));
+export const LIFECYCLE_STATUSES = ['active', 'discarded'] as const;
+export const LifecycleStatusSchema = nullable(enumeration(LIFECYCLE_STATUSES));
 export const DocumentKindSchema = enumeration(['source', 'knowledge']);
 export const ScanModeSchema = enumeration(['refresh', 'rebuild']);
 export const JobStatusSchema = enumeration(['queued', 'running', 'succeeded', 'failed', 'interrupted']);
@@ -79,7 +83,7 @@ export const ReferenceSchema = object({
 export const MetadataSchema = Type.Record(text, Type.Unknown());
 export const SourceSchema = object({
   id: nonempty, path: VaultPathSchema, title: text, source_type: nullable(text), state: DocumentStateSchema,
-  processing_status: ProcessingStatusSchema,
+  processing_status: ProcessingStatusSchema, lifecycle_status: LifecycleStatusSchema,
   revision: nullable(RevisionSchema), original_locator: nullable(text), captured_at: nullable(text),
   asset: nullable(AssetSchema), diagnostics: DiagnosticsSchema,
 });
@@ -88,6 +92,7 @@ const documentCommon = {
   path: ScopedMarkdownPathSchema, revision: RevisionSchema, indexed_revision: nullable(RevisionSchema),
   index_stale: Type.Boolean(), indexed_at: nullable(instant), index_generation: count,
   title: text, metadata: MetadataSchema, annotation: text, diagnostics: DiagnosticsSchema,
+  lifecycle_status: LifecycleStatusSchema,
   original_references: Type.Array(ReferenceSchema),
 };
 const sourceCommon = { ...documentCommon, kind: Type.Literal('source'), record_path: VaultPathSchema,
@@ -156,7 +161,7 @@ export const StatusSchema = object({
 export type Status = Static<typeof StatusSchema>;
 const empty = object({});
 const errors = { 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema, 413: ErrorSchema, 422: ErrorSchema, 500: ErrorSchema, 503: ErrorSchema };
-/** The only P1 endpoints. Schema declarations do not register unimplemented handlers. */
+/** Implemented endpoints. Schema declarations do not register unimplemented handlers. */
 export const API = {
   health: { method: 'GET', url: '/v1/health', schema: { querystring: empty, response: { ...errors, 200: HealthSchema, 503: HealthSchema } } },
   status: { method: 'GET', url: '/v1/status', schema: { querystring: empty, response: { ...errors, 200: StatusSchema } } },
