@@ -1,5 +1,5 @@
 import type { Document } from '@engramweave/contracts';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
 import { lifecycleLabel, processingLabel } from './status-labels';
 import { ErrorNotice } from './Feedback';
@@ -14,11 +14,13 @@ export function Detail({
   open,
   close,
   error,
+  children,
 }: {
   document: Document;
   open: (target: 'obsidian' | 'original') => void;
   close: () => void;
   error?: Failure | undefined;
+  children?: ReactNode;
 }) {
   const panel = useRef<HTMLElement>(null);
   const [tab, setTab] = useState<'details' | 'annotation' | 'links'>('details');
@@ -265,6 +267,7 @@ export function Detail({
           {item.code} · {item.message}
         </p>
       ))}
+      {children}
     </aside>
   );
 }

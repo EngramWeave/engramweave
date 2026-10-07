@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Document, SourcesQuery } from '@engramweave/contracts';
 import type { Failure, SourcePage } from './client';
 import { Detail } from './Detail';
@@ -70,6 +70,7 @@ export function SourceBrowser({
   offset,
   setOffset,
   search,
+  compilerActions,
 }: {
   page: SourcePage | null;
   counts: SourceCounts | null;
@@ -89,6 +90,7 @@ export function SourceBrowser({
   offset: number;
   setOffset: (offset: number) => void;
   search: (query: string) => void;
+  compilerActions?: ReactNode;
 }) {
   const [term, setTerm] = useState('');
   const typeOptions = Array.from(
@@ -370,7 +372,7 @@ export function SourceBrowser({
         </section>
         <div className="source-inspector">
           {document ? (
-            <Detail document={document} close={close} open={open} error={documentError} />
+            <Detail document={document} close={close} open={open} error={documentError}>{compilerActions}</Detail>
           ) : documentError ? (
             <DocumentFailure error={documentError} path={selectedPath} close={close} />
           ) : (

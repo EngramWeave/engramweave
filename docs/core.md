@@ -1,6 +1,6 @@
 # 本地 Core
 
-Core 只处理一个 Vault，通过显式扫描登记 `20_Sources/**/*.md` 和 `40_Knowledge/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、文本检索投影和扫描任务。启动不自动扫描，不执行 AI，也不写知识文件。
+Core 只处理一个 Vault，通过显式扫描登记 `20_Sources/**/*.md` 和 `40_Knowledge/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、文本检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；正式知识写入尚未实现。
 
 Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop.md)。Native Host 创建的 Core 通过 `ENGRAMWEAVE_HOST_STDIN=1` 启用私有 stdin 生命周期控制：固定一行 `{"type":"stop"}` 或父管道关闭触发正常停止；普通独立 CLI 不读取 stdin 命令，也不开放 HTTP 停止路由。
 
@@ -30,7 +30,7 @@ npm run core -- --config D:/path/to/config.json
 
 SQLite 缺失时建立空库，generation=0。health 在数据库初始化成功后返回200 ready；初始化期间返回503。ready 表示运行和数据库可用，不代表已扫描。损坏、版本或约束不匹配、Vault 绑定不同的数据库明确报错，保留文件，不自动删除或恢复。
 
-SQLite schema_version=1，只有documents/jobs/meta三张表。documents.indexed_at允许null，以表示文件尚未成功读取校验；处理阶段和生命周期保存在metadata_json投影中，没有独立列或状态机。A 不需要数据库迁移；已有库的空阶段在下一次登记时补写。带indexed_at NOT NULL等不匹配约束的数据库返回SCHEMA_UNSUPPORTED，不自动转换或删除。验证不同布局时使用独立data_dir并保留旧库。
+SQLite schema_version=2，在documents/jobs/meta之外加入compiler_jobs。严格验证schema 1后事务迁移，保留旧文档、扫描历史与Vault绑定；处理阶段和生命周期仍保存在metadata_json投影中，没有独立阶段列。documents.indexed_at允许null，以表示文件尚未成功读取校验。带indexed_at NOT NULL等不匹配约束的数据库返回SCHEMA_UNSUPPORTED，不自动转换或删除。验证不同布局时使用独立data_dir并保留旧库。
 
 Ctrl+C 正常停止；宿主持有的 Node IPC 可发送 `{type:"stop"}` 请求停止。正常停止等待当前扫描结束，移除本实例描述，保留数据库和 token；不开放 shutdown HTTP。遗留活动扫描在新进程启动时标 interrupted，须显式重试。
 
@@ -86,7 +86,7 @@ POST `/v1/captures` 接收path和markdown，拒绝未知字段和非字符串值
 
 JSON请求最多8MiB，UTF-8 Markdown最多5MiB，均按字节限制，超限413；流式请求同样受限制。输入验证后，目标同目录排他创建`.engramweave-capture-<UUID>.tmp`，完整写入、flush、关闭，再以NTFS硬链接创建最终路径。已有目标无法被硬链接替换；不支持硬链接时明确失败，没有rename/copy覆盖回退。清理仅删除本次请求创建且仍能确认身份的临时文件。
 
-首次创建201、created=true；目标路径和全部字节相同，或仅经同一Registry补pending规则形成精确相同字节的重放200、created=false，revision返回当前文件hash。正文、Annotation、其他属性、换行或既有有效阶段的变化仍返回409 PATH_CONFLICT，不做YAML语义宽松比较。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
+首次创建201、created=true；目标路径和全部字节相同、经同一Registry补pending规则形成精确相同字节，或该形式推进为compiled且关联Draft记录了匹配输入revision时，重放返回200、created=false及当前文件hash，不重置阶段。正文、Annotation、其他属性、换行或其他阶段差异仍返回409 PATH_CONFLICT，不做YAML语义宽松比较。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
 
 以下命令沿用前面的 `$coreHeaders`，只在隔离测试 Vault 中创建新的 Manual Source；网页 Source 可读取已有完整 Markdown 后使用同一接口提交。
 

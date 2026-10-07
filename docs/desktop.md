@@ -41,6 +41,14 @@ Sources 使用列表与属性预览并排的布局。顶部统计和筛选表示
 
 “在 Obsidian 中打开”由已验证的 Vault 与文档路径生成编码 URI；“打开原网页”只接受该文档的 HTTP/HTTPS 定位且拒绝嵌入凭证。不能由前端提供 URI。Zotero 等定位仅显示。所有打开操作由用户点击触发；需要系统注册 Obsidian URI 和默认浏览器。未注册的隔离 Vault 可能需要先在 Obsidian 中手工打开。
 
+## Compiler 与 Draft
+
+Settings 的 Compiler 区域配置 API／Codex、模型、reasoning effort、超时以及服务支持的输出格式。远程凭据经 Windows DPAPI 保护并绑定 endpoint，界面读取不返回密钥；无需认证的本地回环 API 可以留空。当前只配置 Compiler，Analyzer 模板与 Profile 在后续扩展。
+
+Sources 详情的 Run Compiler 对 active、pending、已登记 Source 执行一次正文编译。当前扫描与 Compiler 串行；任务结束后刷新阶段与相关 Draft 列表。每次编译新增 Draft，已有用户编辑保留；可预览各 Draft 或通过原生宿主在 Obsidian 打开，Desktop 不编辑正文。Compiler 失败显示在对应 Source／Job，设置错误留在设置区域，不跨页保留。
+
+正文生成成功不表示完整 Human Review 工作流完成；Analyzer、Recompile 人工入口、批处理／调度与正式整合仍在后续切片。具体合同和恢复限制见 [Compiler 与 Draft](compiler.md)。
+
 ## 验证
 
 ```powershell

@@ -12,6 +12,7 @@ export function registerDocumentRoutes(server: FastifyInstance, config: Config, 
   server.route({ ...API.documents, async handler(request) {
     const { db } = services();
     const relative = (request.query as { path: string }).path;
+    if (relative.startsWith('30_Drafts/')) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Use the dedicated Draft endpoint', 403);
     let file;
     try { file = await readMarkdown(config.vault_path, relative); }
     catch (error) {

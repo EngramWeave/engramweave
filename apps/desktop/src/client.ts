@@ -5,6 +5,8 @@ import {
   API,
   type SearchQuery,
   type SourcesQuery,
+  type CompilerSettings,
+  type CompileRequest,
 } from '@engramweave/contracts';
 
 export interface HostInfo {
@@ -73,6 +75,11 @@ export const client = {
     request('scan', API.scans.schema.response[202], { mode }),
   open: (path: string, target: 'obsidian' | 'original') =>
     native<void>('open_document', { path, target }),
+  compilerSettings: () => request('compiler_settings', API.compilerSettings.schema.response[200]),
+  saveCompilerSettings: (settings: CompilerSettings, api_key?: string) => request('compiler_settings_write', API.compilerSettingsWrite.schema.response[200], { settings, ...(api_key ? { api_key } : {}) }),
+  compile: (input: CompileRequest) => request('compile', API.compile.schema.response[202], input),
+  drafts: (source_path: string) => request('drafts', API.drafts.schema.response[200], { source_path }),
+  draft: (path: string) => request('draft', API.draft.schema.response[200], { path }),
 };
 export type SourcePage = Awaited<ReturnType<typeof client.sources>>;
 export type JobPage = Awaited<ReturnType<typeof client.jobs>>;

@@ -12,6 +12,11 @@ pub enum Operation {
     Document,
     Search,
     Scan,
+    CompilerSettings,
+    CompilerSettingsWrite,
+    Compile,
+    Drafts,
+    Draft,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -40,6 +45,11 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
             ],
         ),
         Operation::Scan => (true, "/v1/scans", &["mode"]),
+        Operation::CompilerSettings => (false, "/v1/compiler/settings", &[]),
+        Operation::CompilerSettingsWrite => (true, "/v1/compiler/settings", &["settings", "api_key"]),
+        Operation::Compile => (true, "/v1/compilations", &["path", "revision", "request_id"]),
+        Operation::Drafts => (false, "/v1/drafts", &["source_path"]),
+        Operation::Draft => (false, "/v1/draft", &["path"]),
     };
     let object = input
         .as_object()
@@ -49,6 +59,12 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
             "VALIDATION_ERROR",
             "Bridge field is not permitted",
         ));
+    }
+    if route == "/v1/compiler/settings" && post {
+        if !object.get("settings").map(Value::is_object).unwrap_or(false)
+            || object.get("api_key").map(|key| !key.is_string() || key.as_str().unwrap_or("").len() > 8192).unwrap_or(false)
+        { return Err(Failure::new("VALIDATION_ERROR", "Invalid Compiler settings input")); }
+        return Ok((true, route.to_string(), vec![]));
     }
     let mut query = Vec::new();
     for (key, value) in object {

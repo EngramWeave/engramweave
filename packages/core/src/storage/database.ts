@@ -5,7 +5,7 @@ import { SCHEMA_VERSION, type Config } from '@engramweave/contracts';
 import { pathKey } from '../config.js';
 import { CoreError } from '../errors.js';
 
-const schema = `
+const legacySchema = `
 CREATE TABLE documents (
   id TEXT PRIMARY KEY, path_key TEXT NOT NULL UNIQUE, path TEXT NOT NULL,
   kind TEXT NOT NULL CHECK(kind IN ('source','knowledge')),
@@ -29,11 +29,21 @@ CREATE TABLE meta (
   index_generation INTEGER NOT NULL DEFAULT 0, last_scan_at TEXT, known_scan_roots TEXT NOT NULL DEFAULT '[]'
 );
 PRAGMA user_version=1;`;
+const compilerSchema = `
+CREATE TABLE compiler_jobs (
+  id TEXT PRIMARY KEY, source_path TEXT NOT NULL, source_revision TEXT NOT NULL,
+  route TEXT NOT NULL CHECK(route IN ('api','codex')), model TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('queued','running','succeeded','failed','interrupted')),
+  created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT, draft_path TEXT, error_json TEXT
+);
+CREATE UNIQUE INDEX one_active_compiler ON compiler_jobs((1)) WHERE status IN ('queued','running');`;
+const schema = legacySchema.replace('PRAGMA user_version=1;', '') + compilerSchema + '\nPRAGMA user_version=2;';
 const columns = {
   documents: 'id path_key path kind state revision size mtime title source_type captured_at original_locator metadata_json asset_json diagnostics_json annotation body_markdown title_norm body_norm annotation_norm metadata_norm indexed_at'.split(' '),
   jobs: 'id kind mode status created_at started_at finished_at processed_files summary_json error_json'.split(' '),
   meta: 'id vault_path_key schema_version index_generation last_scan_at known_scan_roots'.split(' '),
 };
+const compilerColumns = 'id source_path source_revision route model status created_at started_at finished_at draft_path error_json'.split(' ');
 const normalizeDdl = (sql: string) => sql.replace(/\s+/g, '').replace(/;$/, '').toLowerCase();
 export interface IndexMeta { vault_path_key: string; schema_version: number; index_generation: number; last_scan_at: string | null; known_scan_roots: string }
 export function indexMeta(db: Database.Database): IndexMeta { return db.prepare('SELECT * FROM meta WHERE id=1').get() as IndexMeta; }
@@ -57,21 +67,27 @@ export async function openDatabase(config: Config): Promise<Database.Database> {
       });
       initialize();
     } else {
-      if (version !== SCHEMA_VERSION || tables.map(table => table.name).join(',') !== 'documents,jobs,meta') throw new CoreError('SCHEMA_UNSUPPORTED', 'Unsupported database schema');
-      for (const [table, required] of Object.entries(columns)) {
+      const legacy = version === 1;
+      if (![1, SCHEMA_VERSION].includes(version as number) || tables.map(table => table.name).join(',') !== (legacy ? 'documents,jobs,meta' : 'compiler_jobs,documents,jobs,meta')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Unsupported database schema');
+      for (const [table, required] of Object.entries(legacy ? columns : { ...columns, compiler_jobs: compilerColumns })) {
         const actual = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
         if (actual.map(column => column.name).join(',') !== required.join(',')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Database layout does not match its version');
       }
-      for (const statement of schema.split(';').map(item => item.trim()).filter(item => item.startsWith('CREATE'))) {
+      for (const statement of (legacy ? legacySchema : schema).split(';').map(item => item.trim()).filter(item => item.startsWith('CREATE'))) {
         const name = /^CREATE (?:TABLE|UNIQUE INDEX) (\w+)/.exec(statement)?.[1];
         const actual = db.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(name) as { sql: string } | undefined;
         if (!actual || normalizeDdl(actual.sql) !== normalizeDdl(statement)) throw new CoreError('SCHEMA_UNSUPPORTED', 'Database constraints do not match their version');
       }
       const meta = indexMeta(db);
-      if (!meta || meta.schema_version !== SCHEMA_VERSION || !Number.isSafeInteger(meta.index_generation) || meta.index_generation < 0) throw new CoreError('SCHEMA_UNSUPPORTED', 'Invalid database binding metadata');
+      if (!meta || meta.schema_version !== version || !Number.isSafeInteger(meta.index_generation) || meta.index_generation < 0) throw new CoreError('SCHEMA_UNSUPPORTED', 'Invalid database binding metadata');
       const roots: unknown = JSON.parse(meta.known_scan_roots);
       if (!Array.isArray(roots) || roots.some(root => !['20_Sources', '40_Knowledge'].includes(root))) throw new CoreError('SCHEMA_UNSUPPORTED', 'Invalid scan root metadata');
       if (meta.vault_path_key !== pathKey(config.vault_path)) throw new CoreError('VAULT_MISMATCH', 'Database belongs to another Vault');
+      if (legacy) db.transaction(() => {
+        db!.exec(compilerSchema);
+        db!.prepare('UPDATE meta SET schema_version=? WHERE id=1').run(SCHEMA_VERSION);
+        db!.pragma('user_version=2');
+      })();
     }
     db.pragma('foreign_keys = ON');
     return db;

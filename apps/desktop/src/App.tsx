@@ -25,6 +25,8 @@ import {
   type SourceCounts,
 } from './SourceBrowser';
 import { Jobs, Results } from './Lists';
+import { CompilerSettings } from './CompilerSettings';
+import { SourceCompiler } from './SourceCompiler';
 import { DocumentFailure, ErrorNotice, ErrorToast, type ErrorPlacement } from './Feedback';
 
 export function App() {
@@ -418,6 +420,7 @@ export function App() {
                 刷新状态
               </button>
             </div>
+            <CompilerSettings connected={connected} />
             {errors.operations && <ErrorNotice error={errors.operations} />}
             <p className="hint">
               无活动任务时停止轮询。状态为上次确认结果；断线后需显式重新连接。
@@ -448,6 +451,7 @@ export function App() {
       >
         {view === 'sources' && (
           <SourceBrowser
+            compilerActions={document?.kind === 'source' ? <SourceCompiler key={document.path} document={document} jobs={jobs} active={Boolean(active)} onStarted={() => { void refresh().catch(error => report(error, 'document')); }} onPublished={() => { void select(document.path); }} /> : undefined}
             page={sources}
             counts={sourceCounts}
             state={sourceState}
@@ -519,7 +523,7 @@ export function App() {
         )}
         {view === 'jobs' && (
           <section>
-            <h1>扫描任务</h1>
+            <h1>Jobs</h1>
             <p className="hint">
               {active
                 ? '任务活动中，正在轮询进度。'

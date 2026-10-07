@@ -7,6 +7,7 @@ import { acquireInstance, type Instance } from './instance.js';
 import type { Config } from '@engramweave/contracts';
 import { openDatabase } from './storage/database.js';
 import { ScanJobs } from './jobs/scans.js';
+import { CompilerJobs } from './jobs/compiler.js';
 import type { CoreServices } from './http/context.js';
 import { recoverDatabase } from './storage/recover.js';
 
@@ -30,18 +31,22 @@ export async function startCore(input: Config) {
     instance = await acquireInstance(config);
     runtime.token = instance.token;
     database = await openDatabase(config);
-    services = { db: database, jobs: new ScanJobs(database, config.vault_path), instance_id: instance.id };
+    let compiler: CompilerJobs;
+    const jobs = new ScanJobs(database, config.vault_path, () => compiler?.busy() ?? false);
+    compiler = new CompilerJobs(database, config, () => jobs.active() !== null);
+    await compiler.initialize();
+    services = { db: database, jobs, compiler, instance_id: instance.id };
     runtime.status = 'ready';
     let closed = false;
     return { config, instance_id: instance.id, server, async close() {
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); await services?.jobs.close(); }
+      try { await server.close(); await services?.compiler?.close(); await services?.jobs.close(); }
       finally { try { database?.close(); } finally { await instance?.close(); } }
     } };
   } catch (error) {
-    try { await server.close(); await services?.jobs.close(); }
+    try { await server.close(); await services?.compiler?.close(); await services?.jobs.close(); }
     finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }

@@ -14,7 +14,7 @@ const asJob = (row: JobRow): Job => ({ id: row.id, kind: row.kind, mode: row.mod
 export class ScanJobs {
   private running: Promise<void> | null = null;
   private stopping = false;
-  constructor(private readonly db: Database.Database, private readonly vault: string) {
+  constructor(private readonly db: Database.Database, private readonly vault: string, private readonly compilerBusy: () => boolean = () => false) {
     // Persisted activity is not runnable after a process restart; never pretend it is live.
     db.transaction(() => {
       db.prepare("UPDATE jobs SET status='interrupted',finished_at=?,error_json=? WHERE status IN ('queued','running')")
@@ -29,6 +29,7 @@ export class ScanJobs {
     return { items: rows.map(asJob), total: (this.db.prepare('SELECT count(*) AS count FROM jobs').get() as { count: number }).count, limit, offset };
   }
   submit(mode: Job['mode']): { job: Job; reused: boolean } {
+    if (this.compilerBusy()) throw new CoreError('JOB_BUSY', 'Compiler is active; scan after its publication completes', 409);
     if (this.stopping) throw new CoreError('CORE_UNAVAILABLE', 'Core is stopping', 503);
     const active = this.active();
     if (active) {

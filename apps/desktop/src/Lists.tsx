@@ -10,23 +10,23 @@ const contexts: Record<string, string> = {
 };
 export function Jobs({ page }: { page: JobPage | null }) {
   if (!page?.items.length)
-    return <p className="empty">没有扫描任务。扫描与重建均由用户显式触发。</p>;
+    return <p className="empty">没有任务。扫描和 Compiler 由用户显式触发。</p>;
   return (
     <div className="jobs">
       {page.items.map((job) => (
         <article key={job.id}>
           <div className="section-heading">
             <strong>
-              {job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
+              {job.kind === 'compile_source' ? 'Compiler' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
             </strong>
             <span>
-              {job.status} · 已处理 {job.processed_files} 个文件
+              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : `已处理 ${job.processed_files} 个文件`}
             </span>
           </div>
           <p className="path">
             {job.id} · {job.created_at}
           </p>
-          {job.summary && (
+          {job.kind === 'scan_vault' && job.summary && (
             <p>
               新增 {job.summary.added} · 更新 {job.summary.updated} · 未变{' '}
               {job.summary.unchanged} · 缺失 {job.summary.missing} · 无效{' '}
@@ -39,11 +39,12 @@ export function Jobs({ page }: { page: JobPage | null }) {
               {job.error.code} · {job.error.message}
             </p>
           )}
-          {job.summary?.warnings.map((item, index) => (
+          {job.kind === 'scan_vault' && job.summary?.warnings.map((item, index) => (
             <p className="diagnostic" key={index}>
               {item.code} · {item.path} · {item.message}
             </p>
           ))}
+          {job.kind === 'compile_source' && <p className="path">{job.source_path}{job.draft_path ? ` → ${job.draft_path}` : ''}</p>}
         </article>
       ))}
     </div>

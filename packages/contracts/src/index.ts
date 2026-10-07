@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const LIMITS = Object.freeze({
   markdown_bytes: 5 * 1024 * 1024,
   capture_json_bytes: 8 * 1024 * 1024,
@@ -42,6 +42,7 @@ export const ErrorCodeSchema = enumeration([
   'PATH_CONFLICT', 'INVALID_SOURCE', 'PAYLOAD_TOO_LARGE', 'CORE_UNAVAILABLE', 'IO_ERROR',
   'CONFIG_ERROR', 'PORT_CONFLICT', 'INSTANCE_BUSY', 'INSTANCE_UNCERTAIN', 'DATABASE_ERROR',
   'SCHEMA_UNSUPPORTED', 'VAULT_MISMATCH',
+  'EXECUTION_FAILED', 'INVALID_MODEL_OUTPUT', 'UNSUPPORTED_CONTENT', 'SOURCE_CHANGED', 'COMPILATION_RECOVERY_CONFLICT',
 ] as const);
 export type ErrorCode = Static<typeof ErrorCodeSchema>;
 export const ErrorSchema = object({ error: object({ code: ErrorCodeSchema, message: nonempty, details: nullable(Type.Record(text, Type.Unknown())) }) });
@@ -71,6 +72,32 @@ export const JobSchema = object({
   processed_files: count, summary: nullable(ScanSummarySchema), error: nullable(ErrorSchema.properties.error),
 });
 export type Job = Static<typeof JobSchema>;
+export const CompilerResultSchema = object({ title: Type.String({ minLength: 1, maxLength: 500 }), body: Type.String({ minLength: 1, maxLength: 1_000_000 }) });
+export type CompilerResult = Static<typeof CompilerResultSchema>;
+export const CompilerSettingsSchema = object({
+  route: enumeration(['api', 'codex']), model: Type.String({ maxLength: 200 }),
+  endpoint: Type.String({ maxLength: 2000 }), codex_path: Type.String({ maxLength: 4096 }),
+  output_format: enumeration(['json_schema', 'json_object', 'text']),
+  reasoning_effort: enumeration(['default', 'none', 'low', 'medium', 'high', 'xhigh', 'max']),
+  timeout_seconds: Type.Integer({ minimum: 10, maximum: 1800 }),
+});
+export type CompilerSettings = Static<typeof CompilerSettingsSchema>;
+export const CompilerSettingsResponseSchema = object({ settings: CompilerSettingsSchema, api_key_configured: Type.Boolean() });
+export const CompilerSettingsWriteSchema = object({ settings: CompilerSettingsSchema, api_key: Type.Optional(Type.String({ maxLength: 8192 })) });
+export const DraftPathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^30_Drafts/.+\\.[mM][dD]$' })]);
+export const DraftSchema = object({ path: DraftPathSchema, title: text, body: text, revision: RevisionSchema,
+  sources: Type.Array(CapturePathSchema, { minItems: 1 }), lifecycle_status: enumeration(LIFECYCLE_STATUSES), metadata: Type.Record(text, Type.Unknown()) });
+export type Draft = Static<typeof DraftSchema>;
+export const CompileRequestSchema = object({ path: CapturePathSchema, revision: RevisionSchema,
+  request_id: Type.String({ pattern: '^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$' }) });
+export type CompileRequest = Static<typeof CompileRequestSchema>;
+export const CompilerJobSchema = object({ id: nonempty, kind: Type.Literal('compile_source'), status: JobStatusSchema,
+  created_at: instant, started_at: nullable(instant), finished_at: nullable(instant),
+  source_path: CapturePathSchema, source_revision: RevisionSchema, draft_path: nullable(DraftPathSchema),
+  route: enumeration(['api', 'codex']), model: text, prompt_version: Type.Literal('compiler-v1'),
+  error: nullable(ErrorSchema.properties.error) });
+export type CompilerJob = Static<typeof CompilerJobSchema>;
+export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema]);
 export const AssetSchema = object({
   kind: enumeration(['inline_markdown', 'vault_file', 'external_ref']), locator: nonempty,
   availability: enumeration(['available', 'missing', 'unverified', 'unsupported']),
@@ -127,7 +154,7 @@ export const PaginationQuerySchema = object({
 });
 const page = <T extends TSchema>(item: T) => ({ items: Type.Array(item), total: count, limit: Type.Integer({ minimum: 1, maximum: LIMITS.max_limit }), offset: count });
 const indexed = { index_generation: count, indexed_at: nullable(instant) };
-export const JobsResponseSchema = object(page(JobSchema));
+export const JobsResponseSchema = object(page(AnyJobSchema));
 export type PaginationQuery = Static<typeof PaginationQuerySchema>;
 export const SourcesQuerySchema = object({ ...PaginationQuerySchema.properties,
   state: Type.Optional(DocumentStateSchema), source_type: Type.Optional(nonempty), path_prefix: Type.Optional(VaultPathSchema),
@@ -151,7 +178,7 @@ export type CaptureRequest = Static<typeof CaptureRequestSchema>;
 export type CaptureResponse = Static<typeof CaptureResponseSchema>;
 export const StatusSchema = object({
   ...HealthSchema.properties, instance_id: nonempty, vault_path: nonempty, data_dir: nonempty,
-  database_initialized: Type.Boolean(), active_job: nullable(JobSchema),
+  database_initialized: Type.Boolean(), active_job: nullable(AnyJobSchema),
   index_generation: count, last_scan_at: nullable(instant),
   counts: object({ sources: count, knowledge: count, invalid: count, missing: count, unsupported: count }),
   scan_roots: Type.Array(object({ path: enumeration(SCAN_ROOTS), available: Type.Boolean() })),
@@ -167,9 +194,14 @@ export const API = {
   status: { method: 'GET', url: '/v1/status', schema: { querystring: empty, response: { ...errors, 200: StatusSchema } } },
   scans: { method: 'POST', url: '/v1/scans', schema: { body: ScanRequestSchema, querystring: empty, response: { ...errors, 202: ScanResponseSchema } } },
   jobs: { method: 'GET', url: '/v1/jobs', schema: { querystring: PaginationQuerySchema, response: { ...errors, 200: JobsResponseSchema } } },
-  job: { method: 'GET', url: '/v1/jobs/:id', schema: { params: object({ id: nonempty }), querystring: empty, response: { ...errors, 200: JobSchema } } },
+  job: { method: 'GET', url: '/v1/jobs/:id', schema: { params: object({ id: nonempty }), querystring: empty, response: { ...errors, 200: AnyJobSchema } } },
   sources: { method: 'GET', url: '/v1/sources', schema: { querystring: SourcesQuerySchema, response: { ...errors, 200: SourcesResponseSchema } } },
   documents: { method: 'GET', url: '/v1/documents', schema: { querystring: object({ path: ScopedMarkdownPathSchema }), response: { ...errors, 200: DocumentSchema } } },
   search: { method: 'GET', url: '/v1/search', schema: { querystring: SearchQuerySchema, response: { ...errors, 200: SearchResponseSchema } } },
   captures: { method: 'POST', url: '/v1/captures', schema: { querystring: empty, body: CaptureRequestSchema, response: { ...errors, 200: CaptureResponseSchema, 201: CaptureResponseSchema } } },
+  compilerSettings: { method: 'GET', url: '/v1/compiler/settings', schema: { querystring: empty, response: { ...errors, 200: CompilerSettingsResponseSchema } } },
+  compilerSettingsWrite: { method: 'POST', url: '/v1/compiler/settings', schema: { querystring: empty, body: CompilerSettingsWriteSchema, response: { ...errors, 200: CompilerSettingsResponseSchema } } },
+  compile: { method: 'POST', url: '/v1/compilations', schema: { querystring: empty, body: CompileRequestSchema, response: { ...errors, 202: object({ job: CompilerJobSchema, reused: Type.Boolean() }) } } },
+  drafts: { method: 'GET', url: '/v1/drafts', schema: { querystring: object({ source_path: CapturePathSchema }), response: { ...errors, 200: object({ items: Type.Array(DraftSchema), diagnostics: DiagnosticsSchema }) } } },
+  draft: { method: 'GET', url: '/v1/draft', schema: { querystring: object({ path: DraftPathSchema }), response: { ...errors, 200: DraftSchema } } },
 } as const;

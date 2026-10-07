@@ -7,6 +7,7 @@ import { registerRegistryRoutes } from './http/registry.js';
 import { registerDocumentRoutes } from './http/documents.js';
 import { registerSearchRoute } from './http/search.js';
 import { registerCaptureRoute } from './http/captures.js';
+import { registerCompilerRoutes } from './http/compiler.js';
 
 export interface HttpRuntime {
   token: string | null;
@@ -57,6 +58,7 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
     registerDocumentRoutes(server, config, services);
     registerSearchRoute(server, services);
     registerCaptureRoute(server, config, runtime);
+    registerCompilerRoutes(server, config, services);
   }
   return server;
 }

@@ -15,7 +15,8 @@ pub enum OpenTarget {
 
 pub fn document_uri(host: &mut Host, path: String, target: OpenTarget) -> Result<String> {
     // Core validates scope and the current document; the webview cannot supply a URI.
-    let document = host.request(Operation::Document, json!({"path": path}))?;
+    let operation = if path.starts_with("30_Drafts/") { Operation::Draft } else { Operation::Document };
+    let document = host.request(operation, json!({"path": path}))?;
     match target {
         OpenTarget::Obsidian => {
             let status = host.request(Operation::Status, json!({}))?;

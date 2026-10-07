@@ -1,0 +1,15 @@
+.compiler-settings { border-top: 1px solid var(--border, #dce6ff); margin-top: 24px; padding-top: 20px; }
+.compiler-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 800px; }
+.compiler-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.compiler-form input, .compiler-form select { width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid #dce6ff; border-radius: 8px; background: #fff; padding: 8px 10px; color: #10204f; }
+.compiler-saved { margin-left: 12px; color: #00a977; }
+.source-compiler { border-top: 1px solid #dce6ff; padding: 16px; }
+.source-compiler .section-heading { flex-wrap: wrap; gap: 8px; }
+.source-compiler h3 { margin: 0; font-size: 14px; }
+.source-compiler .primary { white-space: nowrap; }
+.draft-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.draft-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; border: 1px solid #dce6ff; border-radius: 8px; }
+.draft-list li button:first-child { text-align: left; overflow-wrap: anywhere; flex: 1; }
+.draft-list span { font-size: 11px; color: #57729a; }
+.draft-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; }
+@media (max-width: 800px) { .compiler-form { grid-template-columns: 1fr; } }

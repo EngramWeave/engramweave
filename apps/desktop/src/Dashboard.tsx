@@ -497,11 +497,11 @@ export function Dashboard({
                   </span>
                   <span className="row-copy">
                     <span className="row-title">
-                      {job.mode === 'rebuild' ? 'Index rebuild' : 'Vault scan'}{' '}
+                      {job.kind === 'compile_source' ? 'Compiler' : job.mode === 'rebuild' ? 'Index rebuild' : 'Vault scan'}{' '}
                       · {job.status}
                     </span>
                     <span className="row-meta">
-                      {job.processed_files} files processed
+                      {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : `${job.processed_files} files processed`}
                     </span>
                   </span>
                   <time dateTime={job.created_at}>

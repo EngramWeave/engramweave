@@ -1,0 +1,13 @@
+import fs from 'node:fs/promises';
+const args = process.argv.slice(2);
+let input = ''; for await (const chunk of process.stdin) input += chunk;
+const answer = args[args.indexOf('--output-last-message') + 1];
+const mode = process.env.ENGRAMWEAVE_TEST_CODEX_MODE;
+await fs.writeFile(answer, JSON.stringify({ title: 'Simulated child result', body: 'Submitted meaning and Annotation.' }));
+await fs.writeFile(answer + '.observed.json', JSON.stringify({ args, apiKeyPresent: Boolean(process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY), inputHasAnnotation: input.includes('annotation') }));
+console.log(JSON.stringify({ type: 'thread.started' }));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'Read-only diagnostic with no tool action' } }));
+if (mode === 'tool') console.log(JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'simulated tool attempt' } }));
+else console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'structured result' } }));
+console.log(JSON.stringify({ type: 'turn.completed' }));
+process.exit(0);

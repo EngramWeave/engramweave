@@ -23,8 +23,8 @@ function projection(relative: string, text = manualSource()) { const bytes = Buf
 describe('real SQLite projection and transactions', () => {
   it('creates exactly the P1 tables and enforces one active scan', async () => {
     const { db } = await fixture();
-    expect(db.pragma('user_version', { simple: true })).toBe(1);
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()).toEqual([{ name: 'documents' }, { name: 'jobs' }, { name: 'meta' }]);
+    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()).toEqual([{ name: 'compiler_jobs' }, { name: 'documents' }, { name: 'jobs' }, { name: 'meta' }]);
     job(db, 'first');
     expect(() => job(db, 'second')).toThrow();
   });
@@ -77,10 +77,10 @@ describe('real SQLite projection and transactions', () => {
     db.close();
     await expect(openDatabase({ ...config, vault_path: path.join(root, 'other-vault') })).rejects.toMatchObject({ code: 'VAULT_MISMATCH' });
     const foreign = new Database(path.join(config.data_dir, 'core.sqlite'));
-    foreign.pragma('user_version=2'); foreign.close();
+    foreign.pragma('user_version=3'); foreign.close();
     await expect(openDatabase(config)).rejects.toMatchObject({ code: 'SCHEMA_UNSUPPORTED' });
     const intact = new Database(path.join(config.data_dir, 'core.sqlite'), { readonly: true });
-    expect(intact.pragma('user_version', { simple: true })).toBe(2); intact.close();
+    expect(intact.pragma('user_version', { simple: true })).toBe(3); intact.close();
   });
   it('rejects a version-one database with missing uniqueness and hard-linked database aliases', async () => {
     const { db, config, root } = await fixture();

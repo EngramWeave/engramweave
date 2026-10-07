@@ -7,6 +7,7 @@ import { CoreError } from '../errors.js';
 import { acquireInstance } from '../instance.js';
 import { windowsAttributes } from '../files/windows.js';
 import { ScanJobs } from '../jobs/scans.js';
+import { CompilerJobs } from '../jobs/compiler.js';
 import { openDatabase } from './database.js';
 
 const databaseNames = ['core.sqlite', 'core.sqlite-journal', 'core.sqlite-wal', 'core.sqlite-shm'] as const;
@@ -46,6 +47,9 @@ export async function recoverDatabase(input: Config): Promise<RecoveryResult> {
       moved.push(candidate.name);
     }
     db = await openDatabase(config);
+    const compiler = new CompilerJobs(db, config, () => false);
+    await compiler.initialize();
+    await compiler.close();
     jobs = new ScanJobs(db, config.vault_path);
     const submitted = jobs.submit('rebuild');
     await jobs.close();

@@ -5,6 +5,7 @@ import { documentPathKey } from '../files/paths.js';
 import { lifecycleStatus, normalizeText, processingStatus, stringList, type ParsedDocument } from '../source/parse.js';
 import { indexMeta } from './database.js';
 import { retainFinishedJobs } from '../jobs/retention.js';
+import type { FileRead } from '../files/read.js';
 
 export interface DocumentRow {
   id: string; path_key: string; path: string; kind: 'source' | 'knowledge'; state: Source['state'];
@@ -16,6 +17,16 @@ export interface DocumentRow {
 export interface Projection { path: string; parsed: ParsedDocument; revision: string | null; size: number | null; mtime: number | null }
 export const getDocument = (db: Database.Database, relative: string) => db.prepare('SELECT * FROM documents WHERE path_key=?').get(documentPathKey(relative)) as DocumentRow | undefined;
 export const allDocuments = (db: Database.Database) => db.prepare('SELECT * FROM documents ORDER BY path_key').all() as DocumentRow[];
+/** Publish the entire newly read Source snapshot, never a new hash with old cached content. */
+export function updateCompiledSource(db: Database.Database, relative: string, file: FileRead, parsed: ParsedDocument) {
+  if (parsed.state !== 'ready' || parsed.kind !== 'source') return;
+  db.transaction(() => {
+    const changed = db.prepare(`UPDATE documents SET state='ready',revision=?,size=?,mtime=?,title=?,source_type=?,captured_at=?,original_locator=?,metadata_json=?,asset_json=?,diagnostics_json=?,annotation=?,body_markdown=?,title_norm=?,body_norm=?,annotation_norm=?,metadata_norm=?,indexed_at=? WHERE path_key=?`)
+      .run(file.revision, file.size, file.mtime, parsed.title, parsed.source_type, parsed.captured_at, parsed.original_locator, JSON.stringify(parsed.metadata), parsed.asset ? JSON.stringify(parsed.asset) : null, JSON.stringify(parsed.diagnostics), parsed.annotation, parsed.body_markdown,
+        normalizeText(parsed.title), normalizeText(parsed.body_markdown), normalizeText(parsed.annotation), normalizeText([parsed.original_locator ?? '', parsed.source_type ?? '', ...stringList(parsed.metadata.tags)].join('\n')), new Date().toISOString(), documentPathKey(relative));
+    if (changed.changes) db.prepare('UPDATE meta SET index_generation=index_generation+1 WHERE id=1').run();
+  })();
+}
 export function sourceItem(row: DocumentRow): Source {
   const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
   return { id: row.id, path: row.path, title: row.title, source_type: row.source_type, state: row.state, revision: row.revision,

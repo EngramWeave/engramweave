@@ -6,8 +6,14 @@ import { parseMarkdown } from './parse.js';
 
 /** Deterministic byte edit shared by registration and Capture replay matching. */
 export function pendingSourceBytes(relative: string, bytes: Buffer): Buffer {
+  return stageSourceBytes(relative, bytes, 'pending');
+}
+export function compiledSourceBytes(relative: string, bytes: Buffer): Buffer {
+  return stageSourceBytes(relative, bytes, 'compiled');
+}
+function stageSourceBytes(relative: string, bytes: Buffer, target: 'pending' | 'compiled'): Buffer {
   const before = parseMarkdown(relative, bytes);
-  if (before.state !== 'ready' || before.kind !== 'source' || before.processing_status !== null) return bytes;
+  if (before.state !== 'ready' || before.kind !== 'source' || (target === 'pending' ? before.processing_status !== null : before.processing_status !== 'pending')) return bytes;
   const text = bytes.toString('utf8');
   const bom = text.startsWith('\uFEFF') ? 1 : 0;
   const opening = /^---\r?\n/.exec(text.slice(bom));
@@ -23,7 +29,7 @@ export function pendingSourceBytes(relative: string, bytes: Buffer): Buffer {
     const value = pair.value;
     if ((!isScalar(value) && !isAlias(value)) || !value.range) throw new FileProblem('PROPERTY_WRITE_UNSUPPORTED', 'invalid', 'Stage property cannot be safely edited');
     from = start + value.range[0]; to = start + value.range[1];
-    replacement = from === to ? 'pending ' : 'pending';
+    replacement = from === to ? `${target} ` : target;
     if (isScalar(value) && value.srcToken?.type === 'block-scalar') {
       // Empty block scalars have no submitted text; preserve header comments and blank lines.
       const header = value.srcToken.props.find(token => token.type === 'block-scalar-header');
@@ -31,7 +37,7 @@ export function pendingSourceBytes(relative: string, bytes: Buffer): Buffer {
     }
   } else if (yaml.contents.flow && yaml.contents.range) {
     from = to = start + yaml.contents.range[0] + 1;
-    replacement = 'processing_status: pending, ';
+    replacement = `processing_status: ${target}, `;
   } else {
     from = to = start;
     let indent = '';
@@ -44,14 +50,14 @@ export function pendingSourceBytes(relative: string, bytes: Buffer): Buffer {
         from = to = lineStart; indent = prefix;
       }
     }
-    replacement = `${indent}processing_status: pending${opening[0].endsWith('\r\n') ? '\r\n' : '\n'}`;
+    replacement = `${indent}processing_status: ${target}${opening[0].endsWith('\r\n') ? '\r\n' : '\n'}`;
   }
   const edited = Buffer.concat([bytes.subarray(0, Buffer.byteLength(text.slice(0, from))), Buffer.from(replacement), bytes.subarray(Buffer.byteLength(text.slice(0, to)))]);
   if (edited.length > LIMITS.markdown_bytes) throw new FileProblem('FILE_TOO_LARGE', 'unsupported', 'Normalized Markdown exceeds the file size limit');
   const after = parseMarkdown(relative, edited);
   const { processing_status: _old, ...oldMetadata } = before.metadata;
   const { processing_status: _new, ...newMetadata } = after.metadata;
-  if (after.state !== 'ready' || after.processing_status !== 'pending' || !isDeepStrictEqual(oldMetadata, newMetadata)
+  if (after.state !== 'ready' || after.processing_status !== target || !isDeepStrictEqual(oldMetadata, newMetadata)
     || before.annotation !== after.annotation || before.body_markdown !== after.body_markdown) {
     throw new FileProblem('PROPERTY_WRITE_UNSUPPORTED', 'invalid', 'Stage edit would change other Source content or properties');
   }

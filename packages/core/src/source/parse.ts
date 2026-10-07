@@ -37,7 +37,7 @@ function firstHeading(body: string): string | undefined {
   return undefined;
 }
 
-function jsonCompatible(value: unknown, seen = new Set<object>(), depth = 0): boolean {
+export function jsonCompatible(value: unknown, seen = new Set<object>(), depth = 0): boolean {
   if (depth > 100) return false;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);

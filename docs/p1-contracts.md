@@ -1,5 +1,7 @@
 # 文件与接口合同（P1 基础及 P2 A 扩展）
 
+P2 B 的 Compiler、Draft 和 schema 2 迁移扩展见 [Compiler 与 Draft](compiler.md)；本文保留 Source／Knowledge、扫描、读取和 Capture 的基础合同。
+
 唯一 API Schema 和推导类型位于 [contracts](../packages/contracts/src/index.ts)。Core 与 Desktop 使用同一份契约；数据库内部 ID 不写入用户 Markdown。部署、采集、扫描和恢复命令见 [Core](core.md)，本机宿主和原生打开见 [Desktop](desktop.md)。
 
 ## 文件模型
@@ -30,7 +32,7 @@ Source 和 Knowledge 独立返回 `lifecycle_status=active/discarded`；缺失/n
 | `GET /v1/sources` | 默认 ready、按 path_key 排序；可按登记状态、类型、目录前缀筛选 |
 | `GET /v1/documents?path=...` | 从当前受限文件读取详情，不刷新投影 |
 | `GET /v1/search` | 默认 Knowledge，支持 Sources/all、字面 AND、字段和元数据过滤 |
-| `POST /v1/captures` | 仅新建 web/manual inline Raw Source；首次 201，原字节或仅补 pending 后的精确字节重放 200，其他差异 409 |
+| `POST /v1/captures` | 仅新建 web/manual inline Raw Source；首次 201；原字节或精确 pending 补写重放 200；compiled 精确形式还需关联 Draft 的输入 revision 证明，其他差异 409 |
 
 health 外均需认证，Host 固定为配置的 `127.0.0.1:port`，浏览器 Origin 被拒绝。请求拒绝未知字段。公共字段用 snake_case、列表用 `items/total/limit/offset`，默认 limit=20、最大100；错误统一为 `error.code/message/details`，不含 token、堆栈或正文。无任意 SQL、文件读写、通用 Job、Source 删除/更新、Canonical 写入或 AI 接口。
 
@@ -44,4 +46,4 @@ refresh 仍读取全部候选并计算 hash，只复用未变化文件的解析�
 
 SQLite 只保存 documents/jobs/meta 三张表及可重建投影，位于 Vault 外，Schema 仍为 1。损坏或不兼容库不会自动删除；显式离线恢复取得独占运行权，隔离数据库及 journal/wal/shm 到新备份目录，再从全部受支持文件 rebuild。失败保留备份与诊断。恢复保持路径、完整阶段、生命周期、Annotation、正文及支持的语义查询；仅缺失/空阶段补 pending 并更新 revision，不保证内部 ID、旧 Job 历史或原扫描时间。
 
-当前支持 Windows 本地 NTFS、单 Vault 和本机 Node 宿主；不承诺网络盘、云占位文件、多 Vault、跨平台安装包、OCR、外部网页存活或找回用户删除的资产。Core 对 Vault 的写入限于明确 Capture 请求的新 Source 和登记时缺失/空阶段的补写；不写 Draft/Knowledge。主页未来模块仅作规划展示，没有后续页面、任务或存储实现。
+当前支持 Windows 本地 NTFS、单 Vault 和本机 Node 宿主；不承诺网络盘、云占位文件、多 Vault、跨平台安装包、OCR、外部网页存活或找回用户删除的资产。Core 可写入明确 Capture 请求的新 Source、登记时缺失/空阶段的补写，以及显式 Compiler 的新 Draft 和 pending→compiled 阶段；不写正式 Knowledge。两项 Analyzer、人工 Review 动作和整合仍在后续实现。

@@ -136,3 +136,19 @@ fn changing_profile_requires_desktop_restart() {
     fs::write(&fixture.config, serde_json::to_vec(&changed).unwrap()).unwrap();
     assert_eq!(desktop.start().unwrap_err().code, "CONFIG_ERROR");
 }
+
+#[test]
+fn compiler_settings_native_bridge_keeps_credentials_write_only() {
+    let fixture = Fixture::new();
+    let mut desktop = fixture.host();
+    desktop.start().unwrap();
+    let input = json!({"settings": {"route":"api","model":"fixture-model","endpoint":"http://127.0.0.1:8094/v1","codex_path":"","output_format":"text","reasoning_effort":"none","timeout_seconds":60}, "api_key":"native-fixture-secret"});
+    let saved = desktop.request(Operation::CompilerSettingsWrite, input).unwrap();
+    assert_eq!(saved["api_key_configured"], true);
+    assert!(!saved.to_string().contains("native-fixture-secret"));
+    let read = desktop.request(Operation::CompilerSettings, json!({})).unwrap();
+    assert!(!read.to_string().contains("native-fixture-secret"));
+    assert!(!fs::read_to_string(fixture.root.join("data/compiler-api-key.dpapi")).unwrap().contains("native-fixture-secret"));
+    assert!(desktop.request(Operation::Compile, json!({"path":"20_Sources/r1.md","revision":"a".repeat(64),"request_id":"00000000-0000-0000-0000-000000000001","command":"forbidden"})).is_err());
+    desktop.stop().unwrap();
+}

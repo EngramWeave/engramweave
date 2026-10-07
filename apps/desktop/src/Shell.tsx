@@ -301,7 +301,7 @@ export function Shell({
               ? `Core ready · ${host?.mode === 'owned' ? '自行启动' : '外部连接'}`
               : 'Core 未连接'}
           </span>
-          <span>仅显式扫描 · 资料只读{busy ? ' · 操作中…' : ''}</span>
+          <span>显式操作 · Obsidian 编辑正文{busy ? ' · 操作中…' : ''}</span>
         </footer>
       </main>
     </div>

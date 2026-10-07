@@ -16,10 +16,10 @@ export function normalizeVaultPath(input: string): string {
   return parts.join('/');
 }
 
-export function markdownPath(input: string): string {
+export function markdownPath(input: string, allowDraft = false): string {
   const normalized = normalizeVaultPath(input);
   const parts = normalized.split('/');
-  if (!SCAN_ROOTS.includes(parts[0] as typeof SCAN_ROOTS[number]) || parts.length < 2 || !/\.md$/i.test(normalized) || parts.some(excludedName)) {
+  if (!(SCAN_ROOTS.includes(parts[0] as typeof SCAN_ROOTS[number]) || allowDraft && parts[0] === '30_Drafts') || parts.length < 2 || !/\.md$/i.test(normalized) || parts.some(excludedName)) {
     throw new CoreError('PATH_OUTSIDE_SCOPE', 'Path is outside the supported Markdown scope', 403);
   }
   return normalized;
@@ -27,7 +27,7 @@ export function markdownPath(input: string): string {
 
 /** Both scans and detail reads check each path segment without following links. */
 export async function resolveMarkdown(vault: string, input: string, nativeAttributesChecked = false): Promise<string> {
-  return resolveVaultFile(vault, markdownPath(input), nativeAttributesChecked);
+  return resolveVaultFile(vault, markdownPath(input, input.startsWith('30_Drafts/')), nativeAttributesChecked);
 }
 
 /** Asset checks share the same containment and native attribute boundary as documents. */
