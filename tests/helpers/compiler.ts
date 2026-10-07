@@ -9,7 +9,7 @@ import { readMarkdown } from '../../packages/core/src/files/read.js';
 import type Database from 'better-sqlite3';
 
 export const sourcePath = '20_Sources/selected.md';
-export const sourceText = '---\ntype: raw_source\nsource_type: paper\nsource: zotero://select/library/items/TEST123\nprocessing_status: pending # stage\nannotation: "I understand that memory is reconstructed."\ncustom: preserve-me\n---\n\n# Selected material\n\nOnly this passage is submitted. The effect holds under condition A.\n';
+export const sourceText = '---\ntype: raw_source\nsource_type: paper\nsource: zotero://select/library/items/TEST123\nprocessing_status: pending # stage\nlifecycle_status: active\nannotation: "I understand that memory is reconstructed."\ncustom: preserve-me\n---\n\n# Selected material\n\nOnly this passage is submitted. The effect holds under condition A.\n';
 export async function compilerFixture(executor: CompilerExecutor, text = sourceText): Promise<Awaited<ReturnType<typeof isolatedRuntime>> & { db: Database.Database; compiler: CompilerJobs; sourcePath: string; revision: string; close(): Promise<void> }> {
   const runtime = await isolatedRuntime();
   await mkdir(path.join(runtime.config.vault_path, '20_Sources'));

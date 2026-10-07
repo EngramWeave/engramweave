@@ -2,11 +2,11 @@ import { lstat, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CompilerSettings } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
-import { compilerResult, instructions } from '../compiler/input.js';
+import { compilerResult } from '../compiler/input.js';
 import { resultJsonSchema } from './api.js';
 import { runProcess } from './process.js';
 
-export async function executeCodex(settings: CompilerSettings, dataDirectory: string, prompt: string, signal: AbortSignal) {
+export async function executeCodex(settings: CompilerSettings, dataDirectory: string, prompt: string, signal: AbortSignal, instructions: string) {
   if (!settings.codex_path || !path.isAbsolute(settings.codex_path)) throw new CoreError('CONFIG_ERROR', 'Configure an absolute Codex executable path', 400);
   const executable = await lstat(settings.codex_path).catch(() => null);
   if (!executable?.isFile() || executable.isSymbolicLink()) throw new CoreError('CONFIG_ERROR', 'Configured Codex executable is unavailable or linked', 400);

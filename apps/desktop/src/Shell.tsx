@@ -84,7 +84,7 @@ export function Shell({
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
                 {item.view === 'sources' && status ? (
-                  <span className="nav-count">{status.counts.sources}</span>
+                  <span className="nav-count">{status.counts.pending ?? '—'}</span>
                 ) : !item.view ? (
                   <span className="nav-planned">Soon</span>
                 ) : null}

@@ -1,9 +1,9 @@
 import type { CompilerSettings } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
-import { compilerResult, instructions } from '../compiler/input.js';
+import { compilerResult } from '../compiler/input.js';
 
 export const resultJsonSchema = { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title', 'body'], additionalProperties: false };
-export async function executeApi(settings: CompilerSettings, key: string, prompt: string, signal: AbortSignal) {
+export async function executeApi(settings: CompilerSettings, key: string, prompt: string, signal: AbortSignal, instructions: string) {
   const format = settings.output_format === 'json_schema' ? { type: 'json_schema', json_schema: { name: 'compiler_result', strict: true, schema: resultJsonSchema } }
     : settings.output_format === 'json_object' ? { type: 'json_object' } : undefined;
   let response: Response;

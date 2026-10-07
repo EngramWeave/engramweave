@@ -7,7 +7,7 @@ import { markdownPath, resolveVaultDirectory, resolveMarkdown } from '../files/p
 import { readMarkdown } from '../files/read.js';
 import { publishFile } from '../files/publication.js';
 import { parseMarkdown } from '../source/parse.js';
-import { pendingSourceBytes, compiledSourceBytes } from '../source/properties.js';
+import { pendingSourceBytes, registeredSourceBytes, compiledSourceBytes } from '../source/properties.js';
 import { listDrafts } from '../drafts/files.js';
 
 async function ensureParent(vault: string, relative: string): Promise<void> {
@@ -30,12 +30,13 @@ async function existingMatch(vault: string, relative: string, bytes: Buffer): Pr
   const current = await readMarkdown(vault, relative);
   if (current.bytes.equals(bytes)) return current.revision;
   try {
-    const registered = pendingSourceBytes(relative, bytes);
+    if (current.bytes.equals(pendingSourceBytes(relative, bytes))) return current.revision;
+    const registered = registeredSourceBytes(relative, bytes);
     if (current.bytes.equals(registered)) return current.revision;
     if (current.bytes.equals(compiledSourceBytes(relative, registered))) {
       const inputRevision = createHash('sha256').update(registered).digest('hex');
       const drafts = await listDrafts(vault, relative);
-      if (drafts.items.some(draft => draft.metadata.compiled_source_revision === inputRevision)) return current.revision;
+      if (drafts.items.some(draft => [inputRevision, current.revision].includes(String(draft.metadata.compiled_source_revision)))) return current.revision;
     }
   } catch { /* Unsupported stage edits do not broaden replay matching. */ }
   throw new CoreError('PATH_CONFLICT', 'Capture target already contains different bytes', 409);

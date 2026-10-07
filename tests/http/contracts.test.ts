@@ -68,7 +68,7 @@ it('validates real wire responses for all nine P1 endpoints and rejects undeclar
       expect(JSON.stringify(error)).not.toContain('private-input');
       expect(JSON.stringify(error)).not.toContain(runtime.config.vault_path);
     }
-    expect(new Set(checks.map(check => check.route)).size).toBe(14);
+    expect(new Set(checks.map(check => check.route)).size).toBe(17);
     expect((await (await runtime.request('/v1/jobs')).json()).total).toBe(1);
     expect(await readFile(path.join(runtime.config.vault_path, capture.path), 'utf8')).toBe(capture.markdown.replace('---\n', '---\nprocessing_status: pending\n'));
     const hashes = [];

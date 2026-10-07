@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 
 const shapes = {
+  archive: <><path d="M4 8h16v13H4zM3 3h18v5H3zM9 12h6" /></>,
+  trash: <><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7" /></>,
   home: (
     <>
       <path d="m3 10 9-7 9 7" />

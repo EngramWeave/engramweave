@@ -12,7 +12,7 @@ import { getDocument, parsedRow, publishScan, type Projection } from '../storage
 import { indexMeta } from '../storage/database.js';
 import { resolveDocumentReferences } from '../source/references.js';
 import { isCaptureTemporaryName } from '../files/publication.js';
-import { pendingSourceBytes } from '../source/properties.js';
+import { registeredSourceBytes } from '../source/properties.js';
 import { isPropertyArtifact, isPropertyJournal, recoverPropertyJournal, writeSourceProperties } from '../files/properties.js';
 import { PropertyNative } from '../files/property-native.js';
 
@@ -106,8 +106,8 @@ async function scanWithProperties(db: Database.Database, vault: string, jobId: s
         ? parsedRow(previous) : parseMarkdown(relative, file.bytes);
       // P1 cached arbitrary lifecycle metadata; do not let the cache bypass P2 validation.
       if (parsed.state === 'ready' && parsed.lifecycle_status === null) parsed = parseMarkdown(relative, file.bytes);
-      if (parsed.state === 'ready' && parsed.kind === 'source' && parsed.processing_status === null) {
-        const updated = pendingSourceBytes(relative, file.bytes);
+      if (parsed.state === 'ready' && parsed.kind === 'source' && (parsed.processing_status === null || parsed.metadata.lifecycle_status == null || parsed.metadata.lifecycle_status === '')) {
+        const updated = registeredSourceBytes(relative, file.bytes);
         await writeSourceProperties(vault, relative, file, updated, native, onBytes);
         file = await readMarkdown(vault, relative, false, onBytes);
         parsed = parseMarkdown(relative, file.bytes);

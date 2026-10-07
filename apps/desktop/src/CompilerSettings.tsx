@@ -30,6 +30,7 @@ export function CompilerSettings({ connected }: { connected: boolean }) {
   return <section className="compiler-settings">
     <h2>Compiler</h2>
     <p className="hint">设置正文编译的执行路径和模型。投递、启动与扫描不会运行 Compiler。</p>
+    <p className="hint">Prompt template: <code>90_System/Prompts/Compiler.md</code>。在 Vault 中编辑，下一次执行读取当前模板；已有任务使用开始时的模板。</p>
     {settings && <form onSubmit={event => { void save(event); }} className="compiler-form">
       <label>Execution path<select value={settings.route} onChange={event => update('route', event.target.value as Settings['route'])}><option value="codex">Codex</option><option value="api">API</option></select></label>
       <label>Model<input required maxLength={200} value={settings.model} onChange={event => update('model', event.target.value)} placeholder="填写可用的模型名称" /></label>

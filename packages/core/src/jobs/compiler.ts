@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { LIMITS, type CompileRequest, type CompilerJob, type CompilerResult, type CompilerSettings, type Config } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { compilerInput, compilerResult } from '../compiler/input.js';
+import { loadCompilerTemplate } from '../compiler/template.js';
 import { getDocument, updateCompiledSource } from '../storage/registry.js';
 import { readMarkdown } from '../files/read.js';
 import { parseMarkdown } from '../source/parse.js';
@@ -13,7 +14,7 @@ import { executeCodex } from '../execution/codex.js';
 type Row = Omit<CompilerJob, 'kind' | 'prompt_version' | 'error'> & { error_json: string | null };
 const asJob = (row: Row): CompilerJob => { const { error_json, ...rest } = row; return { ...rest, kind: 'compile_source', prompt_version: 'compiler-v1', error: error_json ? JSON.parse(error_json) : null }; };
 const safeError = (error: unknown) => error instanceof CoreError ? { code: error.code, message: error.message, details: null } : { code: 'EXECUTION_FAILED' as const, message: 'Compiler execution or publication failed; inspect preserved files', details: null };
-export type CompilerExecutor = (settings: CompilerSettings, prompt: string, signal: AbortSignal) => Promise<CompilerResult>;
+export type CompilerExecutor = (settings: CompilerSettings, prompt: string, signal: AbortSignal, instructions: string) => Promise<CompilerResult>;
 
 export class CompilerJobs {
   readonly settings: ExecutionSettings;
@@ -68,6 +69,7 @@ export class CompilerJobs {
       }
       if (getDocument(this.db, input.path)?.state !== 'ready') throw new CoreError('INVALID_SOURCE', 'Scan and register this Source before compilation', 422);
       if ((await this.publisher.pending()).some(item => item.source.toLowerCase() === input.path.toLowerCase())) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'An unfinished publication for this Source requires inspection', 409);
+      const { instructions } = await loadCompilerTemplate(this.config.vault_path);
       const { prompt } = await compilerInput(this.config.vault_path, input.path, input.revision);
       const { settings } = await this.settings.read();
       if (!settings.model.trim()) throw new CoreError('CONFIG_ERROR', 'Configure a Compiler model', 400);
@@ -76,17 +78,17 @@ export class CompilerJobs {
       this.db.prepare("INSERT INTO compiler_jobs(id,source_path,source_revision,route,model,status,created_at) VALUES(?,?,?,?,?,'queued',?)").run(input.request_id, input.path, input.revision, settings.route, settings.model, new Date().toISOString());
       this.controller = new AbortController();
       const signal = AbortSignal.any([this.controller.signal, AbortSignal.timeout(settings.timeout_seconds * 1000)]);
-      this.running = new Promise<void>(resolve => setImmediate(resolve)).then(() => this.execute(input, prompt, settings, signal));
+      this.running = new Promise<void>(resolve => setImmediate(resolve)).then(() => this.execute(input, prompt, settings, signal, instructions));
       void this.running.catch(() => {});
       return { job: this.get(input.request_id)!, reused: false };
     } finally { this.submitting = false; }
   }
   busy() { return this.submitting || this.active() !== null; }
-  private async execute(input: CompileRequest, prompt: string, settings: CompilerSettings, signal: AbortSignal) {
+  private async execute(input: CompileRequest, prompt: string, settings: CompilerSettings, signal: AbortSignal, instructions: string) {
     try {
       this.db.prepare("UPDATE compiler_jobs SET status='running',started_at=? WHERE id=?").run(new Date().toISOString(), input.request_id);
-      const result = this.executor ? await this.executor(settings, prompt, signal) : settings.route === 'api'
-        ? await executeApi(settings, await this.settings.apiKey(settings.endpoint), prompt, signal) : await executeCodex(settings, this.config.data_dir, prompt, signal);
+      const result = this.executor ? await this.executor(settings, prompt, signal, instructions) : settings.route === 'api'
+        ? await executeApi(settings, await this.settings.apiKey(settings.endpoint), prompt, signal, instructions) : await executeCodex(settings, this.config.data_dir, prompt, signal, instructions);
       if (signal.aborted) throw new CoreError('EXECUTION_FAILED', 'Compiler was stopped before publication');
       const record = await this.publisher.prepare(input.request_id, input.path, input.revision, compilerResult(JSON.stringify(result)), { route: settings.route === 'api' ? 'api' : 'codex', model: settings.model });
       const draft = await this.publisher.finish(record);
@@ -101,4 +103,5 @@ export class CompilerJobs {
     } finally { this.controller = null; this.retain(); }
   }
   async close() { this.stopping = true; this.controller?.abort(); await this.running; }
+  async wait() { await this.running; }
 }

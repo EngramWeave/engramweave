@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compilerFixture, sourceText, waitCompiler } from '../helpers/compiler.js';
@@ -10,6 +10,34 @@ import { publishFile } from '../../packages/core/src/files/publication.js';
 import { searchDocuments } from '../../packages/core/src/search/query.js';
 
 describe('Compiler jobs and multiple Drafts', () => {
+  it('appends a Draft for a read-only compiled Source without rewriting its stage bytes', async () => {
+    const fixture = await compilerFixture(async () => ({ title: 'Another candidate', body: 'Submitted meaning.' }), sourceText.replace('pending # stage', 'compiled # stage'));
+    const filename = path.join(fixture.config.vault_path, fixture.sourcePath);
+    try {
+      const before = await readMarkdown(fixture.config.vault_path, fixture.sourcePath);
+      await chmod(filename, 0o444);
+      const id = randomUUID();
+      await fixture.compiler.submit({ path: fixture.sourcePath, revision: before.revision, request_id: id });
+      expect((await waitCompiler(fixture.compiler, id)).status).toBe('succeeded');
+      expect((await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).bytes).toEqual(before.bytes);
+      expect((await listDrafts(fixture.config.vault_path, fixture.sourcePath)).items).toHaveLength(1);
+    } finally { await chmod(filename, 0o666); await fixture.close(); }
+  }, 60_000);
+  it('preserves a concurrently created candidate during recovery of a repeat compilation with unchanged Source stage', async () => {
+    const fixture = await compilerFixture(async () => { throw new Error('must not run'); }, sourceText.replace('pending # stage', 'compiled # stage'));
+    try {
+      const id = randomUUID();
+      const record = await fixture.compiler.publisher.prepare(id, fixture.sourcePath, fixture.revision, { title: 'Generated', body: 'Saved result' });
+      await mkdir(path.join(fixture.config.vault_path, '30_Drafts'));
+      const edited = '---\ntype: draft\ntitle: Concurrent user file\nsources: ["[[20_Sources/selected.md]]"]\n---\nUser changes remain.\n';
+      await writeFile(path.join(fixture.config.vault_path, record.draft), edited);
+      const recovered = new CompilerJobs(fixture.db, fixture.config, () => false, async () => { throw new Error('must not run'); });
+      await recovered.initialize();
+      expect(recovered.get(id)).toMatchObject({ status: 'failed', error: { code: 'COMPILATION_RECOVERY_CONFLICT' } });
+      expect(await readFile(path.join(fixture.config.vault_path, record.draft), 'utf8')).toBe(edited);
+      await recovered.close();
+    } finally { await fixture.close(); }
+  }, 60_000);
   it('publishes another Draft without altering earlier user edits and replays a request without another call', async () => {
     let calls = 0; const inputs: any[] = [];
     const fixture = await compilerFixture(async (settings, prompt) => { calls++; inputs.push({ settings, input: JSON.parse(prompt) }); return { title: 'Compiled understanding', body: 'Condition A and personal understanding are preserved.' }; });
@@ -30,7 +58,11 @@ describe('Compiler jobs and multiple Drafts', () => {
       const drafts = await listDrafts(fixture.config.vault_path, fixture.sourcePath);
       expect(drafts.items).toHaveLength(2);
       expect(drafts.items.every(item => item.lifecycle_status === 'active')).toBe(true);
-      await expect(fixture.compiler.submit({ ...input, request_id: randomUUID(), revision: (await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).revision })).rejects.toMatchObject({ code: 'INVALID_SOURCE' });
+      const repeat = { ...input, request_id: randomUUID(), revision: (await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).revision };
+      await fixture.compiler.submit(repeat);
+      expect((await waitCompiler(fixture.compiler, repeat.request_id)).status).toBe('succeeded');
+      expect((await listDrafts(fixture.config.vault_path, fixture.sourcePath)).items).toHaveLength(3);
+      expect(calls).toBe(2);
       await expect(fixture.compiler.submit({ ...input, path: '20_Sources/other.md' })).rejects.toMatchObject({ code: 'PATH_CONFLICT' });
     } finally { await fixture.close(); }
   }, 60_000);
@@ -92,7 +124,7 @@ describe('Compiler jobs and multiple Drafts', () => {
     let calls = 0;
     const fixture = await compilerFixture(async () => { calls++; return { title: 'Wrong', body: 'must not run' }; });
     try {
-      for (const text of [sourceText.replace('pending # stage', 'compiled # stage'), sourceText.replace('pending # stage', 'pending # stage\nlifecycle_status: discarded'), sourceText.replace('source_type: paper', 'source_type: paper\nasset: zotero://select/library/items/TEST123')]) {
+      for (const text of [sourceText.replace('pending # stage', 'reviewed # stage'), sourceText.replace('pending # stage', 'pending # stage\nlifecycle_status: discarded'), sourceText.replace('source_type: paper', 'source_type: paper\nasset: zotero://select/library/items/TEST123')]) {
         await writeFile(path.join(fixture.config.vault_path, fixture.sourcePath), text);
         const file = await readMarkdown(fixture.config.vault_path, fixture.sourcePath);
         await expect(fixture.compiler.submit({ path: fixture.sourcePath, revision: file.revision, request_id: randomUUID() })).rejects.toThrow();

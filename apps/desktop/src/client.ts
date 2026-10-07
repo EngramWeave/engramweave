@@ -7,6 +7,7 @@ import {
   type SourcesQuery,
   type CompilerSettings,
   type CompileRequest,
+  type SourceBatchRequest,
 } from '@engramweave/contracts';
 
 export interface HostInfo {
@@ -80,6 +81,9 @@ export const client = {
   compile: (input: CompileRequest) => request('compile', API.compile.schema.response[202], input),
   drafts: (source_path: string) => request('drafts', API.drafts.schema.response[200], { source_path }),
   draft: (path: string) => request('draft', API.draft.schema.response[200], { path }),
+  sourceBatch: (input: SourceBatchRequest) => request('source_batch', API.sourceBatch.schema.response[202], input),
+  sourceBatchStatus: (id: string) => request('source_batch_status', API.sourceBatchStatus.schema.response[200], { id }),
+  discardPreview: (path: string) => request('discard_preview', API.discardPreview.schema.response[200], { path }),
 };
 export type SourcePage = Awaited<ReturnType<typeof client.sources>>;
 export type JobPage = Awaited<ReturnType<typeof client.jobs>>;

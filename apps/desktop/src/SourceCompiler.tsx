@@ -29,7 +29,7 @@ export function SourceCompiler({ document, jobs, active, onStarted, onPublished 
   useEffect(() => {
     if (latest?.kind !== 'compile_source') return;
     if (['queued', 'running'].includes(latest.status)) observedRun.current = latest.id;
-    if (latest.status === 'succeeded' && observedRun.current === latest.id && latest.source_revision === document.revision) {
+    if (latest.status === 'succeeded' && observedRun.current === latest.id) {
       observedRun.current = null;
       onPublished();
     }
@@ -44,7 +44,7 @@ export function SourceCompiler({ document, jobs, active, onStarted, onPublished 
   };
   const draft = drafts.find(item => item.path === selected);
   return <section className="source-compiler">
-    <div className="section-heading"><h3>Compiler / Drafts</h3><button className="primary" disabled={busy || active || document.kind !== 'source' || document.processing_status !== 'pending' || document.lifecycle_status !== 'active'} onClick={() => { void compile(); }}>{busy ? 'Starting…' : 'Run Compiler'}</button></div>
+    <div className="section-heading"><h3>Compiler / Drafts</h3><button className="primary" disabled={busy || active || document.kind !== 'source' || !['pending', 'compiled'].includes(document.processing_status ?? '') || document.lifecycle_status !== 'active'} onClick={() => { void compile(); }}>{busy ? 'Starting…' : 'Run Compiler'}</button></div>
     <p className="hint">每次成功编译新增 Draft，已有正文和用户编辑保留。这里只执行正文编译。</p>
     {latest && <p role="status">Last Compiler · {latest.status}</p>}
     {latest?.error && <ErrorNotice error={latest.error} />}

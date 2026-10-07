@@ -1,7 +1,7 @@
 import type { Document } from '@engramweave/contracts';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
-import { lifecycleLabel, processingLabel } from './status-labels';
+import { lifecycleLabel, processingLabel, processingTone } from './status-labels';
 import { ErrorNotice } from './Feedback';
 import type { Failure } from './client';
 
@@ -23,9 +23,9 @@ export function Detail({
   children?: ReactNode;
 }) {
   const panel = useRef<HTMLElement>(null);
-  const [tab, setTab] = useState<'details' | 'annotation' | 'links'>('details');
+  const [tab, setTab] = useState<'details' | 'annotation' | 'links'>('annotation');
   useEffect(() => {
-    setTab('details');
+    setTab(document.kind === 'source' ? 'annotation' : 'details');
     // A side inspector stays in place; standalone search details remain reachable.
     if (!panel.current?.closest('.source-inspector'))
       panel.current?.scrollIntoView({ block: 'start' });
@@ -68,7 +68,7 @@ export function Detail({
         </button>
       </div>
       <div className="inspector-tabs" role="tablist" aria-label="详情视图">
-        {(['details', 'annotation', 'links'] as const).map((value) => (
+        {(['annotation', 'details', 'links'] as const).map((value) => (
           <button
             key={value}
             role="tab"
@@ -119,7 +119,7 @@ export function Detail({
             </dt>
             <dd>
               {document.kind === 'source' ? (
-                <span className="state-tag green">
+                <span className={`state-tag ${processingTone(document.processing_status)}`}>
                   {processingLabel(document.processing_status)}
                 </span>
               ) : (
@@ -127,7 +127,7 @@ export function Detail({
               )}
             </dd>
             <dt><Icon name="file" />Lifecycle</dt>
-            <dd className={document.lifecycle_status === 'discarded' ? 'lifecycle-discarded' : ''}>{lifecycleLabel(document.lifecycle_status)}</dd>
+            <dd><span className={`state-tag ${document.lifecycle_status === 'discarded' ? 'slate' : 'green'}`}>{lifecycleLabel(document.lifecycle_status)}</span></dd>
             <dt>
               <Icon name="clock" />
               Captured
@@ -143,7 +143,7 @@ export function Detail({
               Record
             </dt>
             <dd className="path">{document.path}</dd>
-            {document.kind === 'source' && (
+            {document.kind === 'source' && document.asset.kind !== 'inline_markdown' && (
               <>
                 <dt>
                   <Icon name="layers" />
@@ -262,7 +262,7 @@ export function Detail({
           索引已过时，请显式刷新 Vault。
         </div>
       )}
-      {document.diagnostics.map((item, index) => (
+      {document.diagnostics.filter(item => item.code !== 'CAPTURED_AT_UNKNOWN').map((item, index) => (
         <p className="notice warning" key={index}>
           {item.code} · {item.message}
         </p>

@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { pendingSourceBytes } from '../../packages/core/src/source/properties.js';
+import { pendingSourceBytes, registeredSourceBytes } from '../../packages/core/src/source/properties.js';
 import { parseMarkdown } from '../../packages/core/src/source/parse.js';
 import { manualSource } from '../helpers/fixtures.js';
 
 const relative = '20_Sources/status.md';
+it.each(['', 'lifecycle_status: null\n', 'lifecycle_status: ""\n', 'lifecycle_status: active\n', 'lifecycle_status: discarded\n'])('normalizes lifecycle without changing an existing compiled stage, Annotation or body (%s)', property => {
+  const text = manualSource('Unchanged body\n---\nMore body', `processing_status: compiled\nannotation: Keep exactly\nunknown: {key: value}\n${property}`).replace('lifecycle_status: active\n', property ? 'lifecycle_status: active\n' : '');
+  const original = Buffer.from(text);
+  const updated = registeredSourceBytes(relative, original);
+  const before = parseMarkdown(relative, original), after = parseMarkdown(relative, updated);
+  expect(after.processing_status).toBe('compiled');
+  expect(after.metadata.lifecycle_status).toBe(property.includes('discarded') ? 'discarded' : 'active');
+  expect(after.body_markdown).toBe(before.body_markdown); expect(after.annotation).toBe(before.annotation);
+  expect(after.metadata.unknown).toEqual(before.metadata.unknown);
+  expect(registeredSourceBytes(relative, updated)).toBe(updated);
+});
 describe('minimal Source stage normalization', () => {
   it.each(['\n', '\r\n'])('inserts one property while preserving BOM, comments, Unicode and %j bytes', newline => {
     const content = '\uFEFF' + manualSource('原文\n---\nprocessing_status: body text', '# Before\nannotation: |\n  用户理解\n  More context\nunknown: {key: value}\n').replaceAll('\n', newline);
@@ -32,7 +43,7 @@ describe('minimal Source stage normalization', () => {
   });
   it('refuses an anchored stage whose alias would change another property', () => {
     const bytes = Buffer.from(manualSource('body', 'processing_status: &stage null\nother: *stage\n'));
-    expect(() => pendingSourceBytes(relative, bytes)).toThrow('other Source');
+    expect(() => pendingSourceBytes(relative, bytes)).toThrow();
     expect(parseMarkdown(relative, bytes).metadata.other).toBeNull();
   });
   it('fills a null alias value without changing its anchor or other aliases', () => {

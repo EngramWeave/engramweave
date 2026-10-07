@@ -7,6 +7,8 @@ import { documentPathKey, normalizeVaultPath } from '../files/paths.js';
 import { indexMeta } from '../storage/database.js';
 import { sourceItem, type DocumentRow } from '../storage/registry.js';
 import type { CoreServices } from './context.js';
+import { querySources, sourceViews } from '../storage/source-views.js';
+import { stringList } from '../source/parse.js';
 
 export const pagination = (query: PaginationQuery) => ({ limit: query.limit ?? LIMITS.default_limit, offset: query.offset ?? 0 });
 export function inPathPrefix(relative: string, prefix: string): boolean {
@@ -33,16 +35,18 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
     const { db } = services();
     const query = request.query as SourcesQuery;
     const { limit, offset } = pagination(query);
-    let rows = db.prepare("SELECT id,path_key,path,title,source_type,state,revision,original_locator,captured_at,metadata_json,asset_json,diagnostics_json FROM documents WHERE kind='source' AND state=? AND (? IS NULL OR source_type=?) ORDER BY path_key")
-      .all(query.state ?? 'ready', query.source_type ?? null, query.source_type ?? null) as DocumentRow[];
+    const all = db.prepare("SELECT * FROM documents WHERE kind='source' ORDER BY path_key").all() as DocumentRow[];
+    let rows = querySources(all, query);
     if (query.path_prefix !== undefined) rows = rows.filter(row => inPathPrefix(row.path, query.path_prefix!));
     const meta = indexMeta(db);
-    return { items: rows.slice(offset, offset + limit).map(sourceItem), total: rows.length, limit, offset, index_generation: meta.index_generation, indexed_at: meta.last_scan_at };
+    return { items: rows.slice(offset, offset + limit).map(sourceItem), total: rows.length, limit, offset, index_generation: meta.index_generation, indexed_at: meta.last_scan_at,
+      views: sourceViews(all), facets: { types: [...new Set(all.map(row => row.source_type).filter((type): type is string => type !== null))].sort(), tags: [...new Set(all.flatMap(row => stringList(JSON.parse(row.metadata_json).tags)))].sort() } };
   } });
   server.route({ ...API.status, async handler() {
     const { db, jobs, instance_id } = services(); const meta = indexMeta(db);
     const rows = db.prepare('SELECT kind,state,count(*) AS count FROM documents GROUP BY kind,state').all() as { kind: string; state: string; count: number }[];
-    const counts = { sources: 0, knowledge: 0, invalid: 0, missing: 0, unsupported: 0 };
+    const counts = { sources: 0, knowledge: 0, invalid: 0, missing: 0, unsupported: 0, pending: 0 };
+    counts.pending = sourceViews(db.prepare("SELECT * FROM documents WHERE kind='source'").all() as DocumentRow[]).pending ?? 0;
     for (const row of rows) {
       if (row.state === 'ready') counts[row.kind === 'source' ? 'sources' : 'knowledge'] += row.count;
       else counts[row.state as 'invalid' | 'missing' | 'unsupported'] += row.count;
@@ -53,7 +57,7 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
     }));
     const status: Status = { status: 'ready', core_version: CORE_VERSION, api_version: API_VERSION, instance_id,
       vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? null,
-      index_generation: meta.index_generation, last_scan_at: meta.last_scan_at, counts, scan_roots: roots, limits: LIMITS,
+      index_generation: meta.index_generation, last_scan_at: meta.last_scan_at, counts, scan_roots: roots, limits: LIMITS, source_batch: services().batches?.latest() ?? null,
       diagnostics: roots.filter(root => !root.available).map(root => ({ code: 'SCAN_ROOT_UNAVAILABLE', message: 'Scan root is currently absent or unavailable', path: root.path })) };
     return status;
   } });

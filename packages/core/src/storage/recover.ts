@@ -8,6 +8,7 @@ import { acquireInstance } from '../instance.js';
 import { windowsAttributes } from '../files/windows.js';
 import { ScanJobs } from '../jobs/scans.js';
 import { CompilerJobs } from '../jobs/compiler.js';
+import { SourceBatches } from '../jobs/source-batches.js';
 import { openDatabase } from './database.js';
 
 const databaseNames = ['core.sqlite', 'core.sqlite-journal', 'core.sqlite-wal', 'core.sqlite-shm'] as const;
@@ -49,6 +50,8 @@ export async function recoverDatabase(input: Config): Promise<RecoveryResult> {
     db = await openDatabase(config);
     const compiler = new CompilerJobs(db, config, () => false);
     await compiler.initialize();
+    const batches = new SourceBatches(config, db, compiler, () => false);
+    await batches.initialize(); await batches.close();
     await compiler.close();
     jobs = new ScanJobs(db, config.vault_path);
     const submitted = jobs.submit('rebuild');

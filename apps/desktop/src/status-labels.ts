@@ -5,3 +5,4 @@ const processingLabels: Record<NonNullable<Source['processing_status']>, string>
 };
 export const processingLabel = (status: Source['processing_status']) => status === null ? 'Not set' : processingLabels[status];
 export const lifecycleLabel = (status: Source['lifecycle_status']) => status === null ? 'Unknown' : status === 'active' ? 'Active' : 'Discarded';
+export const processingTone = (status: Source['processing_status']) => ({ pending: 'orange', compiled: 'blue', reviewed: 'violet', planned: 'teal', archived: 'green' })[status ?? 'pending'];

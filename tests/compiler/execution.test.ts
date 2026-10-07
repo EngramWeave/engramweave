@@ -25,13 +25,14 @@ describe('Compiler model boundaries', () => {
     const endpoint = `http://127.0.0.1:${(server.address() as any).port}/v1`;
     try {
       const settings = { ...defaultSettings, route: 'api' as const, endpoint, model: 'fixture-model' };
-      expect(await executeApi(settings, 'mock-key', '{"submitted_content":"condition A","annotation":"personal understanding"}', AbortSignal.timeout(5000))).toEqual({ title: '记忆', body: '条件甲下成立，理解也保留。' });
+      expect(await executeApi(settings, 'mock-key', '{"submitted_content":"condition A","annotation":"personal understanding"}', AbortSignal.timeout(5000), 'Custom Compiler instructions')).toEqual({ title: '记忆', body: '条件甲下成立，理解也保留。' });
       expect(requests[0].url).toBe('/v1/chat/completions');
       expect(requests[0].input.messages[1].content).toContain('personal understanding');
+      expect(requests[0].input.messages[0].content).toBe('Custom Compiler instructions');
       expect(requests[0].input).not.toHaveProperty('tools');
       expect(requests[0].input.response_format.json_schema.schema.additionalProperties).toBe(false);
       refusal = true;
-      await expect(executeApi(settings, 'mock-key', '{}', AbortSignal.timeout(5000))).rejects.toMatchObject({ code: 'INVALID_MODEL_OUTPUT' });
+      await expect(executeApi(settings, 'mock-key', '{}', AbortSignal.timeout(5000), 'Custom Compiler instructions')).rejects.toMatchObject({ code: 'INVALID_MODEL_OUTPUT' });
       expect(requests).toHaveLength(2);
     } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   });

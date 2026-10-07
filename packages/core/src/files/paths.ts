@@ -27,7 +27,7 @@ export function markdownPath(input: string, allowDraft = false): string {
 
 /** Both scans and detail reads check each path segment without following links. */
 export async function resolveMarkdown(vault: string, input: string, nativeAttributesChecked = false): Promise<string> {
-  return resolveVaultFile(vault, markdownPath(input, input.startsWith('30_Drafts/')), nativeAttributesChecked);
+  return resolveVaultFile(vault, input === '90_System/Prompts/Compiler.md' ? input : markdownPath(input, input.startsWith('30_Drafts/')), nativeAttributesChecked);
 }
 
 /** Asset checks share the same containment and native attribute boundary as documents. */

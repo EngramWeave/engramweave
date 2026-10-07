@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { compilerFixture, sourceText, waitCompiler } from '../helpers/compiler.js';
@@ -17,6 +17,13 @@ it('replays a lost Capture receipt after Compiler stage advancement while preser
     fixture.db.prepare('DELETE FROM compiler_jobs').run();
     expect(await createCapture(fixture.config.vault_path, { path: fixture.sourcePath, markdown: original })).toMatchObject({ created: false, revision: current.revision });
     expect(await readFile(path.join(fixture.config.vault_path, fixture.sourcePath), 'utf8')).toBe(current.bytes.toString('utf8'));
+    const draftPath = `30_Drafts/${id}.md`;
+    await unlink(path.join(fixture.config.vault_path, draftPath));
+    const repeated = { path: fixture.sourcePath, revision: current.revision, request_id: randomUUID() };
+    await fixture.compiler.submit(repeated);
+    expect((await waitCompiler(fixture.compiler, repeated.request_id)).status).toBe('succeeded');
+    fixture.db.prepare('DELETE FROM compiler_jobs').run();
+    expect(await createCapture(fixture.config.vault_path, { path: fixture.sourcePath, markdown: original })).toMatchObject({ created: false, revision: current.revision });
     const edited = current.bytes.toString('utf8') + '\nA later user edit.\n';
     await writeFile(path.join(fixture.config.vault_path, fixture.sourcePath), edited);
     await expect(createCapture(fixture.config.vault_path, { path: fixture.sourcePath, markdown: original })).rejects.toMatchObject({ code: 'PATH_CONFLICT' });

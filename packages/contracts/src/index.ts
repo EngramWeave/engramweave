@@ -156,11 +156,33 @@ const page = <T extends TSchema>(item: T) => ({ items: Type.Array(item), total: 
 const indexed = { index_generation: count, indexed_at: nullable(instant) };
 export const JobsResponseSchema = object(page(AnyJobSchema));
 export type PaginationQuery = Static<typeof PaginationQuerySchema>;
+export const SOURCE_VIEWS = ['all', 'pending', 'processing', 'archived', 'issues', 'discarded'] as const;
+export const SourceViewSchema = enumeration(SOURCE_VIEWS);
 export const SourcesQuerySchema = object({ ...PaginationQuerySchema.properties,
   state: Type.Optional(DocumentStateSchema), source_type: Type.Optional(nonempty), path_prefix: Type.Optional(VaultPathSchema),
+  view: Type.Optional(SourceViewSchema), q: Type.Optional(Type.String({ maxLength: 200 })),
+  types: Type.Optional(Type.String({ maxLength: 4096 })), tags: Type.Optional(Type.String({ maxLength: 4096 })),
+  stages: Type.Optional(Type.String({ maxLength: 4096 })), issues: Type.Optional(Type.String({ maxLength: 4096 })),
+  captured_from: Type.Optional(instant), captured_to: Type.Optional(instant),
+  time_ranges: Type.Optional(Type.String({ maxLength: 4096 })),
+  sort: Type.Optional(enumeration(['title_asc', 'title_desc', 'captured_asc', 'captured_desc'])),
 });
-export const SourcesResponseSchema = object({ ...page(SourceSchema), ...indexed });
+export const SourcesResponseSchema = object({ ...page(SourceSchema), ...indexed,
+  views: Type.Optional(object(Object.fromEntries(SOURCE_VIEWS.map(view => [view, count])))),
+  facets: Type.Optional(object({ types: Type.Array(text), tags: Type.Array(text) })),
+});
 export type SourcesQuery = Static<typeof SourcesQuerySchema>;
+const LifecycleTargetSchema = object({ path: ScopedMarkdownPathSchema, revision: RevisionSchema });
+const RelatedTargetSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, DraftPathSchema]), revision: RevisionSchema });
+export const SourceBatchRequestSchema = object({ id: CompileRequestSchema.properties.request_id, action: enumeration(['compile', 'discard', 'restore']),
+  items: Type.Array(object({ ...LifecycleTargetSchema.properties, request_id: CompileRequestSchema.properties.request_id, related: Type.Optional(Type.Array(RelatedTargetSchema, { maxItems: 100 })) }), { minItems: 1, maxItems: 100 }),
+});
+export type SourceBatchRequest = Static<typeof SourceBatchRequestSchema>;
+export const SourceBatchSchema = object({ id: nonempty, action: enumeration(['compile', 'discard', 'restore']), status: enumeration(['running', 'completed', 'interrupted']),
+  items: Type.Array(object({ path: VaultPathSchema, status: enumeration(['pending', 'running', 'succeeded', 'failed', 'skipped']), job_id: nullable(text), error: nullable(object({ code: text, message: text })) })),
+});
+export type SourceBatch = Static<typeof SourceBatchSchema>;
+export const DiscardPreviewSchema = object({ source: LifecycleTargetSchema, drafts: Type.Array(RelatedTargetSchema), references: Type.Array(LifecycleTargetSchema) });
 export const SearchQuerySchema = object({ ...PaginationQuerySchema.properties,
   scope: Type.Optional(enumeration(['knowledge', 'sources', 'all'])),
   q: Type.Optional(Type.String({ maxLength: LIMITS.query_characters })),
@@ -180,10 +202,11 @@ export const StatusSchema = object({
   ...HealthSchema.properties, instance_id: nonempty, vault_path: nonempty, data_dir: nonempty,
   database_initialized: Type.Boolean(), active_job: nullable(AnyJobSchema),
   index_generation: count, last_scan_at: nullable(instant),
-  counts: object({ sources: count, knowledge: count, invalid: count, missing: count, unsupported: count }),
+  counts: object({ sources: count, knowledge: count, invalid: count, missing: count, unsupported: count, pending: Type.Optional(count) }),
   scan_roots: Type.Array(object({ path: enumeration(SCAN_ROOTS), available: Type.Boolean() })),
   limits: object(Object.fromEntries(Object.entries(LIMITS).map(([key, value]) => [key, Type.Literal(value)]))),
   diagnostics: DiagnosticsSchema,
+  source_batch: Type.Optional(nullable(SourceBatchSchema)),
 });
 export type Status = Static<typeof StatusSchema>;
 const empty = object({});
@@ -204,4 +227,7 @@ export const API = {
   compile: { method: 'POST', url: '/v1/compilations', schema: { querystring: empty, body: CompileRequestSchema, response: { ...errors, 202: object({ job: CompilerJobSchema, reused: Type.Boolean() }) } } },
   drafts: { method: 'GET', url: '/v1/drafts', schema: { querystring: object({ source_path: CapturePathSchema }), response: { ...errors, 200: object({ items: Type.Array(DraftSchema), diagnostics: DiagnosticsSchema }) } } },
   draft: { method: 'GET', url: '/v1/draft', schema: { querystring: object({ path: DraftPathSchema }), response: { ...errors, 200: DraftSchema } } },
+  sourceBatch: { method: 'POST', url: '/v1/source-batches', schema: { querystring: empty, body: SourceBatchRequestSchema, response: { ...errors, 202: SourceBatchSchema } } },
+  sourceBatchStatus: { method: 'GET', url: '/v1/source-batches', schema: { querystring: object({ id: nonempty }), response: { ...errors, 200: SourceBatchSchema } } },
+  discardPreview: { method: 'GET', url: '/v1/source-discard-preview', schema: { querystring: object({ path: CapturePathSchema }), response: { ...errors, 200: DiscardPreviewSchema } } },
 } as const;

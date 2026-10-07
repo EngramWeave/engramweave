@@ -35,7 +35,8 @@ describe('real SQLite projection and transactions', () => {
     job(db, 'b'); const repeated = publishScan(db, 'b', [projection('20_Sources/one.md'), projection('20_Sources/two.md')], ['20_Sources'], []);
     expect(repeated.unchanged).toBe(2); expect(allDocuments(db)[0]!.id).toBe(oldId);
     job(db, 'c'); publishScan(db, 'c', [projection('20_Sources/one.md', manualSource('changed'))], ['20_Sources'], []);
-    expect(allDocuments(db)[1]).toMatchObject({ state: 'missing', body_markdown: '', metadata_json: '{}' });
+    expect(allDocuments(db)[1]).toMatchObject({ state: 'missing', body_markdown: '', metadata_norm: '', annotation: '' });
+    expect(JSON.parse(allDocuments(db)[1]!.metadata_json).lifecycle_status).toBe('active');
     job(db, 'd'); publishScan(db, 'd', [projection('20_Sources/one.md', manualSource('secret', 'annotation: [invalid]\n'))], ['20_Sources'], []);
     expect(allDocuments(db)[0]).toMatchObject({ id: oldId, state: 'invalid', body_markdown: '', annotation: '', metadata_norm: '' });
   });

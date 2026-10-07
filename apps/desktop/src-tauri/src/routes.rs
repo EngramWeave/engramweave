@@ -17,6 +17,9 @@ pub enum Operation {
     Compile,
     Drafts,
     Draft,
+    SourceBatch,
+    SourceBatchStatus,
+    DiscardPreview,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -25,7 +28,7 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::Sources => (
             false,
             "/v1/sources",
-            &["state", "source_type", "path_prefix", "limit", "offset"],
+            &["state", "source_type", "path_prefix", "limit", "offset", "view", "q", "types", "tags", "stages", "issues", "captured_from", "captured_to", "time_ranges", "sort"],
         ),
         Operation::Jobs => (false, "/v1/jobs", &["limit", "offset"]),
         Operation::Job => (false, "/v1/jobs/", &["id"]),
@@ -50,6 +53,9 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::Compile => (true, "/v1/compilations", &["path", "revision", "request_id"]),
         Operation::Drafts => (false, "/v1/drafts", &["source_path"]),
         Operation::Draft => (false, "/v1/draft", &["path"]),
+        Operation::SourceBatch => (true, "/v1/source-batches", &["id", "action", "items"]),
+        Operation::SourceBatchStatus => (false, "/v1/source-batches", &["id"]),
+        Operation::DiscardPreview => (false, "/v1/source-discard-preview", &["path"]),
     };
     let object = input
         .as_object()
@@ -64,6 +70,13 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         if !object.get("settings").map(Value::is_object).unwrap_or(false)
             || object.get("api_key").map(|key| !key.is_string() || key.as_str().unwrap_or("").len() > 8192).unwrap_or(false)
         { return Err(Failure::new("VALIDATION_ERROR", "Invalid Compiler settings input")); }
+        return Ok((true, route.to_string(), vec![]));
+    }
+    if route == "/v1/source-batches" && post {
+        if !object.get("id").map(Value::is_string).unwrap_or(false)
+            || !object.get("action").map(Value::is_string).unwrap_or(false)
+            || !object.get("items").and_then(Value::as_array).map(|items| !items.is_empty() && items.len() <= 100).unwrap_or(false)
+        { return Err(Failure::new("VALIDATION_ERROR", "Invalid Source batch input")); }
         return Ok((true, route.to_string(), vec![]));
     }
     let mut query = Vec::new();

@@ -15,6 +15,12 @@ const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
 export async function writeSourceProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<void> {
   markdownPath(relative);
   if (!relative.startsWith('20_Sources/')) throw new FileProblem('PROPERTY_WRITE_UNSUPPORTED', 'invalid', 'Only Source properties may be normalized');
+  return writeLifecycleProperties(vault, relative, file, bytes, native, onBytes);
+}
+
+/** Explicit lifecycle actions use the same bounded native commit and recovery protocol. */
+export async function writeLifecycleProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<void> {
+  markdownPath(relative, true);
   const directory = await resolveVaultDirectory(vault, path.posix.dirname(relative));
   const stem = `.engramweave-properties-${randomUUID()}`;
   const journal = path.join(directory, `${stem}.json`);
@@ -69,7 +75,7 @@ export async function recoverPropertyJournal(vault: string, directory: string, n
   const item = record as Record<string, unknown>;
   if (Object.keys(item).sort().join(',') !== 'after,before,relative,version' || item.version !== 1 || typeof item.relative !== 'string' || typeof item.before !== 'string' || typeof item.after !== 'string'
     || !/^[a-f0-9]{64}$/.test(item.before) || !/^[a-f0-9]{64}$/.test(item.after)
-    || markdownPath(item.relative) !== item.relative || !item.relative.startsWith('20_Sources/') || path.posix.dirname(item.relative) !== directory) {
+    || markdownPath(item.relative, true) !== item.relative || path.posix.dirname(item.relative) !== directory) {
     throw new FileProblem('PROPERTY_RECOVERY_CONFLICT', 'invalid', 'Property journal does not match its Source directory');
   }
   await native.run(vault, item.relative, name.slice(0, -5), item.before, item.after, manifestHash, true);

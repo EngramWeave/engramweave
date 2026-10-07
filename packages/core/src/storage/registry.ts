@@ -19,7 +19,7 @@ export const getDocument = (db: Database.Database, relative: string) => db.prepa
 export const allDocuments = (db: Database.Database) => db.prepare('SELECT * FROM documents ORDER BY path_key').all() as DocumentRow[];
 /** Publish the entire newly read Source snapshot, never a new hash with old cached content. */
 export function updateCompiledSource(db: Database.Database, relative: string, file: FileRead, parsed: ParsedDocument) {
-  if (parsed.state !== 'ready' || parsed.kind !== 'source') return;
+  if (parsed.state !== 'ready') return;
   db.transaction(() => {
     const changed = db.prepare(`UPDATE documents SET state='ready',revision=?,size=?,mtime=?,title=?,source_type=?,captured_at=?,original_locator=?,metadata_json=?,asset_json=?,diagnostics_json=?,annotation=?,body_markdown=?,title_norm=?,body_norm=?,annotation_norm=?,metadata_norm=?,indexed_at=? WHERE path_key=?`)
       .run(file.revision, file.size, file.mtime, parsed.title, parsed.source_type, parsed.captured_at, parsed.original_locator, JSON.stringify(parsed.metadata), parsed.asset ? JSON.stringify(parsed.asset) : null, JSON.stringify(parsed.diagnostics), parsed.annotation, parsed.body_markdown,
@@ -32,7 +32,7 @@ export function sourceItem(row: DocumentRow): Source {
   return { id: row.id, path: row.path, title: row.title, source_type: row.source_type, state: row.state, revision: row.revision,
     original_locator: row.original_locator, captured_at: row.captured_at,
     processing_status: processingStatus(metadata.processing_status),
-    lifecycle_status: row.state === 'ready' ? lifecycleStatus(metadata.lifecycle_status) : null,
+    lifecycle_status: Object.hasOwn(metadata, 'lifecycle_status') ? lifecycleStatus(metadata.lifecycle_status) : row.state === 'ready' ? 'active' : null,
     asset: row.asset_json === null ? null : JSON.parse(row.asset_json), diagnostics: JSON.parse(row.diagnostics_json) };
 }
 export function parsedRow(row: DocumentRow): ParsedDocument {
@@ -68,12 +68,14 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
         if (parsed.kind === 'source') summary.source_count++; else summary.knowledge_count++;
       }
       const searchable = parsed.state === 'ready';
-      const metadata = searchable ? parsed.metadata : {};
+      const metadata = searchable ? parsed.metadata : old?.kind === 'source' ? JSON.parse(old.metadata_json) : {};
       const body = searchable ? parsed.body_markdown : '';
       const annotation = searchable ? parsed.annotation : '';
       const row: DocumentRow = { id: old?.id ?? randomUUID(), path_key: key, path: projection.path, kind: parsed.kind, state: parsed.state,
         revision: projection.revision, size: projection.size, mtime: projection.mtime, title: parsed.title,
-        source_type: parsed.source_type, captured_at: parsed.captured_at, original_locator: parsed.original_locator,
+        source_type: searchable ? parsed.source_type : parsed.source_type ?? old?.source_type ?? null,
+        captured_at: searchable ? parsed.captured_at : parsed.captured_at ?? old?.captured_at ?? null,
+        original_locator: searchable ? parsed.original_locator : parsed.original_locator ?? old?.original_locator ?? null,
         metadata_json: JSON.stringify(metadata), asset_json: searchable && parsed.asset ? JSON.stringify(parsed.asset) : null,
         diagnostics_json: JSON.stringify(parsed.diagnostics), annotation, body_markdown: body,
         title_norm: searchable ? normalizeText(parsed.title) : '', body_norm: normalizeText(body), annotation_norm: normalizeText(annotation),
@@ -85,7 +87,7 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
     }
     for (const old of allDocuments(db)) {
       if (seen.has(old.path_key) || old.state === 'missing') continue;
-      db.prepare("UPDATE documents SET state='missing', metadata_json='{}',asset_json=NULL,annotation='',body_markdown='',title_norm='',body_norm='',annotation_norm='',metadata_norm='',diagnostics_json=? WHERE id=?")
+      db.prepare("UPDATE documents SET state='missing',metadata_json=CASE WHEN kind='source' THEN metadata_json ELSE '{}' END,asset_json=NULL,annotation='',body_markdown='',title_norm='',body_norm='',annotation_norm='',metadata_norm='',diagnostics_json=? WHERE id=?")
         .run(JSON.stringify([{ code: 'FILE_MISSING', message: 'Document is absent from the completed scan', path: old.path }]), old.id);
       summary.missing++;
     }

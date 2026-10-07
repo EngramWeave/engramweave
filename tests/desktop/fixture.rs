@@ -37,9 +37,9 @@ impl Fixture {
             .port();
         let source = fs::read_to_string(workspace.join(".local/fixtures/r1-vault/20_Sources/Web/2026-10/并发编程（七）：volatile——从语言规则到 CPU.md")).unwrap();
         let original = if source.starts_with("---\r\n") {
-            source.replacen("---\r\n", "---\r\nprocessing_status: pending\r\n", 1)
+            source.replacen("---\r\n", "---\r\nprocessing_status: pending\r\nlifecycle_status: active\r\n", 1)
         } else {
-            source.replacen("---\n", "---\nprocessing_status: pending\n", 1)
+            source.replacen("---\n", "---\nprocessing_status: pending\nlifecycle_status: active\n", 1)
         }.into_bytes();
         fs::write(root.join("vault/20_Sources/r1.md"), &original).unwrap();
         let profile = json!({"config_version":1,"vault_path":root.join("vault"),"data_dir":root.join("data"),"host":"127.0.0.1","port":port});

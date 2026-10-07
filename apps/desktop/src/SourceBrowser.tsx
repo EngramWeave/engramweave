@@ -1,392 +1,63 @@
 import { useState, type ReactNode } from 'react';
-import type { Document, SourcesQuery } from '@engramweave/contracts';
+import type { Document, Source, SourceBatch, SourcesQuery } from '@engramweave/contracts';
 import type { Failure, SourcePage } from './client';
 import { Detail } from './Detail';
 import { Icon, type IconName } from './Icon';
-import { lifecycleLabel, processingLabel } from './status-labels';
+import { lifecycleLabel, processingLabel, processingTone } from './status-labels';
 import { DocumentFailure, ErrorNotice } from './Feedback';
+import { SourceFilters, typeLabel } from './SourceFilters';
+import { SourceBatchActions } from './SourceBatchActions';
+import './source-browser.css';
 
-export type SourceState = 'all' | NonNullable<SourcesQuery['state']>;
+export type SourceState = NonNullable<SourcesQuery['view']>;
 export type SourceCounts = Record<SourceState, number>;
-const categories: {
-  state: SourceState;
-  title: string;
-  caption: string;
-  tone: string;
-  icon: IconName;
-}[] = [
-  {
-    state: 'all',
-    title: 'All Sources',
-    caption: 'Total registered items',
-    tone: 'blue',
-    icon: 'file',
-  },
-  {
-    state: 'ready',
-    title: 'Ready',
-    caption: 'Readable · Not progress',
-    tone: 'green',
-    icon: 'check',
-  },
-  {
-    state: 'invalid',
-    title: 'Invalid',
-    caption: 'Invalid registration',
-    tone: 'red',
-    icon: 'help',
-  },
-  {
-    state: 'missing',
-    title: 'Missing',
-    caption: 'File not found',
-    tone: 'orange',
-    icon: 'clock',
-  },
-  {
-    state: 'unsupported',
-    title: 'Unsupported',
-    caption: 'Not supported',
-    tone: 'violet',
-    icon: 'file',
-  },
+const categories: { state: SourceState; title: string; caption: string; tone: string; icon: IconName }[] = [
+  { state: 'all', title: 'All Sources', caption: 'Browse every Source', tone: 'blue', icon: 'file' },
+  { state: 'pending', title: 'Pending', caption: 'Waiting for processing', tone: 'orange', icon: 'clock' },
+  { state: 'processing', title: 'Processing', caption: 'Compiled · Reviewed · Planned', tone: 'violet', icon: 'layers' },
+  { state: 'archived', title: 'Archived', caption: 'Integrated Sources', tone: 'green', icon: 'archive' },
+  { state: 'issues', title: 'Issues', caption: 'Missing · Invalid · Unsupported', tone: 'red', icon: 'help' },
+  { state: 'discarded', title: 'Discarded', caption: 'Retained for cleanup', tone: 'slate', icon: 'trash' },
 ];
-export function SourceBrowser({
-  page,
-  counts,
-  state,
-  setState,
-  sourceType,
-  setSourceType,
-  document,
-  selectedPath,
-  documentError,
-  listError,
-  countsError,
-  select,
-  close,
-  open,
-  connected,
-  offset,
-  setOffset,
-  search,
-  compilerActions,
-}: {
-  page: SourcePage | null;
-  counts: SourceCounts | null;
-  state: SourceState;
-  setState: (state: SourceState) => void;
-  sourceType: string;
-  setSourceType: (type: string) => void;
-  document: Document | null;
-  selectedPath: string | null;
-  documentError?: Failure | undefined;
-  listError?: Failure | undefined;
-  countsError?: Failure | undefined;
-  select: (path: string) => void;
-  close: () => void;
-  open: (target: 'obsidian' | 'original') => void;
-  connected: boolean;
-  offset: number;
-  setOffset: (offset: number) => void;
-  search: (query: string) => void;
-  compilerActions?: ReactNode;
+const healthTones = { ready: 'green', missing: 'orange', invalid: 'red', unsupported: 'violet' };
+export function SourceBrowser({ page, counts, query, changeQuery, document, selectedPath, documentError, listError, select, close, open, connected, offset, setOffset, compilerActions, active, refresh, currentBatch }: {
+  page: SourcePage | null; counts: SourceCounts | null; query: SourcesQuery; changeQuery: (query: SourcesQuery) => void;
+  document: Document | null; selectedPath: string | null; documentError?: Failure | undefined; listError?: Failure | undefined;
+  select: (path: string) => void; close: () => void; open: (target: 'obsidian' | 'original') => void; connected: boolean; offset: number; setOffset: (offset: number) => void;
+  compilerActions?: ReactNode; active: boolean; refresh: () => void; currentBatch?: SourceBatch | null | undefined;
 }) {
-  const [term, setTerm] = useState('');
-  const typeOptions = Array.from(
-    new Set([
-      'web',
-      'manual',
-      'pdf',
-      sourceType,
-      ...(page?.items
-        .map((item) => item.source_type)
-        .filter((type): type is string => Boolean(type)) ?? []),
-    ]),
-  ).filter((type) => type !== 'all');
-  return (
-    <div className="sources-page">
-      <div className="source-stats">
-        {categories.map((category) => (
-          <button
-            key={category.state}
-            className={`source-stat ${category.tone} ${category.state === state ? 'selected' : ''}`}
-            disabled={!connected}
-            onClick={() => setState(category.state)}
-          >
-            <span className="row-symbol">
-              <Icon name={category.icon} />
-            </span>
-            <span>
-              <strong>{category.title}</strong>
-              <b>{counts?.[category.state] ?? '—'}</b>
-              <small>{category.caption}</small>
-            </span>
-            <svg
-              className="stat-wave"
-              viewBox="0 0 200 40"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M0 31Q24-9 45 19T84 29T125 34H200V40H0Z"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-        ))}
-        <div className="source-stat blue">
-          <span className="row-symbol">
-            <Icon name="database" />
-          </span>
-          <span>
-            <strong>Index</strong>
-            <b>{page?.index_generation ?? '—'}</b>
-            <small>Published generation</small>
-          </span>
-          <svg
-            className="stat-wave"
-            viewBox="0 0 200 40"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M0 31Q24-9 45 19T84 29T125 34H200V40H0Z"
-              fill="currentColor"
-            />
-          </svg>
-        </div>
-      </div>
-      <div className="sources-layout">
-        <section className="source-list panel" aria-label="资料列表">
-          <div className="source-toolbar">
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (term.trim()) search(term);
-              }}
-            >
-              <Icon name="search" />
-              <input
-                placeholder="Search sources by title, URL, or content…"
-                aria-label="搜索 Sources"
-                value={term}
-                maxLength={200}
-                onChange={(event) => setTerm(event.target.value)}
-              />
-              <button
-                type="submit"
-                aria-label="搜索 Sources"
-                disabled={!connected || !term.trim()}
-              >
-                <Icon name="arrow" />
-              </button>
-            </form>
-            <select
-              aria-label="来源类型"
-              disabled={!connected}
-              value={sourceType}
-              onChange={(event) => setSourceType(event.target.value)}
-            >
-              <option value="all">All Types</option>
-              {typeOptions.map((type) => (
-                <option value={type} key={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="登记状态"
-              disabled={!connected}
-              value={state}
-              onChange={(event) => setState(event.target.value as SourceState)}
-            >
-              {categories.map((category) => (
-                <option key={category.state} value={category.state}>
-                  {category.state === 'all' ? 'All States' : category.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          {listError && <ErrorNotice error={listError} />}
-          {!listError && countsError && <ErrorNotice error={countsError} />}
-          <div className="table-scroll">
-            <table className="source-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Type</th>
-                  <th>Asset</th>
-                  <th>State</th>
-                  <th><span>Stage</span><small>Lifecycle</small></th>
-                  <th>Captured</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page?.items.map((source) => (
-                  <tr
-                    key={source.id}
-                    className={selectedPath === source.path ? 'selected' : ''}
-                  >
-                    <td>
-                      <div className="source-title-cell">
-                        <span
-                          className={`row-symbol ${source.source_type === 'manual' ? 'orange' : source.source_type === 'pdf' ? 'red' : 'blue'}`}
-                        >
-                          <Icon
-                            name={
-                              source.source_type === 'web'
-                                ? 'link'
-                                : source.source_type === 'manual'
-                                  ? 'note'
-                                  : 'file'
-                            }
-                          />
-                        </span>
-                        <button
-                          className="row-copy row-select"
-                          onClick={() => select(source.path)}
-                        >
-                          <span className="row-title">
-                            {source.title || source.path}
-                          </span>
-                          <span
-                            className="row-meta"
-                            title={source.original_locator ?? source.path}
-                          >
-                            {source.original_locator ?? source.path}
-                          </span>
-                        </button>
-                      </div>
-                      {source.diagnostics.map((item, index) => (
-                        <span className="diagnostic" key={index}>
-                          {item.code}: {item.message}
-                        </span>
-                      ))}
-                    </td>
-                    <td>
-                      <span
-                        className={`type-tag ${source.source_type === 'manual' ? 'green' : source.source_type === 'pdf' ? 'red' : 'blue'}`}
-                      >
-                        {source.source_type ?? 'Unknown'}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className="source-asset"
-                        title={source.asset?.locator}
-                      >
-                        <Icon
-                          name={
-                            source.asset?.kind === 'external_ref'
-                              ? 'external'
-                              : source.asset?.kind === 'vault_file'
-                                ? 'file'
-                                : 'link'
-                          }
-                        />
-                        {source.asset?.kind === 'external_ref'
-                          ? 'External'
-                          : source.asset?.kind === 'vault_file'
-                            ? 'Vault file'
-                            : source.asset?.kind === 'inline_markdown'
-                              ? 'Inline'
-                              : '—'}
-                      </span>
-                      <small className="row-meta">
-                        {source.asset?.availability}
-                      </small>
-                    </td>
-                    <td>
-                      <span
-                        className={`state-tag ${categories.find((item) => item.state === source.state)?.tone}`}
-                      >
-                        <i />
-                        {
-                          categories.find((item) => item.state === source.state)
-                            ?.title
-                        }
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={
-                          source.processing_status === 'archived'
-                            ? 'archive-tag'
-                            : 'row-meta'
-                        }
-                      >
-                        {processingLabel(source.processing_status)}
-                      </span>
-                      <small className={`row-meta ${source.lifecycle_status === 'discarded' ? 'lifecycle-discarded' : ''}`}>
-                        {lifecycleLabel(source.lifecycle_status)}
-                      </small>
-                    </td>
-                    <td>
-                      <span
-                        className="row-meta"
-                        title={source.captured_at ?? '未记录采集时间'}
-                      >
-                        {source.captured_at
-                          ? Number.isNaN(Date.parse(source.captured_at))
-                            ? source.captured_at
-                            : new Date(source.captured_at).toLocaleDateString(
-                                undefined,
-                                { month: 'short', day: 'numeric' },
-                              )
-                          : '—'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!page?.items.length && (
-            <p className="empty">
-              {connected
-                ? '没有符合条件的 Source。可刷新 Vault 或更改筛选。'
-                : '连接 Core 后查看真实资料。'}
-            </p>
-          )}
-          {page && (
-            <div className="pagination">
-              <span>
-                共 {page.total} 项 · 代次 {page.index_generation} ·{' '}
-                {page.indexed_at ?? '尚未发布'}
-              </span>
-              <button
-                disabled={offset === 0 || !connected}
-                onClick={() => setOffset(Math.max(0, offset - 20))}
-              >
-                上一页
-              </button>
-              <button
-                disabled={offset + 20 >= page.total || !connected}
-                onClick={() => setOffset(offset + 20)}
-              >
-                下一页
-              </button>
-            </div>
-          )}
-        </section>
-        <div className="source-inspector">
-          {document ? (
-            <Detail document={document} close={close} open={open} error={documentError}>{compilerActions}</Detail>
-          ) : documentError ? (
-            <DocumentFailure error={documentError} path={selectedPath} close={close} />
-          ) : (
-            <aside className="panel inspector-empty">
-              <span className="empty-symbol blue">
-                <Icon name="file" />
-              </span>
-              <h2>A closer look</h2>
-              <p>选择一份 Source，预览属性、元数据、Annotation 和原始引用。</p>
-              <span>Read-only · Your files stay yours</span>
-            </aside>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const [selected, setSelected] = useState<Record<string, Source>>({});
+  const selectedItems = Object.values(selected);
+  const toggle = (source: Source) => setSelected(current => {
+    const next = { ...current }; if (next[source.path]) delete next[source.path]; else if (source.revision && Object.keys(next).length < 100) next[source.path] = source; return next;
+  });
+  const selectable = page?.items.filter(source => source.revision) ?? [];
+  const allSelected = selectable.length > 0 && selectable.every(source => selected[source.path]);
+  return <div className="sources-page">
+    <div className="source-stats">{categories.map(category => <button key={category.state} className={`source-stat ${category.tone} ${(query.view ?? 'all') === category.state ? 'selected' : ''}`} disabled={!connected} onClick={() => { const next = { ...query, view: category.state }; delete next.stages; delete next.issues; changeQuery(next); }}>
+      <span className="row-symbol"><Icon name={category.icon} /></span><span><strong>{category.title}</strong><b>{counts?.[category.state] ?? '—'}</b><small>{category.caption}</small></span>
+      <svg className="stat-wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 31Q24-9 45 19T84 29T125 34H200V40H0Z" fill="currentColor" /></svg>
+    </button>)}</div>
+    <div className="sources-layout"><section className="source-list panel" aria-label="Sources list">
+      <SourceFilters query={query} change={changeQuery} connected={connected} facets={page?.facets ?? { types: [], tags: [] }} />
+      <SourceBatchActions selected={selectedItems} clear={() => setSelected({})} disabled={!connected || active} refresh={refresh} currentBatch={currentBatch} />
+      {listError && <ErrorNotice error={listError} />}
+      <div className="table-scroll"><table className="source-table"><thead><tr>
+        <th className="selection-column"><input type="checkbox" aria-label="Select this page" checked={allSelected} disabled={!connected || selectable.length === 0} onChange={() => setSelected(current => { const next = { ...current }; for (const source of selectable) { if (allSelected) delete next[source.path]; else if (Object.keys(next).length < 100) next[source.path] = source; } return next; })} /></th>
+        <th>Title</th><th>Type</th><th>Health</th><th>Processing</th><th>Lifecycle</th><th>Captured</th>
+      </tr></thead><tbody>{page?.items.map(source => <tr key={source.id} className={selectedPath === source.path ? 'selected' : ''}>
+        <td><input type="checkbox" aria-label={`Select ${source.title || source.path}`} disabled={!connected || !source.revision || !selected[source.path] && selectedItems.length >= 100} checked={Boolean(selected[source.path])} onChange={() => toggle(source)} /></td>
+        <td><div className="source-title-cell"><span className={`row-symbol ${source.source_type === 'manual' ? 'orange' : 'blue'}`}><Icon name={source.source_type === 'web' ? 'link' : source.source_type === 'manual' ? 'note' : 'file'} /></span><button className="row-copy row-select" onClick={() => select(source.path)}><span className="row-title">{source.title || source.path}</span><span className="row-meta" title={source.original_locator ?? source.path}>{source.original_locator ?? source.path}</span></button></div>
+          {source.diagnostics.filter(item => item.code !== 'CAPTURED_AT_UNKNOWN').map((item, index) => <span className="diagnostic" key={index}>{item.code}: {item.message}</span>)}
+        </td>
+        <td><span className={`type-tag ${source.source_type === 'manual' ? 'green' : 'blue'}`}>{source.source_type ? typeLabel(source.source_type) : 'Unknown'}</span></td>
+        <td><span className={`state-tag ${healthTones[source.state]}`}><i />{source.state === 'ready' ? 'Available' : typeLabel(source.state)}</span></td>
+        <td title={source.state === 'ready' ? 'processing_status' : 'Last known processing_status'}><span className={`state-tag ${source.processing_status ? processingTone(source.processing_status) : 'slate'}`}>{processingLabel(source.processing_status)}</span></td>
+        <td title={source.state === 'ready' ? 'lifecycle_status' : 'Last known lifecycle_status'}><span className={`state-tag ${source.lifecycle_status === 'active' ? 'green' : 'slate'}`}>{lifecycleLabel(source.lifecycle_status)}</span></td>
+        <td><span className="row-meta" title={source.captured_at ?? 'Captured time unknown'}>{source.captured_at && !Number.isNaN(Date.parse(source.captured_at)) ? new Date(source.captured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</span></td>
+      </tr>)}</tbody></table></div>
+      {!page?.items.length && <p className="empty">{connected ? '没有符合条件的 Source。可刷新 Vault 或更改筛选。' : '连接 Core 后查看资料。'}</p>}
+      {page && <div className="pagination"><span>{page.total} Sources · Generation {page.index_generation}</span><button disabled={offset === 0 || !connected} onClick={() => setOffset(Math.max(0, offset - 20))}>Previous</button><button disabled={offset + 20 >= page.total || !connected} onClick={() => setOffset(offset + 20)}>Next</button></div>}
+    </section><div className="source-inspector">{document ? <Detail document={document} close={close} open={open} error={documentError}>{compilerActions}</Detail> : documentError ? <DocumentFailure error={documentError} path={selectedPath} close={close} /> : <aside className="panel inspector-empty"><span className="empty-symbol blue"><Icon name="file" /></span><h2>A closer look</h2><p>选择 Source 查看 Annotation、属性和原始引用。</p></aside>}</div></div>
+  </div>;
 }

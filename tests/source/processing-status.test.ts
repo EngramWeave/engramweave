@@ -39,7 +39,7 @@ describe('Source processing and lifecycle properties', () => {
     const r3 = await archivedSample(sample);
     const derived = parseMarkdown('20_Sources/R3/archived.md', r3);
     expect(derived).toMatchObject({ state: 'ready', processing_status: 'archived', annotation: original.annotation, body_markdown: original.body_markdown });
-    expect(derived.metadata).toEqual({ ...original.metadata, processing_status: 'archived' });
+    expect(derived.metadata).toEqual({ ...original.metadata, processing_status: 'archived', lifecycle_status: 'active' });
     expect(sha256(await realBytes(sample.path))).toBe(sample.hash);
   });
 });

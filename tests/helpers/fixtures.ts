@@ -8,18 +8,20 @@ export const realSamples = [
 ].map(sample => ({ ...sample, path: `20_Sources/Web/2026-10/${sample.name}` }));
 export const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 export async function realBytes(relative: string) { return readFile(path.resolve('.local/fixtures/r1-vault', relative)); }
-/** R3 is a derived test input: one archive line inserted into an unchanged R1 copy. */
+/** R3 preserves the real content with explicit archival stage and active lifecycle. */
 export async function archivedSample(sample = realSamples[0]!) {
   const original = await realBytes(sample.path);
   if (sha256(original) !== sample.hash) throw new Error('Real fixture differs from its baseline');
   const newline = original.subarray(0, 5).toString('utf8') === '---\r\n' ? '\r\n' : '\n';
   const opening = Buffer.from(`---${newline}`);
   if (!original.subarray(0, opening.length).equals(opening)) throw new Error('Real fixture has no Frontmatter');
-  return Buffer.concat([opening, Buffer.from(`processing_status: archived${newline}`), original.subarray(opening.length)]);
+  return Buffer.concat([opening, Buffer.from(`processing_status: archived${newline}lifecycle_status: active${newline}`), original.subarray(opening.length)]);
 }
-/** Expected registered R1: precisely one inserted stage line, no production writer involved. */
+/** Expected registered R1: only the two default Properties are added, without using the writer. */
 export async function pendingSample(sample = realSamples[0]!) {
-  return Buffer.from((await archivedSample(sample)).toString('utf8').replace('processing_status: archived', 'processing_status: pending'));
+  const original = await realBytes(sample.path);
+  const newline = original.subarray(0, 5).toString('utf8') === '---\r\n' ? '\r\n' : '\n';
+  return Buffer.from(original.toString('utf8').replace(`---${newline}`, `---${newline}lifecycle_status: active${newline}processing_status: pending${newline}`));
 }
 export async function copyRealSamples(vault: string) {
   for (const sample of realSamples) {
@@ -33,4 +35,4 @@ export async function writeDocument(vault: string, relative: string, content: st
   await mkdir(path.dirname(path.join(vault, relative)), { recursive: true });
   await writeFile(path.join(vault, relative), content);
 }
-export const manualSource = (body = 'Original text', extra = '') => `---\ntype: raw_source\nsource_type: manual\ncaptured_at: 2026-10-03\n${extra}---\n${body}`;
+export const manualSource = (body = 'Original text', extra = '') => `---\ntype: raw_source\nsource_type: manual\n${/(?:^|\n)[ \t]*lifecycle_status:/.test(extra) ? '' : 'lifecycle_status: active\n'}captured_at: 2026-10-03\n${extra}---\n${body}`;

@@ -8,6 +8,7 @@ import type { Config } from '@engramweave/contracts';
 import { openDatabase } from './storage/database.js';
 import { ScanJobs } from './jobs/scans.js';
 import { CompilerJobs } from './jobs/compiler.js';
+import { SourceBatches } from './jobs/source-batches.js';
 import type { CoreServices } from './http/context.js';
 import { recoverDatabase } from './storage/recover.js';
 
@@ -32,21 +33,24 @@ export async function startCore(input: Config) {
     runtime.token = instance.token;
     database = await openDatabase(config);
     let compiler: CompilerJobs;
-    const jobs = new ScanJobs(database, config.vault_path, () => compiler?.busy() ?? false);
+    let batches: SourceBatches;
+    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy()));
     compiler = new CompilerJobs(database, config, () => jobs.active() !== null);
     await compiler.initialize();
-    services = { db: database, jobs, compiler, instance_id: instance.id };
+    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null);
+    services = { db: database, jobs, compiler, batches, instance_id: instance.id };
+    await batches.initialize();
     runtime.status = 'ready';
     let closed = false;
     return { config, instance_id: instance.id, server, async close() {
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); await services?.compiler?.close(); await services?.jobs.close(); }
+      try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); }
       finally { try { database?.close(); } finally { await instance?.close(); } }
     } };
   } catch (error) {
-    try { await server.close(); await services?.compiler?.close(); await services?.jobs.close(); }
+    try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); }
     finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }

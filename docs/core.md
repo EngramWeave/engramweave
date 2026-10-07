@@ -58,7 +58,7 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/search?scope=sources&q=counter
 
 GET `/v1/documents?path=...` 只读取受限路径的当前文件。metadata、annotation、source_content/record_body或Knowledge body分别返回。无登记时 indexed_revision/indexed_at=null、index_stale=true；登记后根据当前原始字节revision与索引revision判断新鲜度。搜索结果代表最后一次成功扫描，不实时刷新。
 
-Source列表与Source详情分别返回已发布投影和当前文件的processing_status，支持pending/compiled/reviewed/planned/archived。Registry 为缺失、YAML null、空字符串补pending，包含历史和discarded材料；其他非空值或类型使Source invalid。GET不写属性，尚未登记的空阶段返回null。完整阶段在扫描及数据库重建中保持，不由普通正文编辑、登记或Job结果推断阶段。
+Source列表与Source详情分别返回已发布投影和当前文件的processing_status，支持pending/compiled/reviewed/planned/archived。Registry 为缺失、YAML null、空字符串分别补 processing_status: pending 和 lifecycle_status: active，包含历史和discarded材料；其他非空值或类型使Source invalid。GET不写属性，尚未登记的空阶段返回null。完整阶段在扫描及数据库重建中保持，不由普通正文编辑、登记或Job结果推断阶段。
 
 Source和Knowledge独立返回lifecycle_status，active/discarded保留原值；缺失/null/空字符串读取为active，不补写。非法值使文件invalid；invalid/missing/unsupported列表项返回null。API中Source.state表示registration_status，Job.status表示job_status，沿用字段名。Job仍只执行扫描；错误、运行历史和后续重试/重编译次数属于Core，不回写文件。
 
@@ -112,7 +112,7 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/documents?path=20_Sources%2FMa
 
 ## 属性补写与恢复
 
-属性编辑按YAML节点的字节范围插入或替换阶段，不重序列化Frontmatter。BOM、LF/CRLF、注释、正文、Annotation、未知属性和独立Asset保持。候选重新解析，只有processing_status可改变；阶段anchor被其他属性alias引用而产生联动时拒绝补写，报告PROPERTY_WRITE_UNSUPPORTED，保留原文件。补写使文件超过5MiB也会拒绝，不截断内容。
+属性编辑按YAML节点的字节范围插入或替换阶段，不重序列化Frontmatter。BOM、LF/CRLF、注释、正文、Annotation、未知属性和独立Asset保持。候选重新解析，只有本次目标 processing_status 或 lifecycle_status 可改变；阶段anchor被其他属性alias引用而产生联动时拒绝补写，报告PROPERTY_WRITE_UNSUPPORTED，保留原文件。补写使文件超过5MiB也会拒绝，不截断内容。
 
 固定Windows助手先保护从本地卷根到Vault及目标目录的绝对路径链，锁定目标句柄、核对原件hash，再在原目录排他创建并同步`.engramweave-properties-<UUID>.json`恢复记录和`.tmp`候选。恢复记录和候选重新核对hash；通过句柄把原件移到`.bak`，再无覆盖发布候选，并通过已锁定句柄清理确认过的恢复记录。目标被锁、只读、路径不安全、版本变化或任意硬链接别名均拒绝。Capture进程遗留的可识别临时硬链接保留原inode，只替换Record路径，不删除Capture残留。
 
@@ -162,3 +162,5 @@ finally { Remove-Item Env:P1_PERFORMANCE -ErrorAction SilentlyContinue }
 ```
 
 性能测试默认跳过，不增加普通 `npm test` 的机器相关耗时。测量条件、逐次耗时和哈希保存在 gitignored `.local/p1/evidence/t13-performance.json`；与其他重负载任务同时运行会改变结果。
+
+Sources 的浏览、筛选、Health 与批量生命周期合同见 [Sources](sources.md)。用户可编辑 Compiler 模板与重复执行见 [Compiler](compiler.md)。

@@ -1,0 +1,31 @@
+.source-stat.slate,.state-tag.slate{color:#64748b;background:#f1f5f9}
+.state-tag.teal{color:#087b8e;background:#e8f8fa}
+.sources-page .source-stat.slate{border-color:#e0e7ef}.sources-page .source-stat.slate.selected{border-color:#1661ff}
+.sources-page .source-toolbar{grid-template-columns:minmax(140px,1fr) auto auto;gap:8px}
+.source-filter-menu{position:relative;min-width:90px;z-index:4}
+.source-filter-menu>summary{cursor:pointer;border:1px solid #d5e2ff;border-radius:8px;padding:10px 12px;white-space:nowrap;color:#3c62ac;list-style:none;background:#fff}
+.filter-popover{position:absolute;top:calc(100% + 8px);right:0;width:260px;background:#fff;border:1px solid #d5e2ff;border-radius:10px;box-shadow:0 10px 30px #1646a322;padding:14px;display:grid;gap:12px}
+.filter-popover label{display:grid;gap:5px;font-size:12px;color:#315288}
+.filter-popover input:not([type=checkbox]),.filter-popover select{width:100%;box-sizing:border-box;border:1px solid #d5e2ff;border-radius:6px;padding:7px;min-width:0}
+.filter-options{display:grid;gap:9px;max-height:220px;overflow:auto}
+.filter-options label{display:flex;align-items:center;gap:8px}
+.filter-options input[type=checkbox],.sources-page .source-table input[type=checkbox]{accent-color:#165dff;width:14px;height:14px}
+.date-range{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.filter-chips{display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 12px}
+.filter-chip{background:#edf4ff;border:1px solid #cbdcff;color:#315dac;border-radius:14px;padding:5px 10px;font-size:11px}
+.clear-filters{border:0;background:transparent;color:#55709d;font-size:11px}
+.selection-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px;background:#f2f7ff;border:1px solid #d5e2ff;border-radius:9px;margin:8px 0}
+.selection-toolbar button,.discard-confirmation button{border:1px solid #c8d8f7;border-radius:7px;background:#fff;color:#315dac;padding:7px 10px;font-size:11px}
+.selection-toolbar strong{font-size:12px;margin-right:auto}
+.sources-page .source-table{table-layout:fixed;min-width:650px}
+.sources-page .source-table th:first-child{width:24px}.sources-page .source-table th:nth-child(2){width:auto}.sources-page .source-table th:nth-child(3){width:62px}.sources-page .source-table th:nth-child(4){width:82px}.sources-page .source-table th:nth-child(5){width:85px}.sources-page .source-table th:nth-child(6){width:76px}.sources-page .source-table th:nth-child(7){width:68px}
+.sources-page .source-table .row-title,.sources-page .source-table .row-meta{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.sources-page .source-table .row-symbol{flex-shrink:0}.sources-page .source-table .row-select{min-width:0}
+.discard-confirmation{border:1px solid #f1c593;border-radius:10px;padding:14px;background:#fffaf2;margin:10px 0;max-height:360px;overflow:auto}
+.discard-confirmation h3{margin-top:0}.discard-confirmation p{font-size:12px;color:#71572b}.discard-confirmation ul{font-size:11px;overflow-wrap:anywhere}.discard-confirmation .path{display:block;padding:3px 0;color:#55709d}
+.discard-confirmation fieldset{border:1px solid #edd6ae;border-radius:8px;margin:10px 0;font-size:11px}.discard-confirmation fieldset label{display:flex;gap:8px;margin:8px 0;overflow-wrap:anywhere}
+.batch-summary{font-size:11px;padding:8px 0;color:#46678f}.batch-summary ul{padding-left:18px;overflow-wrap:anywhere}
+@media(max-width:1100px){.sources-page .source-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.sources-page .source-toolbar{grid-template-columns:minmax(120px,1fr) auto}.sources-page .source-toolbar>select{grid-column:1/-1}.sources-page .sources-layout{grid-template-columns:minmax(0,1fr)}.sources-page .source-inspector{max-height:none}.sources-page .source-table{min-width:650px}}
+
+.sources-page .source-table th:nth-child(3),.sources-page .source-table td:nth-child(3){display:table-cell}
+.sources-page .source-toolbar .filter-popover select{width:100%}

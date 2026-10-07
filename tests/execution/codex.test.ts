@@ -14,7 +14,7 @@ describe('Codex subprocess result boundary', () => {
       vi.stubEnv('NODE_OPTIONS', `--import=${pathToFileURL(path.resolve('tests/helpers/codex-child.mjs')).href}`);
       vi.stubEnv('OPENAI_API_KEY', 'secret-must-not-be-inherited');
       const settings = { ...defaultSettings, codex_path: process.execPath, model: 'simulated-model' };
-      const result = await executeCodex(settings, runtime.config.data_dir, '{"annotation":"understanding"}', AbortSignal.timeout(10_000));
+      const result = await executeCodex(settings, runtime.config.data_dir, '{"annotation":"understanding"}', AbortSignal.timeout(10_000), 'Custom Compiler instructions');
       expect(result).toEqual({ title: 'Simulated child result', body: 'Submitted meaning and Annotation.' });
       const directory = (await readdir(runtime.config.data_dir)).find(name => name.startsWith('compiler-codex-'))!;
       const observed = JSON.parse(await readFile(path.join(runtime.config.data_dir, directory, 'answer.json.observed.json'), 'utf8'));
@@ -23,7 +23,7 @@ describe('Codex subprocess result boundary', () => {
       expect(observed.args).toContain('read-only');
       expect(observed.args).toContain('forced_login_method="chatgpt"');
       vi.stubEnv('ENGRAMWEAVE_TEST_CODEX_MODE', 'tool');
-      await expect(executeCodex(settings, runtime.config.data_dir, '{}', AbortSignal.timeout(10_000))).rejects.toMatchObject({ code: 'EXECUTION_FAILED' });
+      await expect(executeCodex(settings, runtime.config.data_dir, '{}', AbortSignal.timeout(10_000), 'Custom Compiler instructions')).rejects.toMatchObject({ code: 'EXECUTION_FAILED' });
     } finally { vi.unstubAllEnvs(); await runtime.cleanup(); }
   }, 30_000);
 });

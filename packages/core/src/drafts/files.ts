@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseDocument } from 'yaml';
@@ -65,7 +65,7 @@ export async function listDrafts(vault: string, source: string) {
   return { items, diagnostics };
 }
 
-interface Publication { version: 1; id: string; source: string; before: string; after: string; draft: string; draft_revision: string; draft_bytes: string; route: 'api' | 'codex'; model: string; created_at: string }
+interface Publication { version: 1; id: string; source: string; before: string; after: string; draft: string; draft_revision: string; draft_bytes: string; route: 'api' | 'codex'; model: string; created_at: string; draft_published?: true }
 const manifestPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.json$/;
 export class DraftPublisher {
   private readonly directory: string;
@@ -82,9 +82,12 @@ export class DraftPublisher {
     if (current.revision !== before) throw new CoreError('SOURCE_CHANGED', 'Source changed while Compiler was running; no Draft was published', 409);
     const updated = compiledSourceBytes(source, current.bytes);
     const parsed = parseMarkdown(source, current.bytes);
-    if (parsed.state !== 'ready' || parsed.processing_status !== 'pending' || parsed.lifecycle_status !== 'active') throw new CoreError('SOURCE_CHANGED', 'Source is no longer eligible for publication', 409);
+    if (parsed.state !== 'ready' || !['pending', 'compiled'].includes(parsed.processing_status ?? '') || parsed.lifecycle_status !== 'active') throw new CoreError('SOURCE_CHANGED', 'Source is no longer eligible for publication', 409);
     const draft = `30_Drafts/${id}.md`;
-    const bytes = Buffer.from(`---\ntype: draft\ntitle: ${JSON.stringify(result.title)}\nlifecycle_status: active\nsources:\n  - ${JSON.stringify(`[[${source}]]`)}\ncompiled_source_revision: ${before}\n---\n\n# ${result.title}\n\n${result.body}\n`);
+    const sourceText = new TextDecoder('utf-8', { fatal: true }).decode(current.bytes);
+    const sourceProperties = parseDocument(/^---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)(?:\r?\n|$)/.exec(sourceText)![1]!, { version: '1.2', schema: 'core' }).toJS({ maxAliasCount: LIMITS.yaml_aliases });
+    const copied = ['captured_at', 'annotation'].filter(key => Object.hasOwn(sourceProperties, key)).map(key => `${key}: ${JSON.stringify(sourceProperties[key])}\n`).join('');
+    const bytes = Buffer.from(`---\ntype: draft\ntitle: ${JSON.stringify(result.title)}\nlifecycle_status: active\n${copied}sources:\n  - ${JSON.stringify(`[[${source}]]`)}\ncompiled_source_revision: ${before}\n---\n\n# ${result.title}\n\n${result.body}\n`);
     const record: Publication = { version: 1, id, source, before, after: hash(updated), draft, draft_revision: hash(bytes), draft_bytes: bytes.toString('base64'), route: execution.route, model: execution.model, created_at: new Date().toISOString() };
     await writeFile(path.join(this.directory, `${id}.json`), JSON.stringify(record), { flag: 'wx', flush: true, mode: 0o600 });
     return record;
@@ -109,12 +112,19 @@ export class DraftPublisher {
     try { existing = await readMarkdown(vault, record.draft); }
     catch (error) { if (!(error instanceof CoreError && error.code === 'DOCUMENT_NOT_FOUND')) throw error; }
     if (existing) {
-      if (existing.revision !== record.draft_revision && source.revision !== record.after) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Published Draft was edited; it remains intact and requires inspection', 409);
+      const published = record.draft_published || record.before !== record.after && source.revision === record.after;
+      if (existing.revision !== record.draft_revision && !published) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Published Draft was edited; it remains intact and requires inspection', 409);
     } else {
-      if (source.revision === record.after) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Completed Draft was moved or removed; preserve the saved result and inspect existing files', 409);
+      if (record.draft_published || source.revision === record.after && record.before !== record.after) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Completed Draft was moved or removed; preserve the saved result and inspect existing files', 409);
       if (!(await publishFile(vault, record.draft, Buffer.from(record.draft_bytes, 'base64')))) throw new CoreError('PATH_CONFLICT', 'Draft target already exists', 409);
     }
-    if (source.revision === record.before) {
+    if (!record.draft_published) {
+      record.draft_published = true;
+      const temporary = path.join(this.directory, `${record.id}.json.tmp`);
+      await writeFile(temporary, JSON.stringify(record), { flag: 'wx', flush: true, mode: 0o600 });
+      await rename(temporary, path.join(this.directory, `${record.id}.json`));
+    }
+    if (source.revision === record.before && record.before !== record.after) {
       const updated = compiledSourceBytes(record.source, source.bytes);
       if (hash(updated) !== record.after) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Source stage preconditions no longer match', 409);
       const native = new PropertyNative();
@@ -133,11 +143,11 @@ export class DraftPublisher {
     if (names.length > 100) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Too many unfinished Compiler publications');
     for (const name of names) {
       const filename = path.join(this.directory, name); const info = await lstat(filename);
-      if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 2_000_000) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Publication manifest is unsafe');
+      if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 4_000_000) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Publication manifest is unsafe');
       let record: Publication;
       try { record = JSON.parse(await readFile(filename, 'utf8')); }
       catch { throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Publication manifest is invalid'); }
-      if (!record || typeof record !== 'object' || Object.keys(record).sort().join(',') !== 'after,before,created_at,draft,draft_bytes,draft_revision,id,model,route,source,version') throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Publication manifest fields are invalid');
+      if (!record || typeof record !== 'object' || Object.keys(record).filter(key => key !== 'draft_published').sort().join(',') !== 'after,before,created_at,draft,draft_bytes,draft_revision,id,model,route,source,version' || record.draft_published !== undefined && record.draft_published !== true) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Publication manifest fields are invalid');
       if (record.version !== 1 || record.id !== name.slice(0, -5) || !/^20_Sources\/.+\.md$/i.test(record.source) || normalizeVaultPath(record.source) !== record.source || record.draft !== `30_Drafts/${record.id}.md`
         || !['api', 'codex'].includes(record.route) || typeof record.model !== 'string' || record.model.length > 200 || typeof record.created_at !== 'string' || !Number.isFinite(Date.parse(record.created_at))
         || !/^[a-f0-9]{64}$/.test(record.before) || !/^[a-f0-9]{64}$/.test(record.after) || !/^[a-f0-9]{64}$/.test(record.draft_revision) || typeof record.draft_bytes !== 'string' || hash(Buffer.from(record.draft_bytes, 'base64')) !== record.draft_revision) throw new CoreError('COMPILATION_RECOVERY_CONFLICT', 'Publication manifest does not match its bounded Source and Draft');

@@ -152,3 +152,32 @@ fn compiler_settings_native_bridge_keeps_credentials_write_only() {
     assert!(desktop.request(Operation::Compile, json!({"path":"20_Sources/r1.md","revision":"a".repeat(64),"request_id":"00000000-0000-0000-0000-000000000001","command":"forbidden"})).is_err());
     desktop.stop().unwrap();
 }
+
+#[test]
+fn source_filters_preview_and_batch_use_the_fixed_native_bridge() {
+    let fixture = Fixture::new();
+    let mut desktop = fixture.host();
+    desktop.start().unwrap();
+    let scan = desktop.request(Operation::Scan, json!({"mode":"refresh"})).unwrap();
+    for _ in 0..100 {
+        let job = desktop.request(Operation::Job, json!({"id":scan["job"]["id"]})).unwrap();
+        if job["status"] == "succeeded" { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let list = desktop.request(Operation::Sources, json!({"view":"pending","types":"[\"web\",\"manual\"]","sort":"captured_desc"})).unwrap();
+    assert_eq!(list["total"], 1);
+    let preview = desktop.request(Operation::DiscardPreview, json!({"path":"20_Sources/r1.md"})).unwrap();
+    assert_eq!(preview["source"]["path"], "20_Sources/r1.md");
+    let id = "00000000-0000-0000-0000-000000000010";
+    desktop.request(Operation::SourceBatch, json!({"id":id,"action":"restore","items":[{"path":"20_Sources/r1.md","revision":preview["source"]["revision"],"request_id":"00000000-0000-0000-0000-000000000011"}]})).unwrap();
+    let mut result = serde_json::Value::Null;
+    for _ in 0..100 {
+        result = desktop.request(Operation::SourceBatchStatus, json!({"id":id})).unwrap();
+        if result["status"] != "running" { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert_eq!(result["status"], "completed");
+    assert_eq!(result["items"][0]["status"], "succeeded");
+    assert!(desktop.request(Operation::SourceBatch, json!({"id":id,"action":"restore","items":[],"headers":{}})).is_err());
+    desktop.stop().unwrap();
+}

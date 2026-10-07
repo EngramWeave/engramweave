@@ -45,7 +45,7 @@ Sources 使用列表与属性预览并排的布局。顶部统计和筛选表示
 
 Settings 的 Compiler 区域配置 API／Codex、模型、reasoning effort、超时以及服务支持的输出格式。远程凭据经 Windows DPAPI 保护并绑定 endpoint，界面读取不返回密钥；无需认证的本地回环 API 可以留空。当前只配置 Compiler，Analyzer 模板与 Profile 在后续扩展。
 
-Sources 详情的 Run Compiler 对 active、pending、已登记 Source 执行一次正文编译。当前扫描与 Compiler 串行；任务结束后刷新阶段与相关 Draft 列表。每次编译新增 Draft，已有用户编辑保留；可预览各 Draft 或通过原生宿主在 Obsidian 打开，Desktop 不编辑正文。Compiler 失败显示在对应 Source／Job，设置错误留在设置区域，不跨页保留。
+Sources 详情的 Run Compiler 对 active、pending／compiled、已登记 Source 执行一次正文编译。当前扫描与 Compiler 串行；任务结束后刷新阶段与相关 Draft 列表。每次编译新增 Draft，已有用户编辑保留；可预览各 Draft 或通过原生宿主在 Obsidian 打开，Desktop 不编辑正文。Compiler 失败显示在对应 Source／Job，设置错误留在设置区域，不跨页保留。
 
 正文生成成功不表示完整 Human Review 工作流完成；Analyzer、Recompile 人工入口、批处理／调度与正式整合仍在后续切片。具体合同和恢复限制见 [Compiler 与 Draft](compiler.md)。
 
@@ -65,3 +65,5 @@ TypeScript 与 Core 测试使用 Vitest。Rust 宿主安全边界需要直接执
 手工确认：从空库启动、显式扫描、查看 Sources/Annotation/Asset、按三种范围搜索、查看 Job 结束与错误、刷新检测断线、重新连接、原生打开。分别验证退出自有进程和退出连接外部进程的模式。
 
 实现参考：[Tauri 权限](https://v2.tauri.app/security/permissions/)、[原生命令](https://v2.tauri.app/develop/calling-rust/)、[Obsidian URI](https://help.obsidian.md/Extending+Obsidian/Obsidian+URI)。
+
+Sources 支持六个 View、Filter Chips、排序和多选 Compile／Discard／Restore。Annotation 为首个详情标签页，Processing 与 Lifecycle 分别直接显示 processing_status 和 lifecycle_status，独立于 Health。交互及操作范围见 [Sources](sources.md)。

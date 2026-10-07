@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import type { Document, SearchQuery, Status } from '@engramweave/contracts';
+import type { Document, SearchQuery, Status, SourcesQuery } from '@engramweave/contracts';
 import {
   client,
   failure,
@@ -21,7 +21,6 @@ import { Shell, type View } from './Shell';
 import { Dashboard } from './Dashboard';
 import {
   SourceBrowser,
-  type SourceState,
   type SourceCounts,
 } from './SourceBrowser';
 import { Jobs, Results } from './Lists';
@@ -40,8 +39,7 @@ export function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>('dashboard');
-  const [sourceState, setSourceState] = useState<SourceState>('all');
-  const [sourceType, setSourceType] = useState('all');
+  const [sourceQuery, setSourceQuery] = useState<SourcesQuery>({view:'all',sort:'title_asc'});
   const [sourceCounts, setSourceCounts] = useState<SourceCounts | null>(null);
   const [sourceOffset, setSourceOffset] = useState(0);
   const [scope, setScope] =
@@ -51,6 +49,7 @@ export function App() {
   const selection = useRef(0);
   const connectionEpoch = useRef(0);
   const pageEpoch = useRef(0);
+  const documentGeneration = useRef<number | null>(null);
   const connected = status !== null;
   const active =
     status?.active_job?.id ??
@@ -84,6 +83,20 @@ export function App() {
       setResults(null);
     }
   }, []);
+  useEffect(() => {
+    const generation = status?.index_generation ?? null;
+    if (documentGeneration.current === generation) return;
+    documentGeneration.current = generation;
+    if (!connected || !selectedPath) return;
+    let cancelled = false;
+    const epoch = selection.current;
+    void client.document(selectedPath).then(value => {
+      if (!cancelled && epoch === selection.current) { setDocument(value); clearError('document'); }
+    }).catch(error => {
+      if (!cancelled && epoch === selection.current) { setDocument(null); report(error, 'document'); }
+    });
+    return () => { cancelled = true; };
+  }, [connected, selectedPath, status?.index_generation, report, clearError]);
   const action = async (work: () => Promise<void>, placement: ErrorPlacement = 'toast') => {
     if (busy) return;
     setBusy(true);
@@ -162,19 +175,13 @@ export function App() {
     let cancelled = false;
     void client
       .sources({
-        ...(view === 'dashboard'
-          ? { state: 'ready' as const }
-          : sourceState === 'all'
-            ? {}
-            : { state: sourceState }),
-        ...(view === 'sources' && sourceType !== 'all'
-          ? { source_type: sourceType }
-          : {}),
+        ...(view === 'dashboard' ? {state:'ready' as const} : sourceQuery),
         offset: view === 'dashboard' ? 0 : sourceOffset,
       })
       .then((value) => {
         if (!cancelled) {
           setSources(value);
+          if (value.views) setSourceCounts(value.views as SourceCounts);
           clearError('sources');
         }
       })
@@ -187,52 +194,15 @@ export function App() {
   }, [
     connected,
     view,
-    sourceState,
+    sourceQuery,
     sourceOffset,
-    sourceType,
+    jobs?.items[0]?.status,
+    status?.active_job?.id,
     status?.index_generation,
     report,
     clearError,
   ]);
-  useEffect(() => {
-    if (!connected || view !== 'sources') return;
-    const epoch = connectionEpoch.current;
-    setSourceCounts(null);
-    let cancelled = false;
-    const states = [
-      'all',
-      'ready',
-      'invalid',
-      'missing',
-      'unsupported',
-    ] as const;
-    void Promise.all(
-      states.map((state) =>
-        client.sources({ limit: 1, ...(state === 'all' ? {} : { state }) }),
-      ),
-    )
-      .then((pages) => {
-        if (
-          !cancelled &&
-          pages.every(
-            (page) => page.index_generation === pages[0]?.index_generation,
-          )
-        ) {
-          setSourceCounts(
-            Object.fromEntries(
-              states.map((state, index) => [state, pages[index]!.total]),
-            ) as SourceCounts,
-          );
-          clearError('counts');
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) report(error, 'counts', epoch);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connected, view, status?.index_generation, report, clearError]);
+  const refreshSources = useCallback(() => { void refresh().catch(error => report(error, 'sources')); }, [refresh, report]);
   const connect = (start: boolean) =>
     action(async () => {
       connectionEpoch.current++;
@@ -454,33 +424,15 @@ export function App() {
             compilerActions={document?.kind === 'source' ? <SourceCompiler key={document.path} document={document} jobs={jobs} active={Boolean(active)} onStarted={() => { void refresh().catch(error => report(error, 'document')); }} onPublished={() => { void select(document.path); }} /> : undefined}
             page={sources}
             counts={sourceCounts}
-            state={sourceState}
-            setState={(value) => {
-              selection.current++;
-              setDocument(null);
-              setSelectedPath(null);
-              clearError('document');
-              clearError('sources');
-              setSourceState(value);
-              setSourceOffset(0);
-              setSources(null);
-            }}
-            sourceType={sourceType}
-            setSourceType={(value) => {
-              selection.current++;
-              setDocument(null);
-              setSelectedPath(null);
-              clearError('document');
-              clearError('sources');
-              setSourceType(value);
-              setSourceOffset(0);
-              setSources(null);
-            }}
+            query={sourceQuery}
+            changeQuery={(value) => {selection.current++;setDocument(null);setSelectedPath(null);clearError('document');clearError('sources');setSourceQuery(value);setSourceOffset(0);}}
+            active={Boolean(active)}
+            refresh={refreshSources}
+            currentBatch={status?.source_batch}
             document={document}
             selectedPath={selectedPath}
             documentError={errors.document}
             listError={errors.sources}
-            countsError={errors.counts}
             select={select}
             close={() => {
               selection.current++;
@@ -503,21 +455,6 @@ export function App() {
               clearError('document');
               clearError('sources');
               setSourceOffset(offset);
-            }}
-            search={(term) => {
-              setQuery(term);
-              setScope('sources');
-              navigate('search');
-              setResults(null);
-              void action(async () => {
-                const input: SearchQuery = {
-                  scope: 'sources',
-                  q: term,
-                  offset: 0,
-                };
-                setResults(await client.search(input));
-                setSearchInput(input);
-              }, 'search');
             }}
           />
         )}
