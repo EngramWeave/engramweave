@@ -12,23 +12,25 @@ export const isPropertyJournal = (name: string) => name.endsWith('.json') && ste
 export const isPropertyArtifact = (name: string) => /\.(json|tmp|bak)$/.test(name) && stemPattern.test(name.replace(/\.(json|tmp|bak)$/, ''));
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 /** Only Source registration uses this writer; GET and Capture creation remain independent. */
-export async function writeSourceProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<void> {
+export async function writeSourceProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<FileRead> {
   markdownPath(relative);
   if (!relative.startsWith('20_Sources/')) throw new FileProblem('PROPERTY_WRITE_UNSUPPORTED', 'invalid', 'Only Source properties may be normalized');
   return writeLifecycleProperties(vault, relative, file, bytes, native, onBytes);
 }
 
 /** Explicit lifecycle actions use the same bounded native commit and recovery protocol. */
-export async function writeLifecycleProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<void> {
+export async function writeLifecycleProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<FileRead> {
   markdownPath(relative, true);
-  const directory = await resolveVaultDirectory(vault, path.posix.dirname(relative));
+  // Native commit locks and validates the entire parent chain before creating any artifact.
+  const directory = path.join(vault, path.posix.dirname(relative));
   const stem = `.engramweave-properties-${randomUUID()}`;
   const journal = path.join(directory, `${stem}.json`);
   const after = hash(bytes);
   // The manifest precedes both temp creation and publication; the original is never truncated.
   const manifest = Buffer.from(JSON.stringify({ version: 1, relative, before: file.revision, after }));
   try {
-    await native.run(vault, relative, stem, file.revision, after, hash(manifest), false, { manifest_bytes: manifest.toString('base64'), replacement_bytes: bytes.toString('base64') });
+    const committed = await native.run(vault, relative, stem, file.revision, after, hash(manifest), false, { manifest_bytes: manifest.toString('base64'), replacement_bytes: bytes.toString('base64') });
+    return { bytes, revision: after, size: bytes.length, mtime: committed.mtime };
   } catch (error) {
     // Restore an absent original or remove verified unused artifacts; never overwrite a changed target.
     try { await recoverPropertyJournal(vault, path.posix.dirname(relative), path.basename(journal), native, hash(manifest), onBytes); }

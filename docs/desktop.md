@@ -35,7 +35,7 @@ $env:ENGRAMWEAVE_CONFIG = 'D:/path/to/config.json'
 
 主页展示真实索引统计、Sources 与扫描任务。Review、ChangeSets、Knowledge Maintenance 等规划区域仅作视觉展示，示例内容明确标记且操作不可用；知识维护不表示 Core 连接配置或 Vault 登记诊断。知识图谱只作结构示意，不表示真实关联。文档详情在 Sources 属性栏或 Search 中展示，离开这些页面后不保留详情卡片。
 
-Sources 使用列表与属性预览并排的布局。顶部统计和筛选表示真实登记状态：All、Ready、Invalid、Missing、Unsupported；可读取不表示已整合。领域概念和状态沿用英文：Processing 为 Pending、Compiled、Reviewed、Planned、Archived，Lifecycle 为 Active 或 Discarded，未记录阶段显示 Not set，未知生命周期显示 Unknown。扫描 Job 失败不改变这些文件属性。统计针对所有来源，不随类型筛选变化。类型筛选与分页使用 Core 接口，列表搜索框进入范围为 Sources 的全文搜索。选中资料后，右侧只读展示 Properties/元数据、生命周期、标签、Annotation、Asset 和原始引用；不提供标签编辑、状态修改或正文编辑。缺失、不支持、无效资产通过状态和诊断表达。详情比较当前字节与登记 revision 提示索引过时，不更新数据库。Search 支持 Knowledge、Sources、全部，默认 Knowledge；Annotation 片段明确标为用户上下文。
+Sources 使用列表与属性预览并排的布局。顶部六个 View 为 All Sources、Pending、Processing、Archived、Issues、Discarded；discarded Source 仅在最后一个 View 出现，具体筛选规则见 [Sources](sources.md)。可读取不表示已整合。领域概念和状态沿用英文：Processing 为 Pending、Compiled、Reviewed、Planned、Archived，Lifecycle 为 Active 或 Discarded，未记录阶段显示 Not set，未知生命周期显示 Unknown。扫描 Job 失败不改变这些文件属性。统计针对所有来源，不随组合筛选变化。搜索、Filter Chips 与分页使用 Core 接口。选中资料后，右侧只读展示 Annotation、Properties/元数据、生命周期、标签和原始引用；inline Asset 不重复展示。详情不提供正文或属性编辑，底部显式操作另经清单确认。缺失、不支持、无效资产通过 Health 和诊断表达。详情比较当前字节与登记 revision 提示索引过时，不更新数据库。Search 支持 Knowledge、Sources、全部，默认 Knowledge；Annotation 片段明确标为用户上下文。
 
 文档读取错误显示在对应详情区域，仍保留所选行和路径；Source 列表、搜索、连接与显式操作错误分别显示在各自区域。错误详情默认折叠，不在工作区顶部展开 JSON。没有合适局部位置的错误使用可关闭的悬浮提示，6 秒后消失。切换页面、关闭详情或更改选择时清除相应错误；旧页面或旧选择的异步失败不会重新出现。
 
@@ -66,4 +66,4 @@ TypeScript 与 Core 测试使用 Vitest。Rust 宿主安全边界需要直接执
 
 实现参考：[Tauri 权限](https://v2.tauri.app/security/permissions/)、[原生命令](https://v2.tauri.app/develop/calling-rust/)、[Obsidian URI](https://help.obsidian.md/Extending+Obsidian/Obsidian+URI)。
 
-Sources 支持六个 View、Filter Chips、排序和多选 Compile／Discard／Restore。Annotation 为首个详情标签页，Processing 与 Lifecycle 分别直接显示 processing_status 和 lifecycle_status，独立于 Health。交互及操作范围见 [Sources](sources.md)。
+Sources 支持六个 View、Filter Chips、排序和底部稳定多选工具栏，执行反馈使用 Toast，目标及详细结果使用独立弹窗。前五个 View 支持 Compile／Discard／Discard Drafts，Discarded 支持永久删除／Restore。Annotation 为首个详情标签页，只显示 active Draft；Processing 与 Lifecycle 分别直接显示 processing_status 和 lifecycle_status，独立于 Health。交互及操作范围见 [Sources](sources.md)。

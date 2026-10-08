@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Document, Source, SourceBatch, SourcesQuery } from '@engramweave/contracts';
 import type { Failure, SourcePage } from './client';
 import { Detail } from './Detail';
@@ -27,6 +27,14 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
   compilerActions?: ReactNode; active: boolean; refresh: () => void; currentBatch?: SourceBatch | null | undefined;
 }) {
   const [selected, setSelected] = useState<Record<string, Source>>({});
+  const handledBatch = useRef(currentBatch?.status === 'completed' ? currentBatch.id : null);
+  useEffect(() => {
+    if (currentBatch?.status === 'running') { handledBatch.current = null; return; }
+    if (currentBatch?.status !== 'completed' || handledBatch.current === currentBatch.id) return;
+    handledBatch.current = currentBatch.id;
+    if (!selectedPath || !['delete', 'discard'].includes(currentBatch.action)) return;
+    if (currentBatch.items.some(item => item.path === selectedPath && item.status === 'succeeded')) close();
+  }, [selectedPath, currentBatch, close]);
   const selectedItems = Object.values(selected);
   const toggle = (source: Source) => setSelected(current => {
     const next = { ...current }; if (next[source.path]) delete next[source.path]; else if (source.revision && Object.keys(next).length < 100) next[source.path] = source; return next;
@@ -34,13 +42,12 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
   const selectable = page?.items.filter(source => source.revision) ?? [];
   const allSelected = selectable.length > 0 && selectable.every(source => selected[source.path]);
   return <div className="sources-page">
-    <div className="source-stats">{categories.map(category => <button key={category.state} className={`source-stat ${category.tone} ${(query.view ?? 'all') === category.state ? 'selected' : ''}`} disabled={!connected} onClick={() => { const next = { ...query, view: category.state }; delete next.stages; delete next.issues; changeQuery(next); }}>
+    <div className="source-stats">{categories.map(category => <button key={category.state} className={`source-stat ${category.tone} ${(query.view ?? 'all') === category.state ? 'selected' : ''}`} disabled={!connected} onClick={() => { setSelected({}); const next = { ...query, view: category.state }; delete next.stages; delete next.issues; changeQuery(next); }}>
       <span className="row-symbol"><Icon name={category.icon} /></span><span><strong>{category.title}</strong><b>{counts?.[category.state] ?? '—'}</b><small>{category.caption}</small></span>
       <svg className="stat-wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 31Q24-9 45 19T84 29T125 34H200V40H0Z" fill="currentColor" /></svg>
     </button>)}</div>
     <div className="sources-layout"><section className="source-list panel" aria-label="Sources list">
       <SourceFilters query={query} change={changeQuery} connected={connected} facets={page?.facets ?? { types: [], tags: [] }} />
-      <SourceBatchActions selected={selectedItems} clear={() => setSelected({})} disabled={!connected || active} refresh={refresh} currentBatch={currentBatch} />
       {listError && <ErrorNotice error={listError} />}
       <div className="table-scroll"><table className="source-table"><thead><tr>
         <th className="selection-column"><input type="checkbox" aria-label="Select this page" checked={allSelected} disabled={!connected || selectable.length === 0} onChange={() => setSelected(current => { const next = { ...current }; for (const source of selectable) { if (allSelected) delete next[source.path]; else if (Object.keys(next).length < 100) next[source.path] = source; } return next; })} /></th>
@@ -58,6 +65,7 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
       </tr>)}</tbody></table></div>
       {!page?.items.length && <p className="empty">{connected ? '没有符合条件的 Source。可刷新 Vault 或更改筛选。' : '连接 Core 后查看资料。'}</p>}
       {page && <div className="pagination"><span>{page.total} Sources · Generation {page.index_generation}</span><button disabled={offset === 0 || !connected} onClick={() => setOffset(Math.max(0, offset - 20))}>Previous</button><button disabled={offset + 20 >= page.total || !connected} onClick={() => setOffset(offset + 20)}>Next</button></div>}
+      <SourceBatchActions selected={selectedItems} clear={() => setSelected({})} disabled={!connected || active} refresh={refresh} currentBatch={currentBatch} discardedView={query.view === 'discarded'} />
     </section><div className="source-inspector">{document ? <Detail document={document} close={close} open={open} error={documentError}>{compilerActions}</Detail> : documentError ? <DocumentFailure error={documentError} path={selectedPath} close={close} /> : <aside className="panel inspector-empty"><span className="empty-symbol blue"><Icon name="file" /></span><h2>A closer look</h2><p>选择 Source 查看 Annotation、属性和原始引用。</p></aside>}</div></div>
   </div>;
 }

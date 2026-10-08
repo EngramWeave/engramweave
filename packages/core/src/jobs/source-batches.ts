@@ -5,16 +5,17 @@ import { Value } from '@sinclair/typebox/value';
 import { SourceBatchSchema, SourceBatchRequestSchema, type Config, type SourceBatch, type SourceBatchRequest } from '@engramweave/contracts';
 import type Database from 'better-sqlite3';
 import { CoreError } from '../errors.js';
-import { readMarkdown } from '../files/read.js';
-import { parseMarkdown, stringList } from '../source/parse.js';
-import { resolveDocumentReferences } from '../source/references.js';
-import { readDraft, listDrafts } from '../drafts/files.js';
+import { readMarkdown, type FileRead } from '../files/read.js';
+import { parseMarkdown } from '../source/parse.js';
+import { parseDraft } from '../drafts/files.js';
 import { editScalarProperty } from '../files/property-scalars.js';
 import { PropertyNative } from '../files/property-native.js';
 import { writeLifecycleProperties, isPropertyJournal, recoverPropertyJournal } from '../files/properties.js';
 import { resolveVaultDirectory } from '../files/paths.js';
-import { allDocuments, updateCompiledSource } from '../storage/registry.js';
+import { updateCompiledSource } from '../storage/registry.js';
+import { sourceRelations } from '../storage/source-relations.js';
 import type { CompilerJobs } from './compiler.js';
+import { retainWindowsAttributes } from '../files/windows.js';
 
 type Target = { path: string; revision: string };
 export class SourceBatches {
@@ -23,6 +24,8 @@ export class SourceBatches {
   private running: Promise<void> | null = null;
   private stopping = false;
   private readonly filename: string;
+  private readonly native = new PropertyNative();
+  private readonly releaseAttributes = retainWindowsAttributes();
   constructor(private readonly config: Config, private readonly db: Database.Database, private readonly compiler: CompilerJobs, private readonly scanBusy: () => boolean) {
     this.filename = path.join(config.data_dir, 'source-batch.json');
   }
@@ -54,27 +57,22 @@ export class SourceBatches {
   busy() { return this.current?.status === 'running'; }
   latest() { return this.current; }
   get(id: string) { if (this.current?.id !== id) throw new CoreError('JOB_NOT_FOUND', 'Batch result is no longer retained', 404); return this.current; }
-  private async save() {
+  private async save(result = this.current) {
     const temporary = `${this.filename}.${randomUUID()}.tmp`;
     const info = await lstat(this.filename).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; });
     if (info && (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1)) throw new CoreError('CONFIG_ERROR', 'Batch record identity is unsafe');
-    await writeFile(temporary, JSON.stringify({ input: this.input, result: this.current }), { flag: 'wx', flush: true, mode: 0o600 });
+    await writeFile(temporary, JSON.stringify({ input: this.input, result }), { flag: 'wx', flush: true, mode: 0o600 });
     await rename(temporary, this.filename);
   }
-  async preview(relative: string) {
+  async preview(relative: string, snapshot = false, alreadyRead?: FileRead) {
     if (!relative.startsWith('20_Sources/')) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Lifecycle actions require a Source', 403);
-    const file = await readMarkdown(this.config.vault_path, relative);
+    const file = alreadyRead ?? await readMarkdown(this.config.vault_path, relative);
     const parsed = parseMarkdown(relative, file.bytes);
     if (parsed.state !== 'ready') throw new CoreError('INVALID_SOURCE', 'An unreadable Source cannot be safely discarded', 422);
-    const drafts = parsed.processing_status === 'archived' ? [] : (await listDrafts(this.config.vault_path, relative)).items.map(item => ({ path: item.path, revision: item.revision }));
-    const references: Target[] = [];
-    for (const row of allDocuments(this.db).filter(row => row.kind === 'knowledge' && row.state === 'ready')) {
-      const current = await readMarkdown(this.config.vault_path, row.path);
-      const knowledge = parseMarkdown(row.path, current.bytes);
-      if (knowledge.state !== 'ready' || knowledge.lifecycle_status !== 'active') continue;
-      if ((await resolveDocumentReferences(this.config.vault_path, row.path, knowledge)).some(reference => reference.target_path?.toLowerCase() === relative.toLowerCase())) references.push({ path: row.path, revision: current.revision });
-    }
-    return { source: { path: relative, revision: file.revision }, drafts, references };
+    const index = sourceRelations(this.db, this.config.vault_path);
+    if (!snapshot) await index.refresh();
+    const related = index.targets(relative);
+    return { source: { path: relative, revision: file.revision }, drafts: related.drafts, references: related.references };
   }
   async submit(input: SourceBatchRequest) {
     if (this.current?.id === input.id) {
@@ -90,23 +88,26 @@ export class SourceBatches {
     void this.running.catch(() => {});
     return this.current;
   }
-  private async mark(target: Target, status: 'active' | 'discarded', native: PropertyNative) {
-    const file = await readMarkdown(this.config.vault_path, target.path);
+  private async mark(target: Target, status: 'active' | 'discarded', native: PropertyNative, alreadyRead: FileRead) {
+    const file = alreadyRead;
     if (file.revision !== target.revision) throw new CoreError('SOURCE_CHANGED', 'Lifecycle target changed; preview and select it again', 409);
-    if (target.path.startsWith('30_Drafts/')) await readDraft(this.config.vault_path, target.path);
+    if (target.path.startsWith('30_Drafts/')) parseDraft(target.path, file);
     else if (parseMarkdown(target.path, file.bytes).state !== 'ready') throw new CoreError('INVALID_SOURCE', 'Lifecycle target is not readable', 422);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
     const updated = /^---\r?\n/.test(text) ? editScalarProperty(file.bytes, 'lifecycle_status', status) : Buffer.from(`---\nlifecycle_status: ${status}\n---\n${text}`);
-    if (!file.bytes.equals(updated)) await writeLifecycleProperties(this.config.vault_path, target.path, file, updated, native);
+    const committed = file.bytes.equals(updated) ? file : await writeLifecycleProperties(this.config.vault_path, target.path, file, updated, native);
     if (!target.path.startsWith('30_Drafts/')) {
-      const current = await readMarkdown(this.config.vault_path, target.path);
-      updateCompiledSource(this.db, target.path, current, parseMarkdown(target.path, current.bytes));
+      updateCompiledSource(this.db, target.path, committed, parseMarkdown(target.path, committed.bytes));
     }
+    if (status === 'discarded') sourceRelations(this.db, this.config.vault_path).removed(target.path);
+    return committed.revision;
   }
   private async execute() {
-    const input = this.input!, result = this.current!, native = new PropertyNative();
+    const input = this.input!, result = this.current!, native = this.native;
     const marked = new Map<string, string>();
     try {
+      const relations = sourceRelations(this.db, this.config.vault_path);
+      if (input.action === 'discard' || input.action === 'discard_drafts' || input.action === 'delete') await relations.refresh(true, input.action === 'delete');
       for (const [index, item] of input.items.entries()) {
         const outcome = result.items[index]!;
         if (this.stopping) { outcome.status = 'skipped'; outcome.error = { code: 'CORE_UNAVAILABLE', message: 'Core is stopping; this item was not started' }; continue; }
@@ -121,19 +122,42 @@ export class SourceBatches {
             outcome.job_id = accepted.job.id; await this.save(); await this.compiler.wait();
             const job = this.compiler.get(accepted.job.id)!;
             if (job.status !== 'succeeded') throw new CoreError('EXECUTION_FAILED', job.error?.message ?? 'Compiler did not complete');
+          } else if (input.action === 'delete') {
+            if (parsed.lifecycle_status !== 'discarded') throw new CoreError('PATH_CONFLICT', 'Only discarded Sources can be permanently deleted', 409);
+            const related = relations.targets(item.path);
+            if (related.diagnostics.some(item => item.code === 'REFERENCE_UNREADABLE')) throw new CoreError('PATH_CONFLICT', 'Formal references could not be verified; refresh and inspect before deleting', 409);
+            if (related.references.length && !item.allow_referenced) throw new CoreError('PATH_CONFLICT', 'Active formal knowledge still references this Source; explicit reference confirmation is required', 409);
+            if (related.references.some(reference => !item.reference_revisions?.some(approved => approved.path === reference.path && approved.revision === reference.revision))) throw new CoreError('SOURCE_CHANGED', 'Formal reference list changed after confirmation; preview deletion again', 409);
+            if (item.related?.length) throw new CoreError('VALIDATION_ERROR', 'Source deletion does not delete related Draft or formal files', 400);
+            // Inline captures have no separate owned Asset. Unproven/shared assets are preserved.
+            await native.remove(this.config.vault_path, item.path, item.revision);
+            this.db.transaction(() => {
+              this.db.prepare('DELETE FROM documents WHERE path_key=?').run(item.path.toLowerCase());
+              this.db.prepare('UPDATE meta SET index_generation=index_generation+1 WHERE id=1').run();
+            })();
+            relations.invalidate();
           } else {
-            if (input.action === 'discard') {
-              const preview = await this.preview(item.path);
+            if (input.action === 'discard' || input.action === 'discard_drafts') {
+              if (parsed.lifecycle_status !== 'active') throw new CoreError('PATH_CONFLICT', 'Select active Sources for Discard actions', 409);
+              const preview = await this.preview(item.path, true, current);
+              if (input.action === 'discard' && parsed.processing_status === 'archived') preview.drafts = [];
               const selected = item.related ?? [];
               const selectedPaths = new Set(selected.map(target => target.path.toLowerCase()));
-              if (preview.drafts.some(target => !marked.has(target.path.toLowerCase()) && !selected.some(choice => choice.path === target.path && choice.revision === target.revision))) throw new CoreError('SOURCE_CHANGED', 'Related Drafts changed; preview Discard again', 409);
+              if (input.action === 'discard' && preview.drafts.some(target => !marked.has(target.path.toLowerCase()) && !selected.some(choice => choice.path === target.path && choice.revision === target.revision))) throw new CoreError('SOURCE_CHANGED', 'Related Drafts changed; preview Discard again', 409);
+              if (input.action === 'discard_drafts' && selected.some(target => !target.path.startsWith('30_Drafts/'))) throw new CoreError('PATH_CONFLICT', 'Discard Drafts cannot change Source or formal knowledge', 409);
               if (selected.some(target => !marked.has(target.path.toLowerCase()) && ![...preview.drafts, ...preview.references].some(choice => choice.path === target.path && choice.revision === target.revision))) throw new CoreError('PATH_CONFLICT', 'Related target is outside the current Discard preview', 409);
               if (selectedPaths.size !== selected.length) throw new CoreError('VALIDATION_ERROR', 'Duplicate related Discard target', 400);
               // Verify all selected revisions before the first write for this item.
-              for (const target of selected) if ((await readMarkdown(this.config.vault_path, target.path)).revision !== (marked.get(target.path.toLowerCase()) ?? target.revision)) throw new CoreError('SOURCE_CHANGED', 'Related target changed', 409);
-              for (const target of selected) if (!marked.has(target.path.toLowerCase())) { await this.mark(target, 'discarded', native); marked.set(target.path.toLowerCase(), (await readMarkdown(this.config.vault_path, target.path)).revision); }
+              const files = new Map<string, FileRead>();
+              for (const target of selected) {
+                const file = await readMarkdown(this.config.vault_path, target.path);
+                if (file.revision !== (marked.get(target.path.toLowerCase()) ?? target.revision)) throw new CoreError('SOURCE_CHANGED', 'Related target changed', 409);
+                files.set(target.path, file);
+              }
+              for (const target of selected) if (!marked.has(target.path.toLowerCase())) marked.set(target.path.toLowerCase(), await this.mark(target, 'discarded', native, files.get(target.path)!));
             }
-            await this.mark(item, input.action === 'restore' ? 'active' : 'discarded', native);
+            if (input.action !== 'discard_drafts') await this.mark(item, input.action === 'restore' ? 'active' : 'discarded', native, current);
+            else this.db.prepare('UPDATE meta SET index_generation=index_generation+1 WHERE id=1').run();
           }
           outcome.status = 'succeeded';
         } catch (error) {
@@ -142,8 +166,13 @@ export class SourceBatches {
         }
         await this.save();
       }
-      result.status = this.stopping ? 'interrupted' : 'completed'; await this.save();
-    } finally { await native.close(); }
+      const status = this.stopping ? 'interrupted' : 'completed';
+      // Publish completion only after its durable receipt; the next batch cannot race this save.
+      await this.save({ ...result, status }); result.status = status;
+    } catch (error) {
+      for (const item of result.items) if (['pending', 'running'].includes(item.status)) { item.status = 'failed'; item.error = error instanceof CoreError ? { code: error.code, message: error.message } : { code: 'IO_ERROR', message: 'Batch preparation failed; no unfinished item was replayed' }; }
+      await this.save({ ...result, status: 'completed' }); result.status = 'completed';
+    } finally { sourceRelations(this.db, this.config.vault_path).invalidate(); }
   }
-  async close() { this.stopping = true; await this.running; }
+  async close() { this.stopping = true; try { await this.running; } finally { try { await this.native.close(); } finally { await this.releaseAttributes(); } } }
 }

@@ -35,7 +35,10 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
     const { db } = services();
     const query = request.query as SourcesQuery;
     const { limit, offset } = pagination(query);
-    const all = db.prepare("SELECT * FROM documents WHERE kind='source' ORDER BY path_key").all() as DocumentRow[];
+    // Browsing without text search does not copy every Source body out of SQLite.
+    const textFields = ['annotation', 'body_markdown', 'title_norm', 'body_norm', 'annotation_norm', 'metadata_norm'];
+    const fields = 'id,path_key,path,kind,state,revision,size,mtime,title,source_type,captured_at,original_locator,metadata_json,asset_json,diagnostics_json,indexed_at,' + textFields.map(field => query.q?.trim() ? field : `'' AS ${field}`).join(',');
+    const all = db.prepare(`SELECT ${fields} FROM documents WHERE kind='source' ORDER BY path_key`).all() as DocumentRow[];
     let rows = querySources(all, query);
     if (query.path_prefix !== undefined) rows = rows.filter(row => inPathPrefix(row.path, query.path_prefix!));
     const meta = indexMeta(db);
@@ -44,10 +47,13 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
   } });
   server.route({ ...API.status, async handler() {
     const { db, jobs, instance_id } = services(); const meta = indexMeta(db);
-    const rows = db.prepare('SELECT kind,state,count(*) AS count FROM documents GROUP BY kind,state').all() as { kind: string; state: string; count: number }[];
+    const rows = db.prepare(`SELECT kind,state,count(*) AS count,
+      sum(CASE WHEN kind='source' AND json_extract(metadata_json,'$.processing_status')='pending'
+        AND coalesce(json_extract(metadata_json,'$.lifecycle_status'),'') <> 'discarded' THEN 1 ELSE 0 END) AS pending
+      FROM documents GROUP BY kind,state`).all() as { kind: string; state: string; count: number; pending: number }[];
     const counts = { sources: 0, knowledge: 0, invalid: 0, missing: 0, unsupported: 0, pending: 0 };
-    counts.pending = sourceViews(db.prepare("SELECT * FROM documents WHERE kind='source'").all() as DocumentRow[]).pending ?? 0;
     for (const row of rows) {
+      counts.pending += row.pending;
       if (row.state === 'ready') counts[row.kind === 'source' ? 'sources' : 'knowledge'] += row.count;
       else counts[row.state as 'invalid' | 'missing' | 'unsupported'] += row.count;
     }

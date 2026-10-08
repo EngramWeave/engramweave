@@ -25,7 +25,12 @@ it('commits through real Windows locked handles and leaves no artifacts', async 
   const { vault, relative, native } = await fixture();
   const before = await readMarkdown(vault, relative);
   const updated = pendingSourceBytes(relative, before.bytes);
-  await writeSourceProperties(vault, relative, before, updated, native);
+  const committed = await writeSourceProperties(vault, relative, before, updated, native);
+  const current = await readMarkdown(vault, relative);
+  expect(committed.bytes).toEqual(current.bytes);
+  expect(committed.revision).toBe(current.revision);
+  expect(committed.size).toBe(current.size);
+  expect(committed.mtime).toBeCloseTo(current.mtime, 2);
   expect(await readdir(path.join(vault, '20_Sources'))).toEqual([path.basename(relative)]);
   expect(await readFile(path.join(vault, relative))).toEqual(updated);
 });

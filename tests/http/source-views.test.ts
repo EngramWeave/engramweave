@@ -17,7 +17,11 @@ it('queries overlapping Source views with AND dimensions, OR categories, Registr
     await unlink(path.join(runtime.config.vault_path, '20_Sources/missing.md'));
     const next = await submitScan(runtime.request); expect((await finishedJob(runtime.request, next.job.id)).status).toBe('succeeded');
     const all = await (await runtime.request('/v1/sources?view=all')).json();
-    expect(all.total).toBe(7); expect(all.views).toEqual({ all: 7, pending: 3, processing: 2, archived: 1, issues: 2, discarded: 1 });
+    expect(all.total).toBe(6); expect(all.views).toEqual({ all: 6, pending: 2, processing: 2, archived: 1, issues: 2, discarded: 1 });
+    expect(all.items.some((item: any) => item.lifecycle_status === 'discarded')).toBe(false);
+    const discarded = await (await runtime.request('/v1/sources?view=discarded')).json();
+    expect(discarded.total).toBe(1);
+    expect(discarded.items[0].path).toBe('20_Sources/discarded.md');
     expect(all.facets.tags).toEqual(['LLM', 'Stats']);
     const pending = await (await runtime.request('/v1/sources?view=pending')).json();
     expect(pending.items.some((item: any) => item.state === 'missing' && item.processing_status === 'pending' && item.lifecycle_status === 'active')).toBe(true);
@@ -26,7 +30,7 @@ it('queries overlapping Source views with AND dimensions, OR categories, Registr
     expect(filtered.items.map((item: any) => item.path)).toEqual(['20_Sources/missing.md', '20_Sources/b.md', '20_Sources/a.md']);
     const issues = await (await runtime.request('/v1/sources?view=issues&issues=' + encodeURIComponent(JSON.stringify(['missing'])))).json();
     expect(issues.total).toBe(1);
-    expect((await (await runtime.request('/v1/status')).json()).counts.pending).toBe(3);
+    expect((await (await runtime.request('/v1/status')).json()).counts.pending).toBe(2);
     expect((await runtime.request('/v1/sources?view=all&tags=invalid-json')).status).toBe(400);
   } finally { await runtime.cleanup(); }
 });

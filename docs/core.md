@@ -6,7 +6,13 @@ Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop
 
 ## 运行
 
-使用 Windows 本地 NTFS、Node 24.x 和 npm 11.x；项目验证版本为 `.node-version` 与 package-lock.json 中的版本。PowerShell 用于固定的 Windows 属性查询和 Source 属性提交，识别 Hidden/ReparsePoint 并取得受保护文件句柄。路径和版本通过 JSON 输入，不执行用户命令；属性提交会读取目标文件校验 hash。
+使用 Windows x64 本地 NTFS、Node 24.x 和 npm 11.x；项目验证版本为 `.node-version` 与 package-lock.json 中的版本。普通文件读取使用 Node.js。Windows 属性检查与受保护的属性提交／删除由 Core 自有的已编译助手 `dist/native/windows-files.exe` 直接调用 Windows API，不通过 PowerShell，也不在运行时编译。它与 Desktop 生命周期独立，CLI 同样可用；路径、版本和新字节只通过私有 JSON 管道传入。
+
+构建使用系统 .NET Framework 4.x 的 x64 `csc.exe` 和 `System.Web.Extensions`，运行需要相应 .NET Framework。`npm run build` 自动构建助手；也可只构建 Core workspace。源码和编译选项未变、已有产物 hash 正确时复用产物。分发 Core 时必须保留 `dist/native/windows-files.exe`。修改助手源码时，应停止正在使用旧助手的 Core 后重建；无需运行 Desktop。
+
+属性查询进程在 Core 生命周期内共享，但每次查询都读取新鲜的 Hidden／ReparsePoint 属性，不缓存安全属性值。生命周期提交进程跨批次复用；提交仍逐项重读当前文件、校验 hash、锁定绝对父目录及文件句柄，保留原子发布与中断恢复。成功响应携带已提交版本与时间戳，避免为了更新投影再读同一文件。完整记录落盘后才发布批次完成状态，防止快速连续批次覆盖未完成的持久记录。
+
+状态轮询在 SQLite 内聚合计数，不为 Pending 计数读取全库正文；普通 Sources 浏览也不装载不参与查询的正文，全文搜索才读取所需文字投影。API 凭据的 DPAPI 保护保持现有独立实现，不属于文件操作热路径。
 
 ```powershell
 npm ci

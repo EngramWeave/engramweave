@@ -11,8 +11,14 @@ import { CompilerJobs } from './jobs/compiler.js';
 import { SourceBatches } from './jobs/source-batches.js';
 import type { CoreServices } from './http/context.js';
 import { recoverDatabase } from './storage/recover.js';
+import { retainWindowsAttributes } from './files/windows.js';
 
 export async function startCore(input: Config) {
+  const releaseAttributes = retainWindowsAttributes();
+  try { return await initializeCore(input, releaseAttributes); }
+  catch (error) { await releaseAttributes(); throw error; }
+}
+async function initializeCore(input: Config, releaseAttributes: () => Promise<void>) {
   const config = await validateConfig(input);
   const runtime: HttpRuntime = { token: null, status: 'starting' };
   let services: CoreServices | undefined;
@@ -47,7 +53,7 @@ export async function startCore(input: Config) {
       closed = true;
       runtime.status = 'degraded';
       try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); }
-      finally { try { database?.close(); } finally { await instance?.close(); } }
+      finally { try { database?.close(); } finally { try { await instance?.close(); } finally { await releaseAttributes(); } } }
     } };
   } catch (error) {
     try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); }

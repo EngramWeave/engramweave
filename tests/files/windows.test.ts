@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
-import { windowsAttributes } from '../../packages/core/src/files/windows.js';
+import { windowsAttributes, retainWindowsAttributes } from '../../packages/core/src/files/windows.js';
 import { isolatedRuntime } from '../helpers/runtime.js';
 import { writeDocument } from '../helpers/fixtures.js';
 
@@ -54,4 +54,20 @@ it('rejects an unavailable attribute batch without leaking native path diagnosti
     code: 'IO_ERROR',
     message: 'Windows file attributes could not be inspected',
   });
+});
+
+it('returns fresh attributes and isolates a failed request while concurrent callers share the helper', async () => {
+  const isolated = await isolatedRuntime(); cleanups.push(isolated.cleanup);
+  const release = retainWindowsAttributes(); cleanups.push(release);
+  await writeDocument(isolated.config.vault_path, '20_Sources/live.md', 'Retained bytes');
+  const filename = path.join(isolated.config.vault_path, '20_Sources/live.md');
+  expect((await windowsAttributes([filename]))[0]?.hidden).toBe(false);
+  await promisify(execFile)(path.join(process.env.SystemRoot!, 'System32/attrib.exe'), ['+H', filename], { windowsHide: true });
+  const values = await Promise.allSettled([windowsAttributes([filename]), windowsAttributes([path.join(isolated.root, 'absent')]), windowsAttributes([isolated.config.vault_path, filename])]);
+  expect(values[0]).toMatchObject({ status: 'fulfilled', value: [{ path: filename, hidden: true }] });
+  expect(values[1]).toMatchObject({ status: 'rejected', reason: { code: 'IO_ERROR' } });
+  expect(values[2]).toMatchObject({ status: 'fulfilled', value: [{ hidden: false }, { path: filename, hidden: true }] });
+  await release(); await release();
+  expect((await windowsAttributes([filename]))[0]?.hidden).toBe(true);
+  expect(await readFile(filename, 'utf8')).toBe('Retained bytes');
 });

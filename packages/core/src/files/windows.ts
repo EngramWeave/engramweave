@@ -1,35 +1,78 @@
-import { spawn } from 'node:child_process';
-import path from 'node:path';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { windowsFilesExecutable } from './native-path.js';
 import { CoreError } from '../errors.js';
 
 interface Attributes { path: string; reparse: boolean; hidden: boolean }
-// Node's Stats does not expose every Windows reparse tag or the Hidden attribute.
-// A fixed native query inspects metadata only; no caller text enters executable code.
-const query = `$ErrorActionPreference = 'Stop'; [Console]::InputEncoding = New-Object Text.UTF8Encoding($false); [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false); $paths = [Console]::In.ReadToEnd() | ConvertFrom-Json; $result = @(foreach ($p in $paths) { $attributes = [IO.File]::GetAttributes($p); @{ path = $p; reparse = [bool]($attributes -band [IO.FileAttributes]::ReparsePoint); hidden = [bool]($attributes -band [IO.FileAttributes]::Hidden) } }); ConvertTo-Json -InputObject $result -Compress`;
-
+type Request = { paths: string[]; resolve: (values: Attributes[]) => void; reject: (error: CoreError) => void; timer?: ReturnType<typeof setTimeout> };
+let worker: AttributeWorker | undefined;
+let leases = 0;
+let idle: ReturnType<typeof setTimeout> | undefined;
+const problem = () => new CoreError('IO_ERROR', 'Windows file attributes could not be inspected');
+function clearIdle() { clearTimeout(idle); idle = undefined; }
+function scheduleIdle(current: AttributeWorker) {
+  if (leases || worker !== current) return;
+  clearIdle();
+  idle = setTimeout(() => { if (worker === current && !leases) { worker = undefined; void current.close(); } }, 1000);
+}
+class AttributeWorker {
+  private readonly child: ChildProcessWithoutNullStreams;
+  private readonly closed: Promise<void>;
+  private queue: Request[] = [];
+  private active: Request | undefined;
+  private closing = false;
+  constructor() {
+    this.child = spawn(windowsFilesExecutable, ['attributes'], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.closed = new Promise(resolve => this.child.once('close', () => { this.fail(); resolve(); }));
+    this.child.stderr.resume();
+    this.child.once('error', () => this.fail());
+    this.child.stdin.on('error', () => this.fail());
+    createInterface({ input: this.child.stdout }).on('line', line => {
+      const item = this.active; if (!item) return;
+      this.active = undefined; clearTimeout(item.timer);
+      try {
+        const values: unknown = JSON.parse(line);
+        if (!Array.isArray(values) || values.length !== item.paths.length || values.some((value, index) => !value || typeof value !== 'object' || value.path !== item.paths[index] || typeof value.reparse !== 'boolean' || typeof value.hidden !== 'boolean')) throw problem();
+        item.resolve(values);
+      } catch { item.reject(problem()); }
+      this.next();
+    });
+  }
+  request(paths: string[]) {
+    clearIdle();
+    return new Promise<Attributes[]>((resolve, reject) => { this.queue.push({ paths, resolve, reject }); this.next(); });
+  }
+  private next() {
+    if (this.active) return;
+    const item = this.queue.shift();
+    if (!item) { if (this.closing) this.child.stdin.end(); else scheduleIdle(this); return; }
+    this.active = item;
+    item.timer = setTimeout(() => { this.fail(); this.child.kill(); }, 15_000);
+    this.child.stdin.write(JSON.stringify(item.paths) + '\n');
+  }
+  private fail() {
+    clearTimeout(this.active?.timer);
+    this.active?.reject(problem()); this.active = undefined;
+    for (const item of this.queue.splice(0)) item.reject(problem());
+    if (worker === this) { worker = undefined; clearIdle(); }
+    this.child.kill();
+  }
+  async close() { this.closing = true; this.next(); await this.closed; }
+}
+/** Keep one checked IPC worker for a Core/batch lifetime; standalone readers release it when idle. */
+export function retainWindowsAttributes() {
+  leases++; clearIdle(); let released = false;
+  return async () => {
+    if (released) return; released = true;
+    if (--leases === 0 && worker) { const current = worker; worker = undefined; clearIdle(); await current.close(); }
+  };
+}
 export async function windowsAttributes(paths: string[]): Promise<Attributes[]> {
   if (!paths.length) return [];
-  const executable = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['-NoProfile', '-NonInteractive', '-Command', query], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let output = '';
-    const timer = setTimeout(() => { child.kill(); }, 15_000);
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', chunk => { output += String(chunk); });
-    // Native errors can contain paths; expose only the controlled diagnostic.
-    child.stderr.resume();
-    child.once('error', () => { clearTimeout(timer); reject(new CoreError('IO_ERROR', 'Windows file attributes are unavailable')); });
-    child.once('close', code => {
-      clearTimeout(timer);
-      if (code !== 0) return reject(new CoreError('IO_ERROR', 'Windows file attributes could not be inspected'));
-      try {
-        const values: unknown = JSON.parse(output);
-        if (!Array.isArray(values) || values.length !== paths.length || values.some((item, index) =>
-          typeof item !== 'object' || item === null || item.path !== paths[index] || typeof item.reparse !== 'boolean' || typeof item.hidden !== 'boolean')) throw new Error('invalid');
-        resolve(values as Attributes[]);
-      } catch { reject(new CoreError('IO_ERROR', 'Invalid Windows file attribute response')); }
-    });
-    child.stdin.on('error', () => {});
-    child.stdin.end(JSON.stringify(paths));
-  });
+  const results: Attributes[] = [];
+  for (let offset = 0; offset < paths.length; offset += 512) {
+    worker ??= new AttributeWorker();
+    results.push(...await worker.request(paths.slice(offset, offset + 512)));
+  }
+  return results;
 }

@@ -11,11 +11,17 @@ import { PropertyNative } from '../files/property-native.js';
 import { writeSourceProperties, recoverPropertyJournal, isPropertyJournal } from '../files/properties.js';
 import { compiledSourceBytes } from '../source/properties.js';
 import { parseMarkdown, jsonCompatible, lifecycleStatus } from '../source/parse.js';
+import { windowsAttributes } from '../files/windows.js';
+import type { FileRead } from '../files/read.js';
 
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-export async function readDraft(vault: string, relative: string): Promise<Draft> {
+export async function readDraft(vault: string, relative: string, attributesChecked = false): Promise<Draft> {
   if (!relative.startsWith('30_Drafts/')) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Draft path is outside its directory', 403);
-  const file = await readMarkdown(vault, relative);
+  const file = await readMarkdown(vault, relative, attributesChecked);
+  return parseDraft(relative, file);
+}
+/** Validate the fresh bytes already read for a mutation, without opening the file a second time. */
+export function parseDraft(relative: string, file: FileRead): Draft {
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
     const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(text);
@@ -37,21 +43,32 @@ export async function readDraft(vault: string, relative: string): Promise<Draft>
   } catch { throw new CoreError('INVALID_SOURCE', 'Draft Properties are invalid or unsupported', 422); }
 }
 export async function listDrafts(vault: string, source: string) {
+  const result = await listAllDrafts(vault);
+  return { ...result, items: result.items.filter(draft => draft.sources.some(item => item.toLowerCase() === source.toLowerCase())) };
+}
+export async function listAllDrafts(vault: string, reader: typeof readDraft = readDraft) {
   const items: Draft[] = []; const diagnostics: { code: string; message: string; path: string }[] = [];
   let candidates = 0; let total = 0;
   const visit = async (relative: string) => {
     const directory = await resolveVaultDirectory(vault, relative);
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entries = (await readdir(directory, { withFileTypes: true })).filter(entry => !excludedName(entry.name) && !entry.isSymbolicLink());
+    const attributes = await windowsAttributes(entries.map(entry => path.join(directory, entry.name)));
+    const seen = new Set<string>();
+    for (const [index, entry] of entries.entries()) {
+      if (attributes[index]?.hidden || attributes[index]?.reparse) continue;
+      const key = entry.name.toLowerCase();
+      if (seen.has(key)) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Case-folded Draft paths conflict', 403);
+      seen.add(key);
       if (excludedName(entry.name) || entry.isSymbolicLink()) continue;
       const child = `${relative}/${entry.name}`;
       if (entry.isDirectory()) await visit(child);
       else if (entry.isFile() && /\.md$/i.test(entry.name)) {
         if (++candidates > LIMITS.scan_candidates) throw new CoreError('PAYLOAD_TOO_LARGE', 'Draft enumeration exceeds the file limit', 413);
         try {
-          const draft = await readDraft(vault, child);
+          const draft = await reader(vault, child, true);
           total += Buffer.byteLength(draft.body);
           if (total > LIMITS.scan_total_bytes) throw new CoreError('PAYLOAD_TOO_LARGE', 'Draft enumeration exceeds the byte limit', 413);
-          if (draft.sources.some(item => item.toLowerCase() === source.toLowerCase())) items.push(draft);
+          items.push(draft);
         } catch (error) {
           if (error instanceof CoreError && error.code === 'PAYLOAD_TOO_LARGE') throw error;
           diagnostics.push({ code: 'DRAFT_UNREADABLE', message: 'A Draft could not be read safely', path: child });

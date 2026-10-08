@@ -5,8 +5,8 @@ import { ErrorNotice } from './Feedback';
 import './compiler.css';
 import { lifecycleLabel } from './status-labels';
 
-export function SourceCompiler({ document, jobs, active, onStarted, onPublished }: {
-  document: Document; jobs: JobPage | null; active: boolean; onStarted: () => void; onPublished: () => void;
+export function SourceCompiler({ document, jobs, active, onStarted, onPublished, generation }: {
+  document: Document; jobs: JobPage | null; active: boolean; onStarted: () => void; onPublished: () => void; generation?: number | undefined;
 }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [error, setError] = useState<Failure>();
@@ -20,12 +20,12 @@ export function SourceCompiler({ document, jobs, active, onStarted, onPublished 
     let cancelled = false;
     void client.drafts(document.path).then(value => {
       if (!cancelled) {
-        setDrafts(value.items);
+        setDrafts(value.items.filter(item => item.lifecycle_status === 'active'));
         if (value.diagnostics.length) setError({ code: 'DRAFT_UNREADABLE', message: value.diagnostics.map(item => `${item.path}: ${item.message}`).join('\n') });
       }
     }).catch(error => { if (!cancelled) setError(failure(error)); });
     return () => { cancelled = true; };
-  }, [document.path, document.revision, latestStatus]);
+  }, [document.path, document.revision, latestStatus, generation]);
   useEffect(() => {
     if (latest?.kind !== 'compile_source') return;
     if (['queued', 'running'].includes(latest.status)) observedRun.current = latest.id;

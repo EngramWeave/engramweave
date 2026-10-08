@@ -1,17 +1,27 @@
 import { SOURCE_VIEWS, PROCESSING_STATUSES, type SourcesQuery } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { normalizeText, stringList } from '../source/parse.js';
-import { sourceItem, type DocumentRow } from './registry.js';
+import { type DocumentRow } from './registry.js';
 
 export function sourceViews(rows: DocumentRow[]) {
-  return Object.fromEntries(SOURCE_VIEWS.map(view => [view, rows.filter(row => inSourceView(row, view)).length]));
+  const counts = Object.fromEntries(SOURCE_VIEWS.map(view => [view, 0]));
+  for (const row of rows) {
+    const metadata = JSON.parse(row.metadata_json);
+    if (metadata.lifecycle_status === 'discarded') { counts.discarded!++; continue; }
+    counts.all!++;
+    if (metadata.processing_status === 'pending') counts.pending!++;
+    if (['compiled', 'reviewed', 'planned'].includes(metadata.processing_status)) counts.processing!++;
+    if (metadata.processing_status === 'archived') counts.archived!++;
+    if (row.state !== 'ready') counts.issues!++;
+  }
+  return counts;
 }
-export function inSourceView(row: DocumentRow, view: typeof SOURCE_VIEWS[number]) {
-  const item = sourceItem(row);
-  return view === 'all' || view === 'pending' && item.processing_status === 'pending'
-    || view === 'processing' && ['compiled', 'reviewed', 'planned'].includes(item.processing_status ?? '')
-    || view === 'archived' && item.processing_status === 'archived'
-    || view === 'discarded' && item.lifecycle_status === 'discarded'
+export function inSourceView(row: DocumentRow, view: typeof SOURCE_VIEWS[number], metadata = JSON.parse(row.metadata_json)) {
+  if (view === 'discarded') return metadata.lifecycle_status === 'discarded';
+  if (metadata.lifecycle_status === 'discarded') return false;
+  return view === 'all' || view === 'pending' && metadata.processing_status === 'pending'
+    || view === 'processing' && ['compiled', 'reviewed', 'planned'].includes(metadata.processing_status)
+    || view === 'archived' && metadata.processing_status === 'archived'
     || view === 'issues' && row.state !== 'ready';
 }
 function choices(encoded?: string) {
@@ -38,14 +48,14 @@ export function querySources(rows: DocumentRow[], query: SourcesQuery) {
     } catch { throw new CoreError('VALIDATION_ERROR', 'Invalid captured time categories', 400); }
   }
   const filtered = rows.filter(row => {
-    const item = sourceItem(row), metadata = JSON.parse(row.metadata_json);
+    const metadata = JSON.parse(row.metadata_json);
     const captured = row.captured_at ? Date.parse(row.captured_at) : NaN;
-    return (query.view ? inSourceView(row, query.view) : row.state === (query.state ?? 'ready'))
+    return (query.view ? inSourceView(row, query.view, metadata) : row.state === (query.state ?? 'ready'))
       && (!query.state || row.state === query.state)
       && (!query.source_type || row.source_type === query.source_type)
       && (!types.length || types.includes(row.source_type ?? ''))
       && (!tags.length || stringList(metadata.tags).some(tag => tags.includes(tag)))
-      && (!stages.length || stages.includes(item.processing_status ?? ''))
+      && (!stages.length || stages.includes(metadata.processing_status ?? ''))
       && (!issues.length || issues.includes(row.state))
       && (from === null || Number.isFinite(captured) && captured >= from)
       && (to === null || Number.isFinite(captured) && captured <= to)
