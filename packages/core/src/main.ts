@@ -15,6 +15,12 @@ import { retainWindowsAttributes } from './files/windows.js';
 import { SemanticRecall } from './recall/index.js';
 import { AnalyzerJobs } from './jobs/analyzer.js';
 import { DraftPublications } from './review/publication.js';
+import { randomUUID } from 'node:crypto';
+import { ProcessingRounds } from './jobs/processing-rounds.js';
+import { ProcessingSettingsStore } from './processing/settings.js';
+import { ProcessingScheduler } from './processing/scheduler.js';
+import { RecompileActions } from './review/recompile.js';
+import { interruptAttempts } from './jobs/retention.js';
 
 export async function startCore(input: Config) {
   const releaseAttributes = retainWindowsAttributes();
@@ -41,33 +47,45 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     instance = await acquireInstance(config);
     runtime.token = instance.token;
     database = await openDatabase(config);
+    interruptAttempts(database);
     let compiler: CompilerJobs;
     let batches: SourceBatches;
     let analyzer: AnalyzerJobs;
     let publications: DraftPublications;
+    let processing: ProcessingRounds;
+    let recompile: RecompileActions;
     let recall: SemanticRecall | undefined;
-    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy()), async () => { await recall?.afterRefresh(); });
-    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy() || publications?.busy()));
+    const processingSettings = new ProcessingSettingsStore(config.data_dir);
+    await processingSettings.initialize();
+    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy() || recompile?.busy()), async () => { await recall?.afterRefresh(); });
+    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy() || publications?.busy()), undefined, () => processingSettings.read().max_retries);
     await compiler.initialize();
     batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null || Boolean(publications?.busy()), input => analyzer?.guardBatch(input));
     recall = new SemanticRecall(config, database);
-    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || publications?.busy()));
-    publications = new DraftPublications(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy()), id => analyzer.get(id));
-    services = { db: database, jobs, compiler, batches, recall, analyzer, publications, instance_id: instance.id };
+    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || publications?.busy()), undefined, () => processingSettings.read().max_retries);
+    publications = new DraftPublications(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || processing?.busy() || recompile?.busy()), id => analyzer.get(id));
+    const busyOutsideRound = () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || recompile?.busy());
+    processing = new ProcessingRounds(database, config, jobs, compiler, analyzer, processingSettings, busyOutsideRound);
+    recompile = new RecompileActions(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || processing.busy()));
+    const scheduler = new ProcessingScheduler(() => processingSettings.read(), () => processing.busy() || busyOutsideRound(), async () => { await processing.submit({ request_id: randomUUID(), mode: 'pending' }, 'schedule'); });
+    services = { db: database, jobs, compiler, batches, recall, analyzer, publications, processing, processingSettings, scheduler, recompile, instance_id: instance.id };
     await analyzer.initialize();
     await batches.initialize();
     await publications.initialize();
+    await recompile.initialize();
+    processing.initialize();
     runtime.status = 'ready';
+    scheduler.reset();
     let closed = false;
     return { config, instance_id: instance.id, server, async close() {
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+      try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.recompile?.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
       finally { try { database?.close(); } finally { try { await instance?.close(); } finally { await releaseAttributes(); } } }
     } };
   } catch (error) {
-    try { await server.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+    try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.recompile?.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
     finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }

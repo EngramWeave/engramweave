@@ -45,6 +45,8 @@ describe('C2 opt-in real models and limited Codex MCP', () => {
         for (const task of ['review','relation'] as const) {
           profile[task].template_path = `90_System/Prompts/${task === 'review' ? 'Review' : 'Relation'}/${material.name === 'knowledge' ? 'Knowledge' : 'Academic'}.md`;
           profile[task].execution = { ...profile[task].execution, route, model: route === 'api' ? 'qwen3.8-27b' : 'gpt-6.1-sol', codex_path: process.env.ENGRAMWEAVE_C2_CODEX_PATH ?? '', output_format: 'text', reasoning_effort: route === 'api' ? 'none' : 'low', timeout_seconds: 600 };
+          if (route === 'api' && process.env.ENGRAMWEAVE_C2_MAX_TOKENS) profile[task].execution.output_tokens = { parameter: 'max_tokens', limit: Number(process.env.ENGRAMWEAVE_C2_MAX_TOKENS) };
+          if (route === 'api' && process.env.ENGRAMWEAVE_C2_FORMAT === 'json_schema') profile[task].execution.output_format = 'json_schema';
         }
         await analyzer.settings.save({ default_profile: profile.id, profiles: [profile] });
         const before = await Promise.all([f.sourcePath, f.draftPath, '40_Knowledge/visibility.md','10_Ideas/reading.md','50_Research/scope.md'].map(p => readFile(path.join(f.config.vault_path, p))));

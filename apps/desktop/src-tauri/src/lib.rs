@@ -71,7 +71,7 @@ async fn core_request(
     operation: routes::Operation,
     input: Value,
 ) -> Result<Value> {
-    if matches!(operation, routes::Operation::Recall | routes::Operation::RecallTest | routes::Operation::AnalysisCancel) {
+    if matches!(operation, routes::Operation::Recall | routes::Operation::RecallTest | routes::Operation::AnalysisCancel | routes::Operation::ProcessingCancel) {
         let mut connection = with_host(&state, |host| host.recall_connection()).await?;
         return tauri::async_runtime::spawn_blocking(move || connection.request(operation, input)).await
             .map_err(|_| Failure::new("IO_ERROR", "Recall request failed"))?;

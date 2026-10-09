@@ -40,9 +40,11 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
     const fields = 'id,path_key,path,kind,state,revision,size,mtime,title,source_type,captured_at,original_locator,metadata_json,asset_json,diagnostics_json,indexed_at,' + textFields.map(field => query.q?.trim() ? field : `'' AS ${field}`).join(',');
     const all = db.prepare(`SELECT ${fields} FROM documents WHERE kind='source' ORDER BY path_key`).all() as DocumentRow[];
     let rows = querySources(all, query);
+    const counts = new Map((db.prepare('SELECT path_key,count(*) AS count FROM recompile_actions GROUP BY path_key').all() as { path_key: string; count: number }[]).map(row => [row.path_key, row.count]));
+    if (query.recompile) rows = rows.filter(row => query.recompile === 'recompile' ? (counts.get(row.path_key) ?? 0) > 0 : !counts.get(row.path_key));
     if (query.path_prefix !== undefined) rows = rows.filter(row => inPathPrefix(row.path, query.path_prefix!));
     const meta = indexMeta(db);
-    return { items: rows.slice(offset, offset + limit).map(sourceItem), total: rows.length, limit, offset, index_generation: meta.index_generation, indexed_at: meta.last_scan_at,
+    return { items: rows.slice(offset, offset + limit).map(row => ({ ...sourceItem(row), recompile_count: counts.get(row.path_key) ?? 0 })), total: rows.length, limit, offset, index_generation: meta.index_generation, indexed_at: meta.last_scan_at,
       views: sourceViews(all), facets: { types: [...new Set(all.map(row => row.source_type).filter((type): type is string => type !== null))].sort(), tags: [...new Set(all.flatMap(row => stringList(JSON.parse(row.metadata_json).tags)))].sort() } };
   } });
   server.route({ ...API.status, async handler() {
@@ -69,6 +71,8 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
     const status: Status = { status: 'ready', core_version: CORE_VERSION, api_version: API_VERSION, instance_id,
       vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? services().analyzer?.active() ?? null,
       index_generation: meta.index_generation, last_scan_at: meta.last_scan_at, counts, scan_roots: roots, limits: LIMITS, source_batch: services().batches?.latest() ?? null,
+      processing_round: services().processing?.active() ?? null,
+      ...(services().scheduler ? {processing_schedule:services().scheduler!.read()} : {}),
       diagnostics: roots.filter(root => !root.available).map(root => ({ code: 'SCAN_ROOT_UNAVAILABLE', message: 'Scan root is currently absent or unavailable', path: root.path })) };
     if (semantic) status.semantic_index = semantic;
     return status;

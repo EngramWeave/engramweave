@@ -43,11 +43,11 @@ Sources 使用列表与属性预览并排的布局。顶部六个 View 为 All S
 
 ## Compiler 与 Draft
 
-Settings 的 Compiler 区域配置 API／Codex、模型、reasoning effort、超时以及服务支持的输出格式。远程凭据经 Windows DPAPI 保护并绑定 endpoint，界面读取不返回密钥；无需认证的本地回环 API 可以留空。当前只配置 Compiler，Analyzer 模板与 Profile 在后续扩展。
+Settings 的 Compiler 区域配置 API／Codex、模型、reasoning effort、超时以及服务支持的输出格式。远程凭据经 Windows DPAPI 保护并绑定 endpoint，界面读取不返回密钥；无需认证的本地回环 API 可以留空。Analyzer 设置支持独立 Review／Relation 模板、模型、执行路径、Profile 与复用偏好，详见 [Analyzer](analyzer.md)。
 
 Sources 详情的 Run Compiler 对 active、pending／compiled、已登记 Source 执行一次正文编译。当前扫描与 Compiler 串行；任务结束后刷新阶段与相关 Draft 列表。每次编译新增 Draft，已有用户编辑保留；可预览各 Draft 或通过原生宿主在 Obsidian 打开，Desktop 不编辑正文。Compiler 失败显示在对应 Source／Job，设置错误留在设置区域，不跨页保留。
 
-正文生成成功不表示完整 Human Review 工作流完成；Analyzer、Recompile 人工入口、批处理／调度与正式整合仍在后续切片。具体合同和恢复限制见 [Compiler 与 Draft](compiler.md)。
+正文生成成功不表示分析已经结束。Desktop 可选具体 Draft 启动 Analyze Draft 或独立 Retry Review／Retry Relation；分析正文位于 Obsidian 侧边栏。Sources 多选提供正文 Compile 和完整 Process，Jobs 提供 Process Pending、轮次／尝试历史、取消与明确 Draft 多选重分析。Settings 配置时间／间隔、时区和有限重试；最小反馈 Recompile 保留旧稿、返回 pending，Sources 显示计数并支持 Pending 筛选。具体合同见 [Processing](processing.md)。人工直接入库由 [Obsidian MVP](obsidian-mvp.md) 实现，完整 Planner／ChangeSet 整合仍待后续阶段。
 
 ## 验证
 
@@ -75,3 +75,5 @@ Settings 提供独立 Embedding／可选 Reranker 的 endpoint、模型和凭据
 ## Draft Analyzer
 
 Settings 提供 Analysis Profile、两项模板内容、各自模型／路径及 Relation 的三档复用偏好。Sources Inspector 可修改 active pending Source 的预设引用，明确选择一份 Draft 后点击 Analyze Draft。多 Draft 不自动挑选；任务显示 Review／Relation 独立状态与所属错误，取消使用独立连接快照，不阻塞宿主生命周期。分析结果正文留给 Obsidian 侧边栏，不在 Desktop 增加审阅面板。配置、证据和恢复合同见 [Draft Analyzer](analyzer.md)。
+
+Compiler、每个 Profile 的 Review 和 Relation 均在 API 配置中提供独立的 Output token limit 与参数名称选择。留空使用服务默认；Codex 配置不显示 API 预算。摘要／建议长度由模板控制，上限包含多少推理 token 取决于服务。HTTP 400 等请求拒绝在所属任务中显示已识别的原因，不自动更改用户选择。

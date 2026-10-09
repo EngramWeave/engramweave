@@ -14,7 +14,7 @@ import { defaultSettings } from '../../packages/core/src/execution/settings.js';
 export const analysisProfile = (reuse: AnalysisProfile['reuse'] = 'none'): AnalysisProfile => ({ id: 'knowledge', name: 'Knowledge', reuse,
   review: { template_path: '90_System/Prompts/Review/Knowledge.md', execution: { ...defaultSettings, route: 'api', endpoint: 'http://127.0.0.1:8094/v1', model: 'fixture' } },
   relation: { template_path: '90_System/Prompts/Relation/Knowledge.md', execution: { ...defaultSettings, route: 'api', endpoint: 'http://127.0.0.1:8094/v1', model: 'fixture' } } });
-export const emptyAnalysis = (task: 'review' | 'relation') => JSON.stringify(task === 'review' ? { summary: 'No findings.', findings: [], limitations: [] } : { summary: 'No relations.', suggestions: [], limitations: [] });
+export const emptyAnalysis = (task: 'review' | 'relation') => JSON.stringify(task === 'review' ? { summary: 'No findings.', findings: [] } : { summary: 'No relations.', suggestions: [] });
 export async function analyzerFixture(executor?: AnalyzerExecutor): Promise<Awaited<ReturnType<typeof isolatedRuntime>> & {
   db: Database.Database; analyzer: AnalyzerJobs; request: () => AnalyzeRequest; recall: Pick<SemanticRecall, 'recall' | 'context'>;
   hit: RecallHit; sourcePath: string; draftPath: string; libraryPath: string; close(): Promise<void>;

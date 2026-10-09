@@ -47,6 +47,8 @@ export function Jobs({ page }: { page: JobPage | null }) {
             </p>
           ))}
           {job.kind === 'compile_source' && <p className="path">{job.source_path}{job.draft_path ? ` → ${job.draft_path}` : ''}</p>}
+          {job.kind === 'compile_source' && job.attempts?.length ? <details className="task-attempts"><summary>Compiler · {job.attempts.length} attempts</summary>{job.attempts.map(a => <p key={a.number}>#{a.number} · {a.status} · {a.error?.message ?? 'Completed'}{a.next_retry_at ? ` · Retry after ${a.next_retry_at}` : ''}</p>)}</details> : null}
+          {job.kind === 'analyze_draft' && (['review','relation'] as const).map(t => job[t].attempts?.length ? <details className="task-attempts" key={t}><summary>{t} · {job[t].attempts!.length} attempts</summary>{job[t].attempts!.map(a => <p key={a.number}>#{a.number} · {a.status} · {a.error?.message ?? 'Completed'}{a.next_retry_at ? ` · Retry after ${a.next_retry_at}` : ''}</p>)}</details> : null)}
           {job.kind === 'analyze_draft' && <><p className="path">{job.source_path} → {job.draft_path} · {job.profile_id}</p>{(['review','relation'] as const).map(t => job[t].error && <p className="notice warning" key={t}>{t} · {job[t].error!.message}</p>)}</>}
         </article>
       ))}

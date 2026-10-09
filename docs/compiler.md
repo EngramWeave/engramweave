@@ -6,11 +6,15 @@ Compiler 整理明确投递的文本和 Source Annotation，仅生成标题与 M
 
 在 Desktop Settings 连接 Core 后配置 Compiler 的执行路径、模型、reasoning effort 和超时。执行设置保存在 `data_dir/compiler-settings.json`，不扩展 bootstrap 的五字段配置，也不进入 Vault 或 Git。Source 详情的 **Run Compiler** 显式执行一次正文任务，生成的 Draft 列在同一详情区域，可预览或在 Obsidian 打开。Desktop 不提供正文编辑器；Capture、启动和扫描均不调用模型。
 
-API 使用 OpenAI-compatible `/chat/completions`，支持 JSON Schema、JSON object 或 JSON in text；选择服务实际支持的模式，不自动切换模式或执行路径。JSON in text 允许完整包裹结果的单个 JSON 代码块，仍严格验证内部只有 `title`／`body`。模型拒绝、不完整响应、额外字段、空结果、超时或超限都会失败，不推进内容阶段。
+API 使用 OpenAI-compatible `/chat/completions`，支持 JSON Schema、JSON object 或 JSON in text；选择服务实际支持的模式，不自动切换模式或路径。JSON in text 允许完整包裹结果的单个 JSON 代码块，仍严格验证只有 `title`／`body`。模型拒绝、不完整响应、额外字段、空结果和超限直接失败；明确暂时的连接／超时／HTTP 错误按 [Processing](processing.md) 的有限配置重试。发布不在推理重试中，已保存的正文只走恢复，不再次生成。
 
 API key 经 Windows 当前用户 DPAPI 加密，保存在 Vault/Git 外的 `compiler-api-key.dpapi`，并绑定规范化 endpoint。设置读取只返回 `api_key_configured`，不提供密钥读取接口。换 endpoint 时不沿用其他 endpoint 的凭据；同 endpoint 留空保留原密钥。HTTP 仅允许显式回环地址，远程使用 HTTPS；重定向拒绝。无需认证的本地回环服务可不填 key。Core 可独立读取受保护凭据，不要求 Desktop 一直打开；原生桥只允许声明的请求及写入字段。
 
 例如未以 structured output 模式启动的本地服务，应选择 JSON in text。模型名称、reasoning effort 和上下文预算由实际服务决定；不对不支持的参数静默降级。
+
+API 可设置 `Output token limit`，留空沿用服务默认值；按服务支持选择 `max_tokens` 或 `max_completion_tokens`，仅发送一个字段。值为 1–131072，服务／模型可以限制更小范围；部分服务将推理 token 计入总输出预算，上限过低会使正文截断。此上限独立于 Review／Relation，并且只用于 API。Codex 路径不应用 API token 预算。配置保存不会调用模型。
+
+错误区分 HTTP 参数拒绝、输出 token 截断、内容拒绝、空正文与不兼容协议。服务返回 `response_format_not_supported` 时提示开启其 structured output 能力或明确选择 JSON in text；不自动替换格式。Ninfer 的实际服务版本／启动选项决定支持范围，不能由主分支文档推断本机已开启。[Ninfer HTTP 合同](https://github.com/Neroued/ninfer/blob/master/docs/serving.md)。
 
 Codex 使用用户配置的绝对 `.exe` 路径和该 CLI 已有 ChatGPT 登录，不复制认证文件、不回退到另行付费的 API。适配器使用 `codex exec`，忽略用户运行配置和规则、限制项目文档注入、使用 read-only 沙箱，并关闭 shell、Code Mode host、apps、plugins、浏览器、computer-use、skill search 和多 Agent 能力。Compiler 不需要文件或 Core Tools/MCP 工具。只有完成的结构化正文结果才可发布，工具执行事件会失败；诊断事件不是工具动作。当前支持在 Windows 上具有这些选项的 Codex CLI，验证过 0.160.0；旧 CLI 缺少选项时报告失败。
 

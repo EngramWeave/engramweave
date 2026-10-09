@@ -28,7 +28,7 @@ export class ScanJobs {
     const rows = this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC,id ASC LIMIT ? OFFSET ?').all(limit, offset) as JobRow[];
     return { items: rows.map(asJob), total: (this.db.prepare('SELECT count(*) AS count FROM jobs').get() as { count: number }).count, limit, offset };
   }
-  submit(mode: Job['mode']): { job: Job; reused: boolean } {
+  submit(mode: Job['mode'], updateSemantic = true): { job: Job; reused: boolean } {
     if (this.compilerBusy()) throw new CoreError('JOB_BUSY', 'Compiler is active; scan after its publication completes', 409);
     if (this.stopping) throw new CoreError('CORE_UNAVAILABLE', 'Core is stopping', 503);
     const active = this.active();
@@ -38,17 +38,17 @@ export class ScanJobs {
     }
     const id = randomUUID();
     this.db.prepare("INSERT INTO jobs(id,kind,mode,status,created_at) VALUES(?,'scan_vault',?,'queued',?)").run(id, mode, new Date().toISOString());
-    this.running = new Promise<void>(resolve => setImmediate(resolve)).then(() => this.execute(id, mode));
+    this.running = new Promise<void>(resolve => setImmediate(resolve)).then(() => this.execute(id, mode, updateSemantic));
     // Keep background database failures handled until close() can report them.
     void this.running.catch(() => {});
     return { job: this.get(id)!, reused: false };
   }
-  private async execute(id: string, mode: Job['mode']) {
+  private async execute(id: string, mode: Job['mode'], updateSemantic: boolean) {
     try {
       this.db.prepare("UPDATE jobs SET status='running',started_at=? WHERE id=?").run(new Date().toISOString(), id);
       await scanVault(this.db, this.vault, id, mode, processed => { this.db.prepare('UPDATE jobs SET processed_files=? WHERE id=?').run(processed, id); });
       // Registration is already committed. Semantic failures must never rewrite that outcome.
-      try { await this.afterScan(); } catch { /* Independent semantic status owns its errors. */ }
+      try { if (updateSemantic) await this.afterScan(); } catch { /* Independent semantic status owns its errors. */ }
     } catch (error) {
       const safe = error instanceof CoreError ? { code: error.code, message: error.message, details: null }
         : { code: 'IO_ERROR', message: 'Scan could not be completed', details: null };
@@ -63,4 +63,5 @@ export class ScanJobs {
     }
   }
   async close() { this.stopping = true; await this.running; }
+  async wait() { await this.running; }
 }

@@ -62,7 +62,7 @@ describe('Analyzer rounds, reuse and recovery', () => {
       expect((await f.analyzer.cancel(request.request_id)).status).toBe('interrupted');
       const saved = await f.analyzer.results.read(request.request_id);
       saved.job.status = 'running'; saved.job.review.status = 'running'; saved.job.relation.status = 'pending';
-      saved.review.result = JSON.parse(emptyAnalysis('review')); await f.analyzer.results.save(saved);
+      saved.review.result = { ...JSON.parse(emptyAnalysis('review')), limitations: [] }; await f.analyzer.results.save(saved);
       f.db.prepare('DELETE FROM analyzer_jobs').run(); let calls = 0;
       const recovered = new AnalyzerJobs(f.db, f.config, f.recall, () => false, async task => { calls++; return emptyAnalysis(task); });
       await recovered.initialize();

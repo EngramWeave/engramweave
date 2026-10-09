@@ -160,9 +160,9 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 - web/manual Markdown Capture 和离线数据库投影恢复。
 - Tauri Desktop 的 Core 启停／连接、状态、Sources、扫描 Jobs、Search 与原生打开。
 
-当前扫描范围是 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`；保存 Capture 后仍需显式扫描。登记支持五个处理阶段和独立生命周期，为缺失或空阶段补 `pending`，保护正文、Annotation 和其他属性。Desktop 可配置 API／Codex，显式 Compiler 每次成功新增 Draft，保留旧文件与用户编辑；未 archived 的 Source 可有多份 Draft。三类笔记支持 BM25＋Embedding 混合召回、可选 Reranker、显式首次建立和 Refresh 增量更新。可通过 Analysis Profile 分别配置 Review／Relation，明确选择 Draft 执行独立分析，不改正文或正式知识。人工 Review 动作、完整轮次调度和 ChangeSets 尚未实现。状态、执行和恢复边界见 [Core 使用说明](docs/core.md)、[Compiler 与 Draft](docs/compiler.md)、[语义召回](docs/semantic-recall.md)及 [Draft Analyzer](docs/analyzer.md)。
+当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。最小 Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian MVP 支持人工直接入库；完整 Review Note、Intent、Planner 和 ChangeSet 尚未实现。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)和 [Processing](docs/processing.md)。
 
-P2 计划接入 Zotero 选段投递、状态与调度、API／Codex 分析和 Obsidian 人工审阅。P3 完成统一 Planner、ChangeSet 审查与执行、Git 提交和再次找回，形成首个实用闭环。两项 Analyzer、完整审阅整合、维护与科研增强尚未交付。
+P2 后续接入 Zotero 选段投递、完整 Review Note／Intent 与编辑差异恢复。P3 完成统一 Planner、ChangeSet 审查执行及 Git，MVP 人工直接入库继续保留。完整审阅整合、维护与科研增强尚未交付。
 
 ---
 

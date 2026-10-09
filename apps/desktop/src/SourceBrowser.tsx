@@ -42,7 +42,7 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
   const selectable = page?.items.filter(source => source.revision) ?? [];
   const allSelected = selectable.length > 0 && selectable.every(source => selected[source.path]);
   return <div className="sources-page">
-    <div className="source-stats">{categories.map(category => <button key={category.state} className={`source-stat ${category.tone} ${(query.view ?? 'all') === category.state ? 'selected' : ''}`} disabled={!connected} onClick={() => { setSelected({}); const next = { ...query, view: category.state }; delete next.stages; delete next.issues; changeQuery(next); }}>
+    <div className="source-stats">{categories.map(category => <button key={category.state} className={`source-stat ${category.tone} ${(query.view ?? 'all') === category.state ? 'selected' : ''}`} disabled={!connected} onClick={() => { setSelected({}); const next = { ...query, view: category.state }; delete next.stages; delete next.issues; if (category.state !== 'pending') delete next.recompile; changeQuery(next); }}>
       <span className="row-symbol"><Icon name={category.icon} /></span><span><strong>{category.title}</strong><b>{counts?.[category.state] ?? '—'}</b><small>{category.caption}</small></span>
       <svg className="stat-wave" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 31Q24-9 45 19T84 29T125 34H200V40H0Z" fill="currentColor" /></svg>
     </button>)}</div>
@@ -59,7 +59,7 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
         </td>
         <td><span className={`type-tag ${source.source_type === 'manual' ? 'green' : 'blue'}`}>{source.source_type ? typeLabel(source.source_type) : 'Unknown'}</span></td>
         <td><span className={`state-tag ${healthTones[source.state]}`}><i />{source.state === 'ready' ? 'Available' : typeLabel(source.state)}</span></td>
-        <td title={source.state === 'ready' ? 'processing_status' : 'Last known processing_status'}><span className={`state-tag ${source.processing_status ? processingTone(source.processing_status) : 'slate'}`}>{processingLabel(source.processing_status)}</span></td>
+        <td title={source.state === 'ready' ? 'processing_status' : 'Last known processing_status'}><span className={`state-tag ${source.processing_status ? processingTone(source.processing_status) : 'slate'}`}>{processingLabel(source.processing_status)}</span>{Boolean(source.recompile_count) && <small className="row-meta">Recompile · {source.recompile_count}</small>}</td>
         <td title={source.state === 'ready' ? 'lifecycle_status' : 'Last known lifecycle_status'}><span className={`state-tag ${source.lifecycle_status === 'active' ? 'green' : 'slate'}`}>{lifecycleLabel(source.lifecycle_status)}</span></td>
         <td><span className="row-meta" title={source.captured_at ?? 'Captured time unknown'}>{source.captured_at && !Number.isNaN(Date.parse(source.captured_at)) ? new Date(source.captured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</span></td>
       </tr>)}</tbody></table></div>

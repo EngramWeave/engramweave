@@ -1,14 +1,25 @@
 import { Value } from '@sinclair/typebox/value';
+import { Type } from '@sinclair/typebox';
 import { ReviewResultSchema, RelationResultSchema, type ReviewResult, type RelationResult } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import type { AnalysisSnapshot, AnalysisEvidence } from './input.js';
+import { AnalysisMaterials } from './materials.js';
 
 export const analysisSchema = (task: 'review' | 'relation') => task === 'review' ? ReviewResultSchema : RelationResultSchema;
-/** Provider strict schemas forbid path allOf. Core still checks the full contract and exact evidence. */
-export function analysisModelSchema(task: 'review' | 'relation'): object {
-  const schema = JSON.parse(JSON.stringify(analysisSchema(task)));
-  schema.properties[task === 'review' ? 'findings' : 'suggestions'].items.properties.evidence.items.properties.path = { type: 'string' };
-  return schema;
+export function analysisModelSchema(task: 'review' | 'relation') {
+  return Type.Object({ summary: Type.String({ maxLength: 12000 }),
+    [task === 'review' ? 'findings' : 'suggestions']: Type.Array(Type.Object({ message: Type.String({ minLength: 1, maxLength: 4000 }),
+      evidence: Type.Array(Type.String({ pattern: '^[SDK][1-9][0-9]*$' }), { minItems: 1, maxItems: 10 }) }, { additionalProperties: false }), { maxItems: 30 }) }, { additionalProperties: false });
+}
+export function analysisModelOutput(text: string, task: 'review' | 'relation', snapshot: AnalysisSnapshot, evidence: AnalysisEvidence, materials: AnalysisMaterials, allowFence = false): ReviewResult | RelationResult {
+  if (allowFence) text = /^\s*```(?:json)?\s*\r?\n([\s\S]*?)\r?\n```\s*$/.exec(text)?.[1] ?? text;
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { throw new CoreError('INVALID_MODEL_OUTPUT', 'Analyzer returned invalid JSON', 422); }
+  if (Buffer.byteLength(text) > 250_000 || !Value.Check(analysisModelSchema(task), value)) throw new CoreError('INVALID_MODEL_OUTPUT', 'Analyzer must return summary and brief suggestions with evidence IDs', 422);
+  const result = value as Record<string, unknown>;
+  const field = task === 'review' ? 'findings' : 'suggestions';
+  const items = result[field] as { message: string; evidence: string[] }[];
+  return analysisOutput(JSON.stringify({ summary: result.summary, [field]: items.map(item => ({ message: item.message, evidence: [...new Set(item.evidence)].map(id => materials.resolve(id)) })), limitations: [] }), task, snapshot, evidence);
 }
 export function analysisOutput(text: string, task: 'review' | 'relation', snapshot: AnalysisSnapshot, evidence: AnalysisEvidence, allowFence = false): ReviewResult | RelationResult {
   if (allowFence) text = /^\s*```(?:json)?\s*\r?\n([\s\S]*?)\r?\n```\s*$/.exec(text)?.[1] ?? text;

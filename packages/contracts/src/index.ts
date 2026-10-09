@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 export const LIMITS = Object.freeze({
   markdown_bytes: 5 * 1024 * 1024,
   capture_json_bytes: 8 * 1024 * 1024,
@@ -80,6 +80,7 @@ export const CompilerSettingsSchema = object({
   output_format: enumeration(['json_schema', 'json_object', 'text']),
   reasoning_effort: enumeration(['default', 'none', 'low', 'medium', 'high', 'xhigh', 'max']),
   timeout_seconds: Type.Integer({ minimum: 10, maximum: 1800 }),
+  output_tokens: Type.Optional(object({ parameter: enumeration(['max_tokens', 'max_completion_tokens']), limit: Type.Integer({ minimum: 1, maximum: 131072 }) })),
 });
 export type CompilerSettings = Static<typeof CompilerSettingsSchema>;
 export const CompilerSettingsResponseSchema = object({ settings: CompilerSettingsSchema, api_key_configured: Type.Boolean() });
@@ -91,7 +92,11 @@ export type Draft = Static<typeof DraftSchema>;
 export const CompileRequestSchema = object({ path: CapturePathSchema, revision: RevisionSchema,
   request_id: Type.String({ pattern: '^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$' }) });
 export type CompileRequest = Static<typeof CompileRequestSchema>;
+export const ExecutionAttemptSchema = object({ number: count, status: enumeration(['running','succeeded','failed','interrupted']),
+  started_at: instant, finished_at: nullable(instant), error: nullable(ErrorSchema.properties.error), next_retry_at: nullable(instant) });
+export type ExecutionAttempt = Static<typeof ExecutionAttemptSchema>;
 export const CompilerJobSchema = object({ id: nonempty, kind: Type.Literal('compile_source'), status: JobStatusSchema,
+  attempts: Type.Optional(Type.Array(ExecutionAttemptSchema)),
   created_at: instant, started_at: nullable(instant), finished_at: nullable(instant),
   source_path: CapturePathSchema, source_revision: RevisionSchema, draft_path: nullable(DraftPathSchema),
   route: enumeration(['api', 'codex']), model: text, prompt_version: Type.Literal('compiler-v1'),
@@ -109,21 +114,23 @@ export const AnalysisSettingsResponseSchema = object({ settings: AnalysisSetting
 export const AnalysisSettingsWriteSchema = object({ settings: AnalysisSettingsSchema, credentials: Type.Optional(Type.Array(object({ profile_id: AnalysisProfileIdSchema, task: enumeration(['review','relation']), api_key: Type.String({ minLength: 1, maxLength: 8192 }) }), { maxItems: 40 })) });
 export const AnalysisTemplateSchema = object({ path: AnalysisTemplatePathSchema, content: Type.String({ maxLength: 64000 }), revision: RevisionSchema });
 export const AnalyzeRequestSchema = object({ request_id: CompileRequestSchema.properties.request_id, source_path: CapturePathSchema, source_revision: RevisionSchema,
-  draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: Type.Optional(AnalysisProfileIdSchema) });
+  draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: Type.Optional(AnalysisProfileIdSchema), task: Type.Optional(enumeration(['review','relation'])) });
 export type AnalyzeRequest = Static<typeof AnalyzeRequestSchema>;
 export const AnalysisCitationSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, DraftPathSchema]), revision: RevisionSchema,
   start_line: Type.Integer({ minimum: 1 }), end_line: Type.Integer({ minimum: 1 }) });
 export const ReviewResultSchema = object({ summary: Type.String({ maxLength: 12000 }), findings: Type.Array(object({
-  category: enumeration(['omission','meaning','understanding','error','claim','scope','other']), message: Type.String({ minLength: 1, maxLength: 4000 }),
+  category: Type.Optional(enumeration(['omission','meaning','understanding','error','claim','scope','other'])), message: Type.String({ minLength: 1, maxLength: 4000 }),
   evidence: Type.Array(AnalysisCitationSchema, { minItems: 1, maxItems: 10 }) }), { maxItems: 30 }), limitations: Type.Array(Type.String({ maxLength: 2000 }), { maxItems: 20 }) });
 export const RelationResultSchema = object({ summary: Type.String({ maxLength: 12000 }), suggestions: Type.Array(object({
-  category: enumeration(['connection','conflict','integration','merge','new_viewpoint']), message: Type.String({ minLength: 1, maxLength: 4000 }),
+  category: Type.Optional(enumeration(['connection','conflict','integration','merge','new_viewpoint'])), message: Type.String({ minLength: 1, maxLength: 4000 }),
   evidence: Type.Array(AnalysisCitationSchema, { minItems: 1, maxItems: 10 }) }), { maxItems: 30 }), limitations: Type.Array(Type.String({ maxLength: 2000 }), { maxItems: 20 }) });
 export type ReviewResult = Static<typeof ReviewResultSchema>;
 export type RelationResult = Static<typeof RelationResultSchema>;
-export const AnalyzerTaskStateSchema = object({ status: enumeration(['pending','running','succeeded','failed','interrupted']), route: enumeration(['api','codex']), model: text,
+export const AnalyzerTaskStateSchema = object({ status: enumeration(['pending','running','succeeded','failed','interrupted','skipped']), route: enumeration(['api','codex']), model: text,
+  attempts: Type.Optional(Type.Array(ExecutionAttemptSchema)),
   started_at: nullable(instant), finished_at: nullable(instant), error: nullable(ErrorSchema.properties.error) });
 export const AnalyzerJobSchema = object({ id: nonempty, kind: Type.Literal('analyze_draft'), status: JobStatusSchema, created_at: instant, started_at: nullable(instant), finished_at: nullable(instant),
+  review_reference_id: Type.Optional(nonempty),
   source_path: CapturePathSchema, source_revision: RevisionSchema, draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: AnalysisProfileIdSchema,
   review: AnalyzerTaskStateSchema, relation: AnalyzerTaskStateSchema, error: nullable(ErrorSchema.properties.error) });
 export type AnalyzerJob = Static<typeof AnalyzerJobSchema>;
@@ -142,7 +149,7 @@ export const SourceSchema = object({
   id: nonempty, path: VaultPathSchema, title: text, source_type: nullable(text), state: DocumentStateSchema,
   processing_status: ProcessingStatusSchema, lifecycle_status: LifecycleStatusSchema,
   revision: nullable(RevisionSchema), original_locator: nullable(text), captured_at: nullable(text),
-  asset: nullable(AssetSchema), diagnostics: DiagnosticsSchema,
+  asset: nullable(AssetSchema), diagnostics: DiagnosticsSchema, recompile_count: Type.Optional(count),
 });
 export type Source = Static<typeof SourceSchema>;
 const documentCommon = {
@@ -196,6 +203,7 @@ export const SourcesQuerySchema = object({ ...PaginationQuerySchema.properties,
   stages: Type.Optional(Type.String({ maxLength: 4096 })), issues: Type.Optional(Type.String({ maxLength: 4096 })),
   captured_from: Type.Optional(instant), captured_to: Type.Optional(instant),
   time_ranges: Type.Optional(Type.String({ maxLength: 4096 })),
+  recompile: Type.Optional(enumeration(['first','recompile'])),
   sort: Type.Optional(enumeration(['title_asc', 'title_desc', 'captured_asc', 'captured_desc'])),
 });
 export const SourcesResponseSchema = object({ ...page(SourceSchema), ...indexed,
@@ -229,6 +237,31 @@ export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: 
 export const CaptureResponseSchema = object({ path: CapturePathSchema, revision: RevisionSchema, created: Type.Boolean(), scan_required: Type.Literal(true) });
 export type CaptureRequest = Static<typeof CaptureRequestSchema>;
 export type CaptureResponse = Static<typeof CaptureResponseSchema>;
+export const ProcessingSettingsSchema = object({ enabled: Type.Boolean(), mode: enumeration(['daily','interval']),
+  daily_time: Type.String({ pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' }), time_zone: Type.String({ minLength: 1, maxLength: 100 }),
+  interval_minutes: Type.Integer({ minimum: 1, maximum: 10080 }), max_retries: Type.Integer({ minimum: 0, maximum: 5 }) });
+export type ProcessingSettings = Static<typeof ProcessingSettingsSchema>;
+export const ProcessingRequestSchema = object({ request_id: CompileRequestSchema.properties.request_id, mode: enumeration(['pending','selected','analyze']),
+  items: Type.Optional(Type.Array(object({ source_path: CapturePathSchema, source_revision: Type.Optional(RevisionSchema),
+    draft_path: Type.Optional(DraftPathSchema), draft_revision: Type.Optional(RevisionSchema), profile_id: Type.Optional(AnalysisProfileIdSchema),
+    task: Type.Optional(enumeration(['review','relation'])) }), { minItems: 1, maxItems: 100 })) });
+export type ProcessingRequest = Static<typeof ProcessingRequestSchema>;
+export const ProcessingRoundSchema = object({ id: nonempty, mode: enumeration(['pending','selected','analyze']), trigger: enumeration(['manual','schedule']),
+  status: JobStatusSchema, created_at: instant, started_at: nullable(instant), finished_at: nullable(instant), max_retries: count,
+  registration_job_id: nullable(text), error: nullable(ErrorSchema.properties.error), items: Type.Array(object({
+    source_path: CapturePathSchema, source_revision: nullable(RevisionSchema), draft_path: nullable(DraftPathSchema), draft_revision: nullable(RevisionSchema),
+    status: enumeration(['pending','running','succeeded','failed','skipped','interrupted']),
+    phase: enumeration(['waiting','compiler','analyzer','finished']), task: Type.Optional(enumeration(['review','relation'])),
+    compiler_job_id: nullable(text), analyzer_job_id: nullable(text), error: nullable(ErrorSchema.properties.error),
+  }), { maxItems: 10000 }) });
+export type ProcessingRound = Static<typeof ProcessingRoundSchema>;
+export const ScheduleStateSchema = object({ next_due: nullable(instant), waiting: Type.Boolean(), last_trigger: nullable(instant), reason: nullable(text) });
+export type ScheduleState = Static<typeof ScheduleStateSchema>;
+export const RecompileRequestSchema = object({ request_id: CompileRequestSchema.properties.request_id, source_path: CapturePathSchema, source_revision: RevisionSchema,
+  draft_path: DraftPathSchema, draft_revision: RevisionSchema, feedback: Type.String({ maxLength: 8000 }) });
+export type RecompileRequest = Static<typeof RecompileRequestSchema>;
+export const RecompileResponseSchema = object({ path: CapturePathSchema, revision: RevisionSchema, recompile_count: count, reused: Type.Boolean() });
+export type RecompileResponse = Static<typeof RecompileResponseSchema>;
 export const StatusSchema = object({
   ...HealthSchema.properties, instance_id: nonempty, vault_path: nonempty, data_dir: nonempty,
   database_initialized: Type.Boolean(), active_job: nullable(AnyJobSchema),
@@ -238,6 +271,8 @@ export const StatusSchema = object({
   limits: object(Object.fromEntries(Object.entries(LIMITS).map(([key, value]) => [key, Type.Literal(value)]))),
   diagnostics: DiagnosticsSchema,
   source_batch: Type.Optional(nullable(SourceBatchSchema)),
+  processing_round: Type.Optional(nullable(ProcessingRoundSchema)),
+  processing_schedule: Type.Optional(ScheduleStateSchema),
   semantic_index: Type.Optional(object({ state: enumeration(['not_built', 'idle', 'running', 'failed', 'interrupted', 'rebuild_required']), stale_documents: count, error: nullable(text) })),
 });
 export type Status = Static<typeof StatusSchema>;
@@ -295,6 +330,7 @@ export type PublishDraftRequest = Static<typeof PublishDraftRequestSchema>;
 export const DraftReviewSchema = object({
   draft: DraftSchema, source: DocumentSchema, related_drafts: Type.Array(ReviewTargetSchema),
   diagnostics: DiagnosticsSchema, analysis: nullable(AnalyzerJobSchema),
+  analyses: Type.Optional(object({ review: nullable(AnalyzerJobSchema), relation: nullable(AnalyzerJobSchema) })),
   publication: nullable(object({ request: PublishDraftRequestSchema, status: enumeration(['completed', 'unfinished']), error: nullable(text) })),
 });
 export type DraftReview = Static<typeof DraftReviewSchema>;
@@ -305,6 +341,14 @@ export const PublishDraftResponseSchema = object({
 export type PublishDraftResponse = Static<typeof PublishDraftResponseSchema>;
 /** Implemented endpoints. Schema declarations do not register unimplemented handlers. */
 export const API = {
+  processingSettings: { method: 'GET', url: '/v1/processing/settings', schema: { querystring: empty, response: { ...errors, 200: ProcessingSettingsSchema } } },
+  processingSettingsWrite: { method: 'POST', url: '/v1/processing/settings', schema: { querystring: empty, body: ProcessingSettingsSchema, response: { ...errors, 200: ProcessingSettingsSchema } } },
+  processingState: { method: 'GET', url: '/v1/processing/state', schema: { querystring: empty, response: { ...errors, 200: object({ schedule: ScheduleStateSchema, active: nullable(ProcessingRoundSchema), latest: nullable(ProcessingRoundSchema) }) } } },
+  processing: { method: 'POST', url: '/v1/processing-rounds', schema: { querystring: empty, body: ProcessingRequestSchema, response: { ...errors, 202: object({ round: ProcessingRoundSchema, reused: Type.Boolean() }) } } },
+  processingRounds: { method: 'GET', url: '/v1/processing-rounds', schema: { querystring: PaginationQuerySchema, response: { ...errors, 200: object(page(ProcessingRoundSchema)) } } },
+  processingRound: { method: 'GET', url: '/v1/processing-round', schema: { querystring: object({ id: nonempty }), response: { ...errors, 200: ProcessingRoundSchema } } },
+  processingCancel: { method: 'POST', url: '/v1/processing/cancel', schema: { querystring: empty, body: object({ id: nonempty }), response: { ...errors, 200: ProcessingRoundSchema } } },
+  recompile: { method: 'POST', url: '/v1/recompile', schema: { querystring: empty, body: RecompileRequestSchema, response: { ...errors, 200: RecompileResponseSchema } } },
   draftReview: { method: 'GET', url: '/v1/draft-review', schema: { querystring: object({ path: DraftPathSchema }), response: { ...errors, 200: DraftReviewSchema } } },
   publishDraft: { method: 'POST', url: '/v1/draft-publications', schema: { querystring: empty, body: PublishDraftRequestSchema, response: { ...errors, 200: PublishDraftResponseSchema } } },
   analysisSettings: { method: 'GET', url: '/v1/analysis/settings', schema: { querystring: empty, response: { ...errors, 200: AnalysisSettingsResponseSchema } } },

@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CompileRequest, Document, Draft } from '@engramweave/contracts';
+import type { CompileRequest, Document, Draft, ProcessingRequest } from '@engramweave/contracts';
 import { client, failure, type Failure, type JobPage } from './client';
 import { ErrorNotice } from './Feedback';
 import './compiler.css';
 import { lifecycleLabel } from './status-labels';
 import { DraftAnalysis } from './DraftAnalysis';
 
-export function SourceCompiler({ document, jobs, active, onStarted, onPublished, generation }: {
-  document: Document; jobs: JobPage | null; active: boolean; onStarted: () => void; onPublished: () => void; generation?: number | undefined;
+export function SourceCompiler({ document, jobs, active, onStarted, onPublished, generation, roundId }: {
+  document: Document; jobs: JobPage | null; active: boolean; onStarted: () => void; onPublished: () => void; generation?: number | undefined; roundId?: string | undefined;
 }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [error, setError] = useState<Failure>();
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const request = useRef<CompileRequest | null>(null);
+  const roundRequest = useRef<ProcessingRequest | null>(null);
   const observedRun = useRef<string | null>(null);
   const latest = jobs?.items.find(job => job.kind === 'compile_source' && job.source_path === document.path);
   const latestStatus = latest?.status;
@@ -47,6 +48,7 @@ export function SourceCompiler({ document, jobs, active, onStarted, onPublished,
   return <section className="source-compiler">
     <div className="section-heading"><h3>Compiler / Drafts</h3><button className="primary" disabled={busy || active || document.kind !== 'source' || !['pending', 'compiled'].includes(document.processing_status ?? '') || document.lifecycle_status !== 'active'} onClick={() => { void compile(); }}>{busy ? 'Starting…' : 'Run Compiler'}</button></div>
     <p className="hint">每次成功编译新增 Draft，已有正文和用户编辑保留。这里只执行正文编译。</p>
+    <button disabled={busy || active || document.kind !== 'source' || !['pending','compiled'].includes(document.processing_status ?? '') || document.lifecycle_status !== 'active'} onClick={() => { setBusy(true); roundRequest.current ??= {request_id:crypto.randomUUID(),mode:'selected',items:[{source_path:document.path,source_revision:document.revision}]}; void client.process(roundRequest.current).then(() => {roundRequest.current = null;onStarted();}).catch(e => setError(failure(e))).finally(() => setBusy(false)); }}>Run complete round</button>
     {latest && <p role="status">Last Compiler · {latest.status}</p>}
     {latest?.error && <ErrorNotice error={latest.error} />}
     {error && <ErrorNotice error={error} />}
@@ -55,6 +57,6 @@ export function SourceCompiler({ document, jobs, active, onStarted, onPublished,
       <button onClick={() => { void client.open(item.path, 'obsidian').catch(error => setError(failure(error))); }}>Open in Obsidian</button>
     </li>)}</ul>}
     {draft && <details className="draft-preview" open><summary>{draft.title}</summary><pre>{draft.body}</pre></details>}
-    <DraftAnalysis key={document.path} document={document} drafts={drafts} jobs={jobs} active={active} onStarted={onStarted} onPublished={onPublished} />
+    <DraftAnalysis key={document.path} document={document} drafts={drafts} jobs={jobs} active={active} onStarted={onStarted} onPublished={onPublished} roundId={roundId} />
   </section>;
 }

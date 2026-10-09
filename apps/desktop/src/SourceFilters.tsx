@@ -38,7 +38,7 @@ export function SourceFilters({ query, change, facets, connected }: {
   const options = currentDimension === 'types' ? [...new Set(['web', 'manual', 'zotero', 'desktop', ...facets.types])]
     : currentDimension === 'tags' ? facets.tags.filter(tag => tag.toLowerCase().includes(tagInput.toLowerCase()))
       : currentDimension === 'stages' ? ['compiled', 'reviewed', 'planned'] : ['missing', 'invalid', 'unsupported'];
-  const hasFilters = allowed.some(key => Boolean(query[key]));
+  const hasFilters = allowed.some(key => Boolean(query[key])) || Boolean(query.recompile);
   return <>
     <div className="source-toolbar">
       <form onSubmit={event => { event.preventDefault(); change({ ...query, q: term.trim() }); }}>
@@ -61,10 +61,11 @@ export function SourceFilters({ query, change, facets, connected }: {
         <option value="title_asc">Sort · Title A–Z</option><option value="title_desc">Sort · Title Z–A</option><option value="captured_desc">Sort · Newest captured</option><option value="captured_asc">Sort · Oldest captured</option>
       </select>
     </div>
+    {query.view === 'pending' && <label className="filter-chip">Compilation<select aria-label="Compilation filter" value={query.recompile ?? ''} onChange={event => { const next = {...query}; if (event.target.value) next.recompile = event.target.value as 'first' | 'recompile'; else delete next.recompile; change(next); }}><option value="">All Pending</option><option value="first">First compile</option><option value="recompile">Recompile requested</option></select></label>}
     {hasFilters && <div className="filter-chips">
       {allowed.filter(key => key !== 'time_ranges').flatMap(key => values(query[key]).map(choice => <button className="filter-chip" key={`${key}:${choice}`} onClick={() => update(key, choice, true)}>{labels[key]}: {key === 'tags' ? choice : typeLabel(choice)} ×</button>))}
       {timeRanges.map((range, index) => <button className="filter-chip" key={`${range.from}:${range.to}`} onClick={() => { const updated = { ...query }; const remaining = timeRanges.filter((_, current) => current !== index); if (remaining.length) updated.time_ranges = JSON.stringify(remaining); else delete updated.time_ranges; change(updated); }}>Captured: {range.label} ×</button>)}
-      <button className="clear-filters" onClick={() => { const updated = { ...query }; for (const key of ['types', 'tags', 'time_ranges', 'stages', 'issues'] as const) delete updated[key]; change(updated); }}>Clear all</button>
+      <button className="clear-filters" onClick={() => { const updated = { ...query }; for (const key of ['types', 'tags', 'time_ranges', 'stages', 'issues', 'recompile'] as const) delete updated[key]; change(updated); }}>Clear all</button>
     </div>}
   </>;
 }

@@ -11,6 +11,7 @@ import { registerCompilerRoutes } from './http/compiler.js';
 import { registerRecallRoutes } from './http/recall.js';
 import { registerAnalysisRoutes } from './http/analysis.js';
 import { registerReviewRoutes } from './http/review.js';
+import { registerProcessingRoutes } from './http/processing.js';
 
 export interface HttpRuntime {
   token: string | null;
@@ -58,7 +59,10 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
   } });
   if (services) {
     server.addHook('preHandler', async request => {
-      if (request.method === 'POST' && request.url !== API.publishDraft.url && services().publications?.busy()) {
+      const scheduleSettings = request.url === API.processingSettingsWrite.url;
+      if (request.method === 'POST' && !scheduleSettings && services().processing?.busy() && request.url !== API.processingCancel.url && request.url !== API.processing.url) throw new CoreError('JOB_BUSY', 'A processing round owns the model workflow; wait or cancel that round', 409);
+      if (request.method === 'POST' && !scheduleSettings && services().recompile?.busy() && request.url !== API.recompile.url) throw new CoreError('JOB_BUSY', 'Finish or recover the Recompile action before another mutation', 409);
+      if (request.method === 'POST' && !scheduleSettings && request.url !== API.publishDraft.url && services().publications?.busy()) {
         throw new CoreError('JOB_BUSY', 'Finish or recover the approved Draft publication before another mutation', 409);
       }
     });
@@ -70,6 +74,7 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
     registerRecallRoutes(server, services);
     registerAnalysisRoutes(server, config, services);
     registerReviewRoutes(server, config, services);
+    registerProcessingRoutes(server, services);
   }
   return server;
 }

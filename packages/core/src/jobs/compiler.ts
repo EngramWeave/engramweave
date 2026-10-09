@@ -10,6 +10,8 @@ import { DraftPublisher } from '../drafts/files.js';
 import { ExecutionSettings, localEndpoint } from '../execution/settings.js';
 import { executeApi } from '../execution/api.js';
 import { executeCodex } from '../execution/codex.js';
+import { executionAttempts, inferWithRetries, type RetryOptions } from '../processing/retries.js';
+import { processingDependencies } from './retention.js';
 
 type Row = Omit<CompilerJob, 'kind' | 'prompt_version' | 'error'> & { error_json: string | null };
 const asJob = (row: Row): CompilerJob => { const { error_json, ...rest } = row; return { ...rest, kind: 'compile_source', prompt_version: 'compiler-v1', error: error_json ? JSON.parse(error_json) : null }; };
@@ -23,7 +25,7 @@ export class CompilerJobs {
   private stopping = false;
   private submitting = false;
   private controller: AbortController | null = null;
-  constructor(private readonly db: Database.Database, private readonly config: Config, private readonly scanActive: () => boolean, private readonly executor?: CompilerExecutor) {
+  constructor(private readonly db: Database.Database, private readonly config: Config, private readonly scanActive: () => boolean, private readonly executor?: CompilerExecutor, private readonly retryLimit: () => number = () => 0) {
     this.settings = new ExecutionSettings(config.data_dir);
     this.publisher = new DraftPublisher(config);
   }
@@ -47,11 +49,17 @@ export class CompilerJobs {
     }
     this.retain();
   }
-  get(id: string) { const row = this.db.prepare('SELECT * FROM compiler_jobs WHERE id=?').get(id) as Row | undefined; return row ? asJob(row) : undefined; }
-  active(): CompilerJob | null { const row = this.db.prepare("SELECT * FROM compiler_jobs WHERE status IN ('queued','running')").get() as Row | undefined; return row ? asJob(row) : null; }
-  all() { return (this.db.prepare('SELECT * FROM compiler_jobs ORDER BY created_at DESC,id').all() as Row[]).map(asJob); }
-  private retain() { this.db.prepare("DELETE FROM compiler_jobs WHERE id IN (SELECT id FROM compiler_jobs WHERE status NOT IN ('queued','running') ORDER BY created_at DESC,id LIMIT -1 OFFSET ?)").run(LIMITS.retained_finished_jobs); }
-  async submit(input: CompileRequest) {
+  get(id: string) { const row = this.db.prepare('SELECT * FROM compiler_jobs WHERE id=?').get(id) as Row | undefined; return row ? { ...asJob(row), attempts: executionAttempts(this.db, id, 'compiler') } : undefined; }
+  active(): CompilerJob | null { const row = this.db.prepare("SELECT * FROM compiler_jobs WHERE status IN ('queued','running')").get() as Row | undefined; return row ? this.get(row.id)! : null; }
+  all() { return (this.db.prepare('SELECT id FROM compiler_jobs ORDER BY created_at DESC,id').all() as { id: string }[]).map(row => this.get(row.id)!); }
+  private retain() {
+    const protectedIds = processingDependencies(this.db);
+    let count = 0;
+    for (const job of this.all()) if (!['queued','running'].includes(job.status) && !protectedIds.has(job.id) && ++count > LIMITS.retained_finished_jobs) {
+      this.db.prepare('DELETE FROM compiler_jobs WHERE id=?').run(job.id); this.db.prepare('DELETE FROM execution_attempts WHERE job_id=?').run(job.id);
+    }
+  }
+  async submit(input: CompileRequest, options: RetryOptions = {}) {
     if (this.stopping || this.submitting || this.scanActive()) throw new CoreError('JOB_BUSY', 'Core is scanning, stopping or accepting another Compiler request', 409);
     this.submitting = true;
     try {
@@ -77,18 +85,23 @@ export class CompilerJobs {
       if (settings.route === 'codex' && !settings.codex_path) throw new CoreError('CONFIG_ERROR', 'Configure a Codex executable path', 400);
       this.db.prepare("INSERT INTO compiler_jobs(id,source_path,source_revision,route,model,status,created_at) VALUES(?,?,?,?,?,'queued',?)").run(input.request_id, input.path, input.revision, settings.route, settings.model, new Date().toISOString());
       this.controller = new AbortController();
-      const signal = AbortSignal.any([this.controller.signal, AbortSignal.timeout(settings.timeout_seconds * 1000)]);
-      this.running = new Promise<void>(resolve => setImmediate(resolve)).then(() => this.execute(input, prompt, settings, signal, instructions));
+      const signal = this.controller.signal;
+      this.running = new Promise<void>(resolve => setImmediate(resolve)).then(() => this.execute(input, prompt, settings, signal, instructions, {...options,maxRetries:options.maxRetries ?? this.retryLimit()}));
       void this.running.catch(() => {});
       return { job: this.get(input.request_id)!, reused: false };
     } finally { this.submitting = false; }
   }
   busy() { return this.submitting || this.active() !== null; }
-  private async execute(input: CompileRequest, prompt: string, settings: CompilerSettings, signal: AbortSignal, instructions: string) {
+  private async execute(input: CompileRequest, prompt: string, settings: CompilerSettings, signal: AbortSignal, instructions: string, options: RetryOptions) {
     try {
+      const key = !this.executor && settings.route === 'api' ? await this.settings.apiKey(settings.endpoint) : '';
       this.db.prepare("UPDATE compiler_jobs SET status='running',started_at=? WHERE id=?").run(new Date().toISOString(), input.request_id);
-      const result = this.executor ? await this.executor(settings, prompt, signal, instructions) : settings.route === 'api'
-        ? await executeApi(settings, await this.settings.apiKey(settings.endpoint), prompt, signal, instructions) : await executeCodex(settings, this.config.data_dir, prompt, signal, instructions);
+      const result = await inferWithRetries(this.db, input.request_id, 'compiler', async () => {
+        if ((await readMarkdown(this.config.vault_path, input.path)).revision !== input.revision) throw new CoreError('SOURCE_CHANGED', 'Source changed before a Compiler attempt', 409);
+        const attemptSignal = AbortSignal.any([signal, AbortSignal.timeout(settings.timeout_seconds * 1000)]);
+        return this.executor ? this.executor(settings, prompt, attemptSignal, instructions) : settings.route === 'api'
+          ? executeApi(settings, key, prompt, attemptSignal, instructions) : executeCodex(settings, this.config.data_dir, prompt, attemptSignal, instructions);
+      }, { ...options, signal });
       if (signal.aborted) throw new CoreError('EXECUTION_FAILED', 'Compiler was stopped before publication');
       const record = await this.publisher.prepare(input.request_id, input.path, input.revision, compilerResult(JSON.stringify(result)), { route: settings.route === 'api' ? 'api' : 'codex', model: settings.model });
       const draft = await this.publisher.finish(record);
@@ -98,10 +111,11 @@ export class CompilerJobs {
       this.db.prepare("UPDATE compiler_jobs SET status='succeeded',finished_at=?,draft_path=?,error_json=NULL WHERE id=?").run(new Date().toISOString(), draft, input.request_id);
       await this.publisher.complete(input.request_id);
     } catch (error) {
-      this.db.prepare("UPDATE compiler_jobs SET status=?,finished_at=?,error_json=? WHERE id=?").run(this.stopping ? 'interrupted' : 'failed', new Date().toISOString(), JSON.stringify(safeError(error)), input.request_id);
+      this.db.prepare("UPDATE compiler_jobs SET status=?,finished_at=?,error_json=? WHERE id=?").run(this.stopping || signal.aborted ? 'interrupted' : 'failed', new Date().toISOString(), JSON.stringify(safeError(error)), input.request_id);
       if (error instanceof CoreError && error.code === 'SOURCE_CHANGED') await this.publisher.complete(input.request_id).catch(() => {});
     } finally { this.controller = null; this.retain(); }
   }
   async close() { this.stopping = true; this.controller?.abort(); await this.running; }
   async wait() { await this.running; }
+  async cancel(id: string) { if (this.active()?.id === id) { this.controller?.abort(); await this.running; } }
 }

@@ -1,12 +1,12 @@
 import type { RecallStatus } from '@engramweave/contracts';
 import { setTimeout as delay } from 'node:timers/promises';
-export async function waitSemanticIndex(request: (route: string) => Promise<Response>): Promise<RecallStatus> {
+export async function waitSemanticIndex(request: (route: string) => Promise<Response>, ready: (status: RecallStatus) => boolean = () => true): Promise<RecallStatus> {
   const deadline = Date.now() + 120000;
   while (Date.now() < deadline) {
     const response = await request('/v1/recall/status');
     if (!response.ok) throw new Error(`Semantic status HTTP ${response.status}`);
     const status = await response.json() as RecallStatus;
-    if (status.state !== 'running') return status;
+    if (status.state !== 'running' && ready(status)) return status;
     await delay(25);
   }
   throw new Error('Semantic indexing did not finish');

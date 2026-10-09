@@ -57,6 +57,16 @@ async function request<T extends TSchema>(
   return result;
 }
 export const client = {
+  processingSettings: () => request('processing_settings', API.processingSettings.schema.response[200]),
+  saveProcessingSettings: (input: import('@engramweave/contracts').ProcessingSettings) => request('processing_settings_write', API.processingSettingsWrite.schema.response[200], input),
+  processingState: () => request('processing_state', API.processingState.schema.response[200]),
+  process: (input: import('@engramweave/contracts').ProcessingRequest) => request('processing', API.processing.schema.response[202], input),
+  processingRounds: (offset = 0) => request('processing_rounds', API.processingRounds.schema.response[200], { limit: 20, offset }),
+  processingRound: (id: string) => request('processing_round', API.processingRound.schema.response[200], { id }),
+  cancelProcessing: (id: string) => request('processing_cancel', API.processingCancel.schema.response[200], { id }),
+  recompile: (input: import('@engramweave/contracts').RecompileRequest) => request('recompile', API.recompile.schema.response[200], input),
+  draftReview: (path: string) => request('draft_review', API.draftReview.schema.response[200], { path }),
+  analysisResult: (id: string) => request('analysis_result', API.analysisResult.schema.response[200], { id }),
   analysisSettings: () => request('analysis_settings', API.analysisSettings.schema.response[200]),
   saveAnalysisSettings: (input: Static<typeof API.analysisSettingsWrite.schema.body>) => request('analysis_settings_write', API.analysisSettingsWrite.schema.response[200], input),
   analysisTemplates: () => request('analysis_templates', API.analysisTemplates.schema.response[200]),

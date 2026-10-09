@@ -138,6 +138,16 @@ fn changing_profile_requires_desktop_restart() {
 }
 
 #[test]
+fn processing_bridge_limits_workflow_and_recompile_fields() {
+    assert_eq!(route(Operation::Processing, &json!({"request_id":"id","mode":"analyze","items":[{"draft_path":"30_Drafts/a.md","task":"review"}]})).unwrap().1,"/v1/processing-rounds");
+    assert_eq!(route(Operation::ProcessingSettingsWrite, &json!({"enabled":false,"mode":"daily","daily_time":"03:00","time_zone":"Asia/Shanghai","interval_minutes":60,"max_retries":2})).unwrap().1,"/v1/processing/settings");
+    assert!(route(Operation::Processing,&json!({"url":"http://example.com"})).is_err());
+    assert!(route(Operation::Recompile,&json!({"authorization":"secret"})).is_err());
+    assert!(route(Operation::ProcessingCancel,&json!({"id":"x","command":"delete"})).is_err());
+    assert_eq!(route(Operation::DraftReview,&json!({"path":"30_Drafts/a.md"})).unwrap().1,"/v1/draft-review");
+}
+
+#[test]
 fn analysis_bridge_exposes_only_fixed_bounded_actions() {
     assert_eq!(route(Operation::AnalysisSettings, &json!({})).unwrap().1, "/v1/analysis/settings");
     assert_eq!(route(Operation::Analyze, &json!({"source_path":"20_Sources/source.md","draft_path":"30_Drafts/draft.md"})).unwrap().1, "/v1/analyses");

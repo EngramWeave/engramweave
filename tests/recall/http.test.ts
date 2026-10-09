@@ -38,7 +38,7 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
     expect(competing.map(response => response.status).sort()).toEqual([202, 409]);
     expect(await waitIndex(runtime.request)).toMatchObject({ state: 'idle', initialized: true, indexed_documents: 3 });
     const initialInputs = inputs;
-    const second = await submitScan(runtime.request); await finishedJob(runtime.request, second.job.id); await waitIndex(runtime.request); expect(inputs).toBe(initialInputs);
+    const second = await submitScan(runtime.request); const secondDone=await finishedJob(runtime.request, second.job.id); await waitIndex(runtime.request,s=>s.generation===secondDone.summary!.index_generation); expect(inputs).toBe(initialInputs);
     const result = await (await post('/v1/recall', { q: '知识', rerank: true })).json() as RecallResponse;
     expect([...Value.Errors(API.recall.schema.response[200], result)]).toEqual([]);
     expect(result.reranker).toBe('applied'); expect(result.items.map(hit => hit.kind)).toEqual(expect.arrayContaining(['idea', 'knowledge', 'research']));
@@ -47,7 +47,7 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
     const knowledge = path.join(runtime.config.vault_path, '40_Knowledge/knowledge.md');
     await writeFile(knowledge, '---\ncaptured_at: 2026-10-09\n---\n# Knowledge\n知识编译系统');
     expect(inputs).toBe(metadataBefore);
-    const changed = await submitScan(runtime.request); await finishedJob(runtime.request, changed.job.id); await waitIndex(runtime.request); expect(inputs).toBe(metadataBefore);
+    const changed = await submitScan(runtime.request); const changedDone=await finishedJob(runtime.request, changed.job.id); await waitIndex(runtime.request,s=>s.generation===changedDone.summary!.index_generation); expect(inputs).toBe(metadataBefore);
     const evidence = result.items.find(hit => hit.kind === 'knowledge')!;
     const context = await (await post('/v1/recall/context', { items: [evidence].map(({ path, revision, chunk_id }) => ({ path, revision, chunk_id })) })).json();
     expect(context.items).toEqual([]);
@@ -60,7 +60,7 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
     rankFailed = false; failed = true;
     await writeDocument(runtime.config.vault_path, '10_Ideas/idea.md', '# 新点子\n新正文');
     const failing = await submitScan(runtime.request); expect((await finishedJob(runtime.request, failing.job.id)).status).toBe('succeeded');
-    expect(await waitIndex(runtime.request)).toMatchObject({ state: 'failed', initialized: true });
+    expect(await waitIndex(runtime.request,s=>s.state==='failed')).toMatchObject({ state: 'failed', initialized: true });
     expect((await runtime.request('/v1/search?scope=ideas&q=新正文')).status).toBe(200);
     failed = false;
     await post('/v1/recall/index', { mode: 'update' }); expect((await waitIndex(runtime.request)).state).toBe('idle');

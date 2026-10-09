@@ -12,12 +12,13 @@ describe('Execution settings and credentials', () => {
       const settings = new ExecutionSettings(runtime.config.data_dir);
       expect((await settings.read()).api_key_configured).toBe(false);
       const key = 'isolated-test-key-DO-NOT-SEND';
-      const saved = await settings.save({ ...defaultSettings, route: 'api', model: 'fixture-model' }, key);
+      const saved = await settings.save({ ...defaultSettings, route: 'api', model: 'fixture-model', output_tokens: { parameter: 'max_completion_tokens', limit: 4096 } }, key);
       expect(saved.api_key_configured).toBe(true);
       expect(JSON.stringify(saved)).not.toContain(key);
       expect(await settings.apiKey()).toBe(key);
       expect(await readFile(path.join(runtime.config.data_dir, 'compiler-api-key.dpapi'), 'utf8')).not.toContain(key);
       expect((await new ExecutionSettings(runtime.config.data_dir).read()).settings.model).toBe('fixture-model');
+      expect((await new ExecutionSettings(runtime.config.data_dir).read()).settings.output_tokens).toEqual({ parameter: 'max_completion_tokens', limit: 4096 });
       const switched = await settings.save({ ...defaultSettings, route: 'api', model: 'other-model', endpoint: 'http://127.0.0.1:8094/v1' });
       expect(switched.api_key_configured).toBe(false);
       expect(await settings.apiKey('http://127.0.0.1:8094/v1')).toBe('');

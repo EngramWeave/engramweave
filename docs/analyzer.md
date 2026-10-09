@@ -10,9 +10,11 @@ API 使用独立的 OpenAI-compatible endpoint 和每个 Profile／任务的凭�
 
 未开启 structured output 的本机服务选择 `text`（界面 JSON in text），仍须返回严格 JSON。选择的输出格式或模型参数不受服务支持时明确失败，不自动换格式、模型或服务。Codex 使用已有 ChatGPT 登录与绝对 `.exe` 路径，不回退到另行付费 API。
 
+每个 Profile 的 Review／Relation 可分别设置 `Output token limit`，选择服务支持的 `max_tokens` 或 `max_completion_tokens`；一次请求只发送所选字段。留空沿用服务默认值，旧配置无需迁移。预算为 1–131072，但实际有效范围由服务／模型决定；部分服务将推理 token 计入总生成预算。该设置只用于 API，Codex 不应用这个上限。最终字数由模板控制，上限过低可能导致截断。HTTP 400、截断（`finish_reason: length`）、拒绝、空正文与不兼容响应分别显示；服务错误仅暴露已识别的参数／错误码，不回显可能包含材料或密钥的原始错误文本。
+
 Capture 可以提交可选 `analysis_profile`，Core 仅在 Source Properties 保存这个引用，不运行模型。active、pending Source 可以显式修改选择；其他属性、Annotation、正文和阶段保留。执行使用最终选择及当前配置。分析请求可明确选择本轮 Profile；它不会覆盖 Source 的持久选择。
 
-在 Sources Inspector 选择具体 active Draft，再点击 Analyze Draft。一个 Source 可有多份 Draft，Core 不取第一份或最新一份代替用户选择。请求必须给出 Source／Draft 当前 revision 和 UUID request_id。已有 Run Compiler 仍只生成正文。完整轮次调度、重试和批量重分析分别由后续处理能力承接。
+在 Sources Inspector 选择具体 active Draft，再点击 Analyze Draft 或独立 Retry Review／Retry Relation。成功过的任务同样允许明确重试；只执行选择的任务，不联动另一项或 Compiler。一个 Source 可有多份 Draft，不自动猜最新稿。请求提供当前 Source／Draft revision、UUID request_id 和可选 task。完整轮次、有限重试、调度及明确 Draft 批量重分析见 [Processing](processing.md)。
 
 ## 用户模板与输入
 
@@ -38,13 +40,17 @@ scope 为 `all`／`knowledge`／`ideas`／`research`，limit 为 1–20；requir
 
 Core 使用 C1 三类材料的有界召回组装 API 上下文，两项各一次独立模型调用，没有动态 API 工具 loop。召回候选保留路径、kind、revision、行号和覆盖，不因相似分数成为正式关系。模型输出中的引用必须属于实际提供或读取的材料及行范围；合法的空 findings／suggestions 数组允许没有发现。
 
+默认只输出最有价值的 0–3 项，每项 1–2 句，加一句摘要，不重复总结 Draft，也不强制填满项目。分类和常规覆盖说明无需模型填写；用户模板可明确请求更详细内容。模型只返回 `summary` 和 `findings`／`suggestions`，每项含 `message` 和短证据 ID 数组 `evidence`。`S1` 等指向 Source 的实际片段，`D1` 等指向 Draft，`K1` 等指向该任务实际投递的库片段。Core 将 ID 展开为版本和行范围；范围代表完整投递片段，不冒充模型选择的精确某一行。ID 仅在本任务内有效，动态工具召回不会重排已有 ID，未知 ID 不接受。
+
+模型输入不再重复正文和逐行副本；每份 Source／Draft 只投递一次带 ID 的内容片段，不截断正文。Codex 通过 `read_input` 获取材料，初始提示不再重复完整材料。API／结果回执仍保留完整冻结输入、当前上下文和引用版本；只读结果接口保留既有路径／版本／范围，历史分类为可选字段，旧结果无需改写。侧边栏直接展示短建议，证据和 Core 实际覆盖说明折叠查看。
+
 Relation 的三档复用：
 
 - `input`：复用本轮 Review 实际消费的材料、证据和额外工具观察；Relation 仍使用自己的指令及所需上下文。
 - `output`：有合法本轮 Review 输出时将其作为未认可的 AI 参考。没有则独立执行，不增加缺少参考提示或特殊状态；Review 的失败独立显示。
 - `none`：不复用 Review 的额外上下文或输出；共有 Source／Draft 仍绑定同轮输入。
 
-不使用旧轮输出填补缺口，配置变化只影响后续明确请求，不自动运行模型或撤销 Human Review。
+不使用不兼容的旧轮输出填补缺口。单项 Relation 可按偏好引用同 Source／Draft／Profile／模板上下文且证据仍有效的 Review，记录 reference ID；缺失或已变化则独立执行。另一项结果保留真实执行 ID、输入版本与过期状态，不伪装为本次重跑。配置变化只影响后续明确请求，不自动运行模型或撤销 Human Review。
 
 Codex 使用现有 runner 和每任务私有 stdio MCP，复用官方 SDK。仅开放 `read_input`、`recall`、`read_evidence`：后者只能读取本轮已选证据，不接受任意文件路径。recall 范围由模板限定，最多 12 次工具调用，并有累计证据预算。Core 实际校验权限；readonly annotation 只是辅助说明。
 
@@ -54,7 +60,7 @@ CLI 忽略用户运行配置和规则，关闭 shell、Code Mode host、无关 M
 
 两项结果及对应输入、模板、上下文和工具观察分开记录在 `data_dir/analysis-results/<run-id>/record.json` 的 Review／Relation 部分。采用一个原子完整回执，避免结果与 provenance 分离；先保存回执，再提交 SQLite 任务状态。密钥只在本轮内存中使用，不进入回执。
 
-启动只恢复已有回执；未完成的任务标 interrupted，不重新调用模型。数据库损坏后，用户文件仍是权威；保留的合法回执可恢复任务及结果。当前 Draft 的最近结果和失败／interrupted 记录保留，其他成功历史有界清理；不承诺永久保留所有旧分析上下文。
+启动只恢复已有回执；未完成任务标 interrupted，不重新调用模型。数据库损坏后用户文件仍是权威，合法回执可恢复结果。保留所保留轮次依赖和每个 Draft 各项的最近尝试／成功结果，其他终止历史有界清理；失败历史也不承诺永久保留。
 
 结果正文的产品展示属于 Obsidian 侧边栏。Desktop 只显示明确目标、Review／Relation 状态、所属任务错误和取消操作；当前只读结果接口供侧边栏和内容验收使用，不新增 Desktop 分析正文审阅面板。
 

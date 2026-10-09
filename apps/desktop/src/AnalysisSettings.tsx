@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { OutputBudget } from './OutputBudget';
 import type { AnalysisSettings as Settings, AnalysisProfile, CompilerSettings } from '@engramweave/contracts';
 import { client, failure, type Failure } from './client';
 import { ErrorNotice } from './Feedback';
@@ -19,6 +20,7 @@ function TaskEditor({ task, value, templates, configured, apiKey, update, keyCha
       <label>API key<input type="password" autoComplete="off" value={apiKey} onChange={e => keyChange(e.target.value)} placeholder={configured ? '已安全保存；留空保留' : '本机可留空；远端需独立密钥'} /></label>
       <label>Output format<select value={execution.output_format} onChange={e => set('output_format', e.target.value as CompilerSettings['output_format'])}>{['json_schema','json_object','text'].map(v => <option key={v} value={v}>{v}</option>)}</select></label></>
       : <label>Codex executable<input required value={execution.codex_path} onChange={e => set('codex_path', e.target.value)} placeholder="C:\…\codex.exe" /></label>}
+    {execution.route === 'api' && <OutputBudget value={execution.output_tokens} onChange={value => set('output_tokens', value)} />}
     <label>Reasoning effort<select value={execution.reasoning_effort} onChange={e => set('reasoning_effort', e.target.value as CompilerSettings['reasoning_effort'])}>{['default','none','low','medium','high','xhigh','max'].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
     <label>Timeout (seconds)<input type="number" min={10} max={1800} value={execution.timeout_seconds} onChange={e => set('timeout_seconds', Number(e.target.value))} /></label>
   </div></fieldset>;

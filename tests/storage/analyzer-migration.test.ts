@@ -13,7 +13,7 @@ describe('C2 database migration', () => {
       legacyDatabase(db, 3); db.prepare('UPDATE meta SET index_generation=17').run();
       db.prepare("INSERT INTO compiler_jobs(id,source_path,source_revision,route,model,status,created_at) VALUES('old',?,?,'api','previous-model','failed','2026-10-01T00:00:00Z')").run(f.sourcePath, f.request().source_revision);
       db.close(); db = await openDatabase(f.config);
-      expect(db.pragma('user_version', { simple: true })).toBe(4);
+      expect(db.pragma('user_version', { simple: true })).toBe(5);
       expect(db.prepare('SELECT index_generation FROM meta').get()).toEqual({ index_generation: 17 });
       expect(db.prepare('SELECT status,model FROM compiler_jobs').get()).toEqual({ status: 'failed', model: 'previous-model' });
       expect(db.prepare('SELECT count(*) AS total FROM analyzer_jobs').get()).toEqual({ total: 0 });

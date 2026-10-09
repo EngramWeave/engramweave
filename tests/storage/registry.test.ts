@@ -23,8 +23,8 @@ function projection(relative: string, text = manualSource()) { const bytes = Buf
 describe('real SQLite projection and transactions', () => {
   it('creates exactly the P1 tables and enforces one active scan', async () => {
     const { db } = await fixture();
-    expect(db.pragma('user_version', { simple: true })).toBe(4);
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()).toEqual([{ name: 'analyzer_jobs' }, { name: 'compiler_jobs' }, { name: 'documents' }, { name: 'jobs' }, { name: 'meta' }]);
+    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()).toEqual(['analyzer_jobs','compiler_jobs','documents','execution_attempts','jobs','meta','processing_rounds','recompile_actions'].map(name => ({name})));
     job(db, 'first');
     expect(() => job(db, 'second')).toThrow();
   });

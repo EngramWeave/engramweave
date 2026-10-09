@@ -6,6 +6,7 @@ import type { SemanticRecall } from '../recall/index.js';
 import { CoreError } from '../errors.js';
 import type { AnalysisSnapshot, AnalysisEvidence } from './input.js';
 import { mergeEvidence } from './context.js';
+import { AnalysisMaterials } from './materials.js';
 
 export const analysisTools = [
   { name: 'read_input', description: 'Read the frozen Source, Annotation and explicit Draft for this round only.', inputSchema: Type.Object({}, { additionalProperties: false }), annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } },
@@ -16,24 +17,27 @@ export class AnalysisTools {
   private calls = 0;
   private bytes = 0;
   readonly observations: { tool: string; arguments: unknown; result: unknown }[] = [];
+  readonly materials: AnalysisMaterials;
   constructor(private readonly snapshot: AnalysisSnapshot, private readonly task: 'review' | 'relation', private readonly recall: Pick<SemanticRecall, 'recall' | 'context'>,
-    public evidence: AnalysisEvidence, private readonly signal: AbortSignal) {}
+    public evidence: AnalysisEvidence, private readonly signal: AbortSignal) { this.materials = new AnalysisMaterials(snapshot); }
   async call(name: string, args: unknown) {
     this.signal.throwIfAborted();
     const tool = analysisTools.find(t => t.name === name);
     if (!tool || !Value.Check(tool.inputSchema, args)) throw new CoreError('VALIDATION_ERROR', 'Tool arguments or capability are not permitted', 400);
     if (++this.calls > 12) throw new CoreError('PAYLOAD_TOO_LARGE', 'Analyzer tool call budget reached', 413);
     let result: unknown;
-    if (name === 'read_input') result = this.snapshot.input;
+    if (name === 'read_input') result = this.materials.readInput(this.evidence);
     else if (name === 'recall') {
       const context = this.snapshot.templates[this.task].context;
       const recalled = await this.recall.recall({ q: (args as { q: string }).q, scope: context.scope, limit: context.limit }, this.signal);
-      result = { items: recalled.items, coverage: recalled.coverage, diagnostics: recalled.diagnostics };
-      this.evidence = mergeEvidence(this.evidence, result as AnalysisEvidence);
+      this.evidence = mergeEvidence(this.evidence, { items: recalled.items, coverage: recalled.coverage, diagnostics: recalled.diagnostics });
+      result = this.materials.library({ ...this.evidence, items: recalled.items });
     } else {
       const selected = this.evidence.items.find(item => item.chunk_id === (args as { chunk_id: string }).chunk_id);
       if (!selected) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Evidence was not selected in this round', 403);
-      result = await this.recall.context([selected]);
+      const context = await this.recall.context([selected]);
+      if (context.truncated || context.items.length !== 1 || context.items[0]?.revision !== selected.revision) throw new CoreError('SOURCE_CHANGED', 'Selected evidence changed or is unavailable', 409);
+      result = this.materials.library({ ...this.evidence, items: context.items });
     }
     this.signal.throwIfAborted();
     const bytes = Buffer.byteLength(JSON.stringify(result));

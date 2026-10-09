@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Source, SourceBatch, SourceBatchRequest } from '@engramweave/contracts';
+import type { Source, SourceBatch, SourceBatchRequest, ProcessingRequest } from '@engramweave/contracts';
 import { client, failure, type Failure } from './client';
 import { ErrorToast } from './Feedback';
 
@@ -24,11 +24,18 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
   const [notification, setNotification] = useState<SourceBatch | null>(null);
   const [showResult, setShowResult] = useState(false);
   const request = useRef<SourceBatchRequest | null>(null);
+  const roundRequest = useRef<ProcessingRequest | null>(null);
   const observed = useRef<string | null>(null);
   const selectionKey = selected.map(item => `${item.path}:${item.revision}`).join('|');
   const running = batch?.status === 'running';
   useEffect(() => { if (currentBatch) setBatch(currentBatch); }, [currentBatch]);
-  useEffect(() => { request.current = null; }, [selectionKey]);
+  useEffect(() => { request.current = null; roundRequest.current = null; }, [selectionKey]);
+  const processSelected = async () => {
+    setLoading(true); setError(undefined);
+    roundRequest.current ??= { request_id: crypto.randomUUID(), mode: 'selected', items: selected.filter(s => s.revision).map(s => ({source_path:s.path,source_revision:s.revision!})) };
+    try { await client.process(roundRequest.current); roundRequest.current = null; clear(); refresh(); }
+    catch(e) {setError(failure(e));} finally {setLoading(false);}
+  };
   useEffect(() => {
     if (!batch) return;
     if (batch.status === 'running') observed.current = batch.id;
@@ -91,6 +98,7 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
         <button disabled={blocked} onClick={() => { void submit('restore'); }}>Restore selected</button>
       </> : <>
         <button disabled={blocked || modelBusy} onClick={() => { void submit('compile'); }}>Compile selected</button>
+        <button disabled={blocked || modelBusy} onClick={() => { void processSelected(); }}>Process selected</button>
         <button disabled={blocked} onClick={() => { void previewAction('discard'); }}>Discard selected</button>
         <button disabled={blocked} onClick={() => { void previewAction('discard_drafts'); }}>Discard Drafts</button>
       </>}

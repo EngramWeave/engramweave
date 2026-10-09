@@ -5,14 +5,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { startCore } from '../../packages/core/src/main.js';
 import { isolatedRuntime } from './runtime.js';
 
-export async function httpRuntime(prepare?: (vault: string) => Promise<void>) {
+export async function httpRuntime(prepare?: (vault: string) => Promise<void>, start: typeof startCore = startCore) {
   const isolated = await isolatedRuntime();
   if (prepare) await prepare(isolated.config.vault_path);
-  const connected = await httpCore(isolated.config);
+  const connected = await httpCore(isolated.config, start);
   return { ...isolated, ...connected, async cleanup() { await connected.core.close(); await isolated.cleanup(); } };
 }
-export async function httpCore(config: Config) {
-  const core = await startCore(config);
+export async function httpCore(config: Config, start: typeof startCore = startCore) {
+  const core = await start(config);
   const token = await readFile(path.join(config.data_dir, 'token'), 'utf8');
   const request = (route: string, init: RequestInit = {}) => fetch(`http://127.0.0.1:${config.port}${route}`, { ...init,
     headers: { authorization: `Bearer ${token}`, ...init.headers } });

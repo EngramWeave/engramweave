@@ -34,6 +34,16 @@ pub enum Operation {
     AnalysisSelection,
     Analyze,
     AnalysisCancel,
+    ProcessingSettings,
+    ProcessingSettingsWrite,
+    ProcessingState,
+    Processing,
+    ProcessingRounds,
+    ProcessingRound,
+    ProcessingCancel,
+    Recompile,
+    DraftReview,
+    AnalysisResult,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -42,7 +52,7 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::Sources => (
             false,
             "/v1/sources",
-            &["state", "source_type", "path_prefix", "limit", "offset", "view", "q", "types", "tags", "stages", "issues", "captured_from", "captured_to", "time_ranges", "sort"],
+            &["state", "source_type", "path_prefix", "limit", "offset", "view", "q", "types", "tags", "stages", "issues", "captured_from", "captured_to", "time_ranges", "sort", "recompile"],
         ),
         Operation::Jobs => (false, "/v1/jobs", &["limit", "offset"]),
         Operation::Job => (false, "/v1/jobs/", &["id"]),
@@ -82,8 +92,18 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::AnalysisTemplates => (false, "/v1/analysis/templates", &[]),
         Operation::AnalysisTemplateWrite => (true, "/v1/analysis/template", &["path", "revision", "content"]),
         Operation::AnalysisSelection => (true, "/v1/analysis/selection", &["path", "revision", "profile_id"]),
-        Operation::Analyze => (true, "/v1/analyses", &["request_id", "source_path", "source_revision", "draft_path", "draft_revision", "profile_id"]),
+        Operation::Analyze => (true, "/v1/analyses", &["request_id", "source_path", "source_revision", "draft_path", "draft_revision", "profile_id", "task"]),
         Operation::AnalysisCancel => (true, "/v1/analysis/cancel", &["id"]),
+        Operation::ProcessingSettings => (false, "/v1/processing/settings", &[]),
+        Operation::ProcessingSettingsWrite => (true, "/v1/processing/settings", &["enabled", "mode", "daily_time", "time_zone", "interval_minutes", "max_retries"]),
+        Operation::ProcessingState => (false, "/v1/processing/state", &[]),
+        Operation::Processing => (true, "/v1/processing-rounds", &["request_id", "mode", "items"]),
+        Operation::ProcessingRounds => (false, "/v1/processing-rounds", &["limit", "offset"]),
+        Operation::ProcessingRound => (false, "/v1/processing-round", &["id"]),
+        Operation::ProcessingCancel => (true, "/v1/processing/cancel", &["id"]),
+        Operation::Recompile => (true, "/v1/recompile", &["request_id", "source_path", "source_revision", "draft_path", "draft_revision", "feedback"]),
+        Operation::DraftReview => (false, "/v1/draft-review", &["path"]),
+        Operation::AnalysisResult => (false, "/v1/analysis/result", &["id"]),
     };
     let object = input
         .as_object()
@@ -94,7 +114,7 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
             "Bridge field is not permitted",
         ));
     }
-    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses") {
+    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses" || route.starts_with("/v1/processing") || route == "/v1/recompile") {
         if serde_json::to_vec(input).map(|bytes| bytes.len() > 450000).unwrap_or(true) {
             return Err(Failure::new("VALIDATION_ERROR", "Analysis request exceeds its bound"));
         }

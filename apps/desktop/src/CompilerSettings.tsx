@@ -3,6 +3,7 @@ import type { CompilerSettings as Settings } from '@engramweave/contracts';
 import { client, failure, type Failure } from './client';
 import { ErrorNotice } from './Feedback';
 import './compiler.css';
+import { OutputBudget } from './OutputBudget';
 
 export function CompilerSettings({ connected }: { connected: boolean }) {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -38,6 +39,7 @@ export function CompilerSettings({ connected }: { connected: boolean }) {
         <label>API endpoint<input required type="url" value={settings.endpoint} onChange={event => update('endpoint', event.target.value)} placeholder="https://api.openai.com/v1" /></label>
         <label>API key<input type="password" autoComplete="off" value={key} onChange={event => setKey(event.target.value)} placeholder={configured ? '已安全保存；留空保留现有密钥' : '本地端点可留空；远程端点需密钥'} /></label>
         <label>Output format<select value={settings.output_format} onChange={event => update('output_format', event.target.value as Settings['output_format'])}><option value="json_schema">JSON Schema</option><option value="json_object">JSON object</option><option value="text">JSON in text</option></select></label>
+        <OutputBudget value={settings.output_tokens} onChange={value => update('output_tokens', value)} />
       </> : <label>Codex executable<input required value={settings.codex_path} onChange={event => update('codex_path', event.target.value)} placeholder="C:\…\codex.exe" /><small>使用此 CLI 已有的 ChatGPT 登录。</small></label>}
       <label>Reasoning effort<select value={settings.reasoning_effort} onChange={event => update('reasoning_effort', event.target.value as Settings['reasoning_effort'])}>{['default', 'none', 'low', 'medium', 'high', 'xhigh', 'max'].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
       <label>Timeout (seconds)<input type="number" min={10} max={1800} value={settings.timeout_seconds} onChange={event => update('timeout_seconds', Number(event.target.value))} /></label>

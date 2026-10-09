@@ -206,7 +206,7 @@ export function Shell({
                   ? greeting
                   : {
                       sources: 'Sources',
-                      jobs: 'Scan activity',
+                      jobs: 'Jobs & rounds',
                       search: 'Find your knowledge',
                       settings: 'Your workspace',
                     }[view]}
@@ -221,7 +221,7 @@ export function Shell({
                   : {
                       sources:
                         'Manage your captured materials and their context.',
-                      jobs: 'A clear view of your local indexing tasks.',
+                      jobs: 'Track compilation, analysis, and local indexing.',
                       search:
                         'Find notes, sources, and the context that connects them.',
                       settings:

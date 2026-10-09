@@ -26,6 +26,7 @@ import {
 import { Jobs, Results } from './Lists';
 import { CompilerSettings } from './CompilerSettings';
 import { AnalysisSettings } from './AnalysisSettings';
+import { ProcessingSettings, ProcessingRounds } from './Processing';
 import { SemanticSettings, SemanticSearch } from './SemanticRecall';
 import { SourceCompiler } from './SourceCompiler';
 import { DocumentFailure, ErrorNotice, ErrorToast, type ErrorPlacement } from './Feedback';
@@ -56,6 +57,7 @@ export function App() {
   const documentGeneration = useRef<number | null>(null);
   const connected = status !== null;
   const active =
+    status?.processing_round?.id ??
     status?.active_job?.id ??
     jobs?.items.find((job) => ['queued', 'running'].includes(job.status))?.id ??
     null;
@@ -146,34 +148,35 @@ export function App() {
     setJobs(jobs);
     return (
       status.active_job !== null ||
+      status.processing_round != null ||
       status.semantic_index?.state === 'running' ||
       jobs.items.some((job) => ['queued', 'running'].includes(job.status))
     );
   }, []);
   useEffect(() => {
-    if (!connected || (!active && status?.semantic_index?.state !== 'running')) return;
+    if (!connected || (!active && status?.semantic_index?.state !== 'running' && !status?.processing_schedule?.next_due)) return;
     const epoch = connectionEpoch.current;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const pending = await refresh();
-        if (!cancelled && pending)
+        if (!cancelled && (pending || status?.processing_schedule?.next_due))
           timer = setTimeout(() => {
             void poll();
-          }, 1000);
+          }, pending ? 1000 : 15000);
       } catch (error) {
         if (!cancelled) report(error, 'toast', epoch);
       }
     };
     timer = setTimeout(() => {
       void poll();
-    }, 1000);
+    }, active ? 1000 : 15000);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [connected, active, status?.semantic_index?.state, refresh, report]);
+  }, [connected, active, status?.semantic_index?.state, status?.processing_schedule?.next_due, refresh, report]);
   useEffect(() => {
     if (!connected || (view !== 'sources' && view !== 'dashboard')) return;
     const epoch = connectionEpoch.current;
@@ -398,6 +401,7 @@ export function App() {
             </div>
             <CompilerSettings connected={connected} />
             <AnalysisSettings connected={connected} />
+            <ProcessingSettings connected={connected} onChange={refreshSources} />
             <SemanticSettings connected={connected} generation={status?.index_generation} onIndexChange={() => { void refresh().catch(error => report(error, 'operations')); }} />
             {errors.operations && <ErrorNotice error={errors.operations} />}
             <p className="hint">
@@ -429,7 +433,7 @@ export function App() {
       >
         {view === 'sources' && (
           <SourceBrowser
-            compilerActions={document?.kind === 'source' ? <SourceCompiler key={document.path} document={document} jobs={jobs} active={Boolean(active)} generation={status?.index_generation} onStarted={() => { void refresh().catch(error => report(error, 'document')); }} onPublished={() => { void select(document.path); }} /> : undefined}
+            compilerActions={document?.kind === 'source' ? <SourceCompiler key={document.path} document={document} jobs={jobs} active={Boolean(active)} generation={status?.index_generation} roundId={status?.processing_round?.id} onStarted={() => { void refresh().catch(error => report(error, 'document')); }} onPublished={() => { void select(document.path); }} /> : undefined}
             analyzerSource={status?.active_job?.kind === 'analyze_draft' ? status.active_job.source_path : null}
             page={sources}
             counts={sourceCounts}
@@ -475,6 +479,7 @@ export function App() {
                 ? '任务活动中，正在轮询进度。'
                 : '没有活动任务，轮询已停止。'}
             </p>
+            <ProcessingRounds connected={connected} active={Boolean(active)} onChange={refreshSources} jobs={jobs} />
             <Jobs page={jobs} />
           </section>
         )}

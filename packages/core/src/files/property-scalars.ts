@@ -24,7 +24,11 @@ export function editScalarProperty(bytes: Buffer, key: string, target: string, q
     if (isScalar(value) && value.srcToken?.type === 'block-scalar') {
       // Empty block scalars have no submitted text; preserve header comments and blank lines.
       const header = value.srcToken.props.find(token => token.type === 'block-scalar-header');
-      if (header && 'source' in header) to = from + header.source.length;
+      if (quoted && typeof value.value === 'string' && value.value.length) {
+        to = start + value.range[2];
+        const comment = value.srcToken.props.find(token => token.type === 'comment');
+        replacement = literal + (comment && 'source' in comment ? ` ${comment.source}` : '') + (opening[0].endsWith('\r\n') ? '\r\n' : '\n');
+      } else if (header && 'source' in header) to = from + header.source.length;
     }
   } else if (yaml.contents.flow && yaml.contents.range) {
     from = to = start + yaml.contents.range[0] + 1;

@@ -14,8 +14,9 @@ export function registerReviewRoutes(server: FastifyInstance, config: Config, se
     const source = await readDocument(config, current, draft.sources[0]!);
     const index = sourceRelations(current.db, config.vault_path); await index.refresh(true);
     const targets = index.targets(source.path);
-    const analysis = current.analyzer?.all().find(job => job.draft_path === draft.path && job.source_path === source.path) ?? null;
+    const analysis = current.analyzer?.latestForDraft(draft.path) ?? null;
     return { draft, source, related_drafts: targets.drafts, diagnostics: targets.diagnostics, analysis,
+      analyses: { review: current.analyzer?.latestForDraft(draft.path, 'review') ?? null, relation: current.analyzer?.latestForDraft(draft.path, 'relation') ?? null },
       publication: await current.publications?.forDraft(draft.path) ?? null };
   } });
   server.route({ ...API.publishDraft, handler(request) {
