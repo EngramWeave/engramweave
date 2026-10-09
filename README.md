@@ -2,6 +2,8 @@
 
 # EngramWeave
 
+Obsidian 原生审阅 MVP 已提供独立插件：Source 编译／分析、Draft 编辑、侧边栏结果和人工确认直接入库 `40_Knowledge`。使用方法见 [插件说明](../engramweave-obsidian/README.md)，Core 安全与恢复边界见 [直接入库合同](docs/obsidian-mvp.md)。
+
 **你的知识，你来定稿。**
 
 AI 编译，你定稿。面向长期学习与研究的个人知识编译系统。

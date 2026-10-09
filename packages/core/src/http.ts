@@ -10,6 +10,7 @@ import { registerCaptureRoute } from './http/captures.js';
 import { registerCompilerRoutes } from './http/compiler.js';
 import { registerRecallRoutes } from './http/recall.js';
 import { registerAnalysisRoutes } from './http/analysis.js';
+import { registerReviewRoutes } from './http/review.js';
 
 export interface HttpRuntime {
   token: string | null;
@@ -56,6 +57,11 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
     return reply.code(runtime.status === 'ready' ? 200 : 503).send(health);
   } });
   if (services) {
+    server.addHook('preHandler', async request => {
+      if (request.method === 'POST' && request.url !== API.publishDraft.url && services().publications?.busy()) {
+        throw new CoreError('JOB_BUSY', 'Finish or recover the approved Draft publication before another mutation', 409);
+      }
+    });
     registerRegistryRoutes(server, config, services);
     registerDocumentRoutes(server, config, services);
     registerSearchRoute(server, services);
@@ -63,6 +69,7 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
     registerCompilerRoutes(server, config, services);
     registerRecallRoutes(server, services);
     registerAnalysisRoutes(server, config, services);
+    registerReviewRoutes(server, config, services);
   }
   return server;
 }

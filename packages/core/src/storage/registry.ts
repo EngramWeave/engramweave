@@ -17,6 +17,15 @@ export interface DocumentRow {
 export interface Projection { path: string; parsed: ParsedDocument; revision: string | null; size: number | null; mtime: number | null }
 export const getDocument = (db: Database.Database, relative: string) => db.prepare('SELECT * FROM documents WHERE path_key=?').get(documentPathKey(relative)) as DocumentRow | undefined;
 export const allDocuments = (db: Database.Database) => db.prepare('SELECT * FROM documents ORDER BY path_key').all() as DocumentRow[];
+/** A newly approved note is visible immediately; this does not invoke Embedding. */
+export function upsertLibraryDocument(db: Database.Database, relative: string, file: FileRead, parsed: ParsedDocument) {
+  if (parsed.state !== 'ready' || parsed.kind === 'source') throw new Error('Library publication requires a readable library note');
+  db.prepare(`INSERT OR IGNORE INTO documents
+    (id,path_key,path,kind,state,revision,size,mtime,title,source_type,captured_at,original_locator,metadata_json,asset_json,diagnostics_json,annotation,body_markdown,title_norm,body_norm,annotation_norm,metadata_norm,indexed_at)
+    VALUES (?,?,?,?,'ready',?,?,?, ?,NULL,NULL,NULL,'{}',NULL,'[]','','','','','','',NULL)`)
+    .run(randomUUID(), documentPathKey(relative), relative, parsed.kind, file.revision, file.size, file.mtime, parsed.title);
+  updateCompiledSource(db, relative, file, parsed);
+}
 /** Publish the entire newly read Source snapshot, never a new hash with old cached content. */
 export function updateCompiledSource(db: Database.Database, relative: string, file: FileRead, parsed: ParsedDocument) {
   if (parsed.state !== 'ready') return;

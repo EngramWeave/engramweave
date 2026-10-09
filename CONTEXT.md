@@ -90,6 +90,12 @@ Core owns selected Source Compile/Discard/Restore/Discard Drafts/Delete batches,
 
 Ordinary reads use Node. Core builds and owns a Windows x64 C# helper using the installed .NET Framework compiler; runtime executes the compiled artifact directly and does not invoke PowerShell or compile file-operation code. It remains available to the standalone CLI independently of Desktop. Fresh attribute queries share a Core-owned worker; mutation commits reuse a sequential helper and return the exact committed bytes/hash/timestamp for projection publication. Ancestor/file handle locks, native attribute checks, revision guards and recovery journals remain mandatory. Completed batch status is published only after the final receipt is durable. Status aggregates counts inside SQLite, and browsing without text search omits entire-body projections.
 
+## MVP native review and publication
+
+Core implements the early direct Knowledge publication path authorized in [system ADR-0015](../engramweave-docs/docs/adr/0015-mvp-direct-draft-publication.md). The Obsidian plugin remains a thin local client and native editor; model configuration stays in Desktop/Core. Human approval binds the current Draft/Source and explicit complete Draft cleanup list to a new Knowledge path, with no overwrite or model-generated integration operation. This is separate from full Review Complete, Integration Intent and ChangeSet semantics.
+
+Publication receipts outside the Vault precede formal creation and guarded lifecycle edits. Restart reconciles unfinished approved application without invoking models; completed IDs remain replayable after database reconstruction. Conflicting edits are retained and prevent competing mutations until recovery. New formal notes enter the Registry immediately while Embedding still follows explicit build/Refresh semantics. Automatic Vault Git is deferred for this MVP. See [the publication contract](docs/obsidian-mvp.md).
+
 ## Semantic recall
 
 Core owns explicit first indexing and initialized Refresh Workspace updates for active, ready Knowledge, Ideas and Research. Ordinary edits and startup never invoke Embedding. Successful Registry publication remains usable if semantic indexing fails. A separate data-directory SQLite cache and worker own chunking, FTS5 BM25, exact sqlite-vec retrieval, reusable content/model fingerprints, and independent indexing status. Model or representation changes require explicit rebuilding; interrupted work never resumes automatically.

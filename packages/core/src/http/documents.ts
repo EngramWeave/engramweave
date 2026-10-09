@@ -10,8 +10,11 @@ import type { CoreServices } from './context.js';
 
 export function registerDocumentRoutes(server: FastifyInstance, config: Config, services: () => CoreServices) {
   server.route({ ...API.documents, async handler(request) {
-    const { db } = services();
     const relative = (request.query as { path: string }).path;
+    return readDocument(config, services(), relative);
+  } });
+}
+export async function readDocument(config: Config, { db }: CoreServices, relative: string): Promise<Document> {
     if (relative.startsWith('30_Drafts/')) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Use the dedicated Draft endpoint', 403);
     let file;
     try { file = await readMarkdown(config.vault_path, relative); }
@@ -44,5 +47,4 @@ export function registerDocumentRoutes(server: FastifyInstance, config: Config, 
     }
     const document: Document = { ...source, asset: { ...asset, kind: asset.kind }, source_content: null, record_body: parsed.body_markdown };
     return document;
-  } });
 }

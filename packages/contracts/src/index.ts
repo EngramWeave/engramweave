@@ -282,8 +282,31 @@ export const RecallResponseSchema = object({
 export type RecallResponse = Static<typeof RecallResponseSchema>;
 export const RecallContextRequestSchema = object({ items: Type.Array(object({ chunk_id: nonempty, path: ScopedMarkdownPathSchema, revision: RevisionSchema }), { minItems: 1, maxItems: 60 }) });
 export const RecallContextResponseSchema = object({ items: Type.Array(RecallHitSchema), diagnostics: DiagnosticsSchema, truncated: Type.Boolean() });
+export const KnowledgePathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^40_Knowledge/.+\\.[mM][dD]$' })]);
+const ReviewTargetSchema = object({ path: DraftPathSchema, revision: RevisionSchema, title: text });
+export const PublishDraftRequestSchema = object({
+  request_id: Type.String({ pattern: '^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$' }),
+  draft_path: DraftPathSchema, draft_revision: RevisionSchema,
+  source_path: CapturePathSchema, source_revision: RevisionSchema,
+  target_path: KnowledgePathSchema, analysis_id: nonempty,
+  related_drafts: Type.Array(object({ path: DraftPathSchema, revision: RevisionSchema }), { minItems: 1, maxItems: 100 }),
+});
+export type PublishDraftRequest = Static<typeof PublishDraftRequestSchema>;
+export const DraftReviewSchema = object({
+  draft: DraftSchema, source: DocumentSchema, related_drafts: Type.Array(ReviewTargetSchema),
+  diagnostics: DiagnosticsSchema, analysis: nullable(AnalyzerJobSchema),
+  publication: nullable(object({ request: PublishDraftRequestSchema, status: enumeration(['completed', 'unfinished']), error: nullable(text) })),
+});
+export type DraftReview = Static<typeof DraftReviewSchema>;
+export const PublishDraftResponseSchema = object({
+  request_id: nonempty, target_path: KnowledgePathSchema, source_path: CapturePathSchema,
+  discarded_drafts: Type.Array(DraftPathSchema), status: Type.Literal('completed'), reused: Type.Boolean(),
+});
+export type PublishDraftResponse = Static<typeof PublishDraftResponseSchema>;
 /** Implemented endpoints. Schema declarations do not register unimplemented handlers. */
 export const API = {
+  draftReview: { method: 'GET', url: '/v1/draft-review', schema: { querystring: object({ path: DraftPathSchema }), response: { ...errors, 200: DraftReviewSchema } } },
+  publishDraft: { method: 'POST', url: '/v1/draft-publications', schema: { querystring: empty, body: PublishDraftRequestSchema, response: { ...errors, 200: PublishDraftResponseSchema } } },
   analysisSettings: { method: 'GET', url: '/v1/analysis/settings', schema: { querystring: empty, response: { ...errors, 200: AnalysisSettingsResponseSchema } } },
   analysisSettingsWrite: { method: 'POST', url: '/v1/analysis/settings', schema: { querystring: empty, body: AnalysisSettingsWriteSchema, response: { ...errors, 200: AnalysisSettingsResponseSchema } } },
   analysisTemplates: { method: 'GET', url: '/v1/analysis/templates', schema: { querystring: empty, response: { ...errors, 200: object({ items: Type.Array(AnalysisTemplateSchema) }) } } },

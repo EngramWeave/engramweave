@@ -14,6 +14,7 @@ import { recoverDatabase } from './storage/recover.js';
 import { retainWindowsAttributes } from './files/windows.js';
 import { SemanticRecall } from './recall/index.js';
 import { AnalyzerJobs } from './jobs/analyzer.js';
+import { DraftPublications } from './review/publication.js';
 
 export async function startCore(input: Config) {
   const releaseAttributes = retainWindowsAttributes();
@@ -43,27 +44,30 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     let compiler: CompilerJobs;
     let batches: SourceBatches;
     let analyzer: AnalyzerJobs;
+    let publications: DraftPublications;
     let recall: SemanticRecall | undefined;
-    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy()), async () => { await recall?.afterRefresh(); });
-    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy()));
+    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy()), async () => { await recall?.afterRefresh(); });
+    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy() || publications?.busy()));
     await compiler.initialize();
-    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null, input => analyzer?.guardBatch(input));
+    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null || Boolean(publications?.busy()), input => analyzer?.guardBatch(input));
     recall = new SemanticRecall(config, database);
-    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy()));
-    services = { db: database, jobs, compiler, batches, recall, analyzer, instance_id: instance.id };
+    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || publications?.busy()));
+    publications = new DraftPublications(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy()), id => analyzer.get(id));
+    services = { db: database, jobs, compiler, batches, recall, analyzer, publications, instance_id: instance.id };
     await analyzer.initialize();
     await batches.initialize();
+    await publications.initialize();
     runtime.status = 'ready';
     let closed = false;
     return { config, instance_id: instance.id, server, async close() {
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+      try { await server.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
       finally { try { database?.close(); } finally { try { await instance?.close(); } finally { await releaseAttributes(); } } }
     } };
   } catch (error) {
-    try { await server.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+    try { await server.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
     finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }
