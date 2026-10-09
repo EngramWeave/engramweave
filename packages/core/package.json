@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@engramweave/contracts": "0.1.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
     "sqlite-vec": "0.1.9",

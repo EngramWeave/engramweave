@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const LIMITS = Object.freeze({
   markdown_bytes: 5 * 1024 * 1024,
   capture_json_bytes: 8 * 1024 * 1024,
@@ -97,7 +97,37 @@ export const CompilerJobSchema = object({ id: nonempty, kind: Type.Literal('comp
   route: enumeration(['api', 'codex']), model: text, prompt_version: Type.Literal('compiler-v1'),
   error: nullable(ErrorSchema.properties.error) });
 export type CompilerJob = Static<typeof CompilerJobSchema>;
-export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema]);
+export const AnalysisProfileIdSchema = Type.String({ pattern: '^[a-z][a-z0-9_-]{0,63}$' });
+export const AnalysisTemplatePathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^90_System/Prompts/(Review|Relation)/[a-zA-Z0-9_-]+\\.md$' })]);
+export const AnalysisTaskSchema = object({ template_path: AnalysisTemplatePathSchema, execution: CompilerSettingsSchema });
+export const AnalysisProfileSchema = object({ id: AnalysisProfileIdSchema, name: Type.String({ minLength: 1, maxLength: 100 }),
+  review: AnalysisTaskSchema, relation: AnalysisTaskSchema, reuse: enumeration(['input', 'output', 'none']) });
+export type AnalysisProfile = Static<typeof AnalysisProfileSchema>;
+export const AnalysisSettingsSchema = object({ default_profile: nullable(AnalysisProfileIdSchema), profiles: Type.Array(AnalysisProfileSchema, { maxItems: 20 }) });
+export type AnalysisSettings = Static<typeof AnalysisSettingsSchema>;
+export const AnalysisSettingsResponseSchema = object({ settings: AnalysisSettingsSchema, credentials: Type.Array(object({ profile_id: AnalysisProfileIdSchema, review: Type.Boolean(), relation: Type.Boolean() })) });
+export const AnalysisSettingsWriteSchema = object({ settings: AnalysisSettingsSchema, credentials: Type.Optional(Type.Array(object({ profile_id: AnalysisProfileIdSchema, task: enumeration(['review','relation']), api_key: Type.String({ minLength: 1, maxLength: 8192 }) }), { maxItems: 40 })) });
+export const AnalysisTemplateSchema = object({ path: AnalysisTemplatePathSchema, content: Type.String({ maxLength: 64000 }), revision: RevisionSchema });
+export const AnalyzeRequestSchema = object({ request_id: CompileRequestSchema.properties.request_id, source_path: CapturePathSchema, source_revision: RevisionSchema,
+  draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: Type.Optional(AnalysisProfileIdSchema) });
+export type AnalyzeRequest = Static<typeof AnalyzeRequestSchema>;
+export const AnalysisCitationSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, DraftPathSchema]), revision: RevisionSchema,
+  start_line: Type.Integer({ minimum: 1 }), end_line: Type.Integer({ minimum: 1 }) });
+export const ReviewResultSchema = object({ summary: Type.String({ maxLength: 12000 }), findings: Type.Array(object({
+  category: enumeration(['omission','meaning','understanding','error','claim','scope','other']), message: Type.String({ minLength: 1, maxLength: 4000 }),
+  evidence: Type.Array(AnalysisCitationSchema, { minItems: 1, maxItems: 10 }) }), { maxItems: 30 }), limitations: Type.Array(Type.String({ maxLength: 2000 }), { maxItems: 20 }) });
+export const RelationResultSchema = object({ summary: Type.String({ maxLength: 12000 }), suggestions: Type.Array(object({
+  category: enumeration(['connection','conflict','integration','merge','new_viewpoint']), message: Type.String({ minLength: 1, maxLength: 4000 }),
+  evidence: Type.Array(AnalysisCitationSchema, { minItems: 1, maxItems: 10 }) }), { maxItems: 30 }), limitations: Type.Array(Type.String({ maxLength: 2000 }), { maxItems: 20 }) });
+export type ReviewResult = Static<typeof ReviewResultSchema>;
+export type RelationResult = Static<typeof RelationResultSchema>;
+export const AnalyzerTaskStateSchema = object({ status: enumeration(['pending','running','succeeded','failed','interrupted']), route: enumeration(['api','codex']), model: text,
+  started_at: nullable(instant), finished_at: nullable(instant), error: nullable(ErrorSchema.properties.error) });
+export const AnalyzerJobSchema = object({ id: nonempty, kind: Type.Literal('analyze_draft'), status: JobStatusSchema, created_at: instant, started_at: nullable(instant), finished_at: nullable(instant),
+  source_path: CapturePathSchema, source_revision: RevisionSchema, draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: AnalysisProfileIdSchema,
+  review: AnalyzerTaskStateSchema, relation: AnalyzerTaskStateSchema, error: nullable(ErrorSchema.properties.error) });
+export type AnalyzerJob = Static<typeof AnalyzerJobSchema>;
+export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema, AnalyzerJobSchema]);
 export const AssetSchema = object({
   kind: enumeration(['inline_markdown', 'vault_file', 'external_ref']), locator: nonempty,
   availability: enumeration(['available', 'missing', 'unverified', 'unsupported']),
@@ -195,7 +225,7 @@ export const SearchResponseSchema = object({ ...page(SearchResultSchema), ...ind
 export const ScanRequestSchema = object({ mode: ScanModeSchema });
 export type ScanRequest = Static<typeof ScanRequestSchema>;
 export const ScanResponseSchema = object({ job: JobSchema, reused: Type.Boolean() });
-export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: Type.String({ minLength: 1 }) });
+export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: Type.String({ minLength: 1 }), analysis_profile: Type.Optional(AnalysisProfileIdSchema) });
 export const CaptureResponseSchema = object({ path: CapturePathSchema, revision: RevisionSchema, created: Type.Boolean(), scan_required: Type.Literal(true) });
 export type CaptureRequest = Static<typeof CaptureRequestSchema>;
 export type CaptureResponse = Static<typeof CaptureResponseSchema>;
@@ -254,6 +284,14 @@ export const RecallContextRequestSchema = object({ items: Type.Array(object({ ch
 export const RecallContextResponseSchema = object({ items: Type.Array(RecallHitSchema), diagnostics: DiagnosticsSchema, truncated: Type.Boolean() });
 /** Implemented endpoints. Schema declarations do not register unimplemented handlers. */
 export const API = {
+  analysisSettings: { method: 'GET', url: '/v1/analysis/settings', schema: { querystring: empty, response: { ...errors, 200: AnalysisSettingsResponseSchema } } },
+  analysisSettingsWrite: { method: 'POST', url: '/v1/analysis/settings', schema: { querystring: empty, body: AnalysisSettingsWriteSchema, response: { ...errors, 200: AnalysisSettingsResponseSchema } } },
+  analysisTemplates: { method: 'GET', url: '/v1/analysis/templates', schema: { querystring: empty, response: { ...errors, 200: object({ items: Type.Array(AnalysisTemplateSchema) }) } } },
+  analysisTemplateWrite: { method: 'POST', url: '/v1/analysis/template', schema: { querystring: empty, body: AnalysisTemplateSchema, response: { ...errors, 200: AnalysisTemplateSchema } } },
+  analysisSelection: { method: 'POST', url: '/v1/analysis/selection', schema: { querystring: empty, body: object({ path: CapturePathSchema, revision: RevisionSchema, profile_id: AnalysisProfileIdSchema }), response: { ...errors, 200: object({ path: CapturePathSchema, revision: RevisionSchema }) } } },
+  analyze: { method: 'POST', url: '/v1/analyses', schema: { querystring: empty, body: AnalyzeRequestSchema, response: { ...errors, 202: object({ job: AnalyzerJobSchema, reused: Type.Boolean() }) } } },
+  analysisCancel: { method: 'POST', url: '/v1/analysis/cancel', schema: { querystring: empty, body: object({ id: nonempty }), response: { ...errors, 200: AnalyzerJobSchema } } },
+  analysisResult: { method: 'GET', url: '/v1/analysis/result', schema: { querystring: object({ id: nonempty }), response: { ...errors, 200: object({ job: AnalyzerJobSchema, stale: Type.Boolean(), stale_reasons: Type.Array(text), review: nullable(ReviewResultSchema), relation: nullable(RelationResultSchema), record: Type.Record(text, Type.Unknown()) }) } } },
   recallSettings: { method: 'GET', url: '/v1/recall/settings', schema: { querystring: empty, response: { ...errors, 200: RecallSettingsResponseSchema } } },
   recallSettingsWrite: { method: 'POST', url: '/v1/recall/settings', schema: { querystring: empty, body: RecallSettingsWriteSchema, response: { ...errors, 200: RecallSettingsResponseSchema } } },
   recallTest: { method: 'POST', url: '/v1/recall/test', schema: { querystring: empty, body: empty, response: { ...errors, 200: object({ dimensions: count, reranker: enumeration(['disabled','available']) }) } } },

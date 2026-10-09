@@ -27,6 +27,13 @@ pub enum Operation {
     RecallIndex,
     Recall,
     RecallContext,
+    AnalysisSettings,
+    AnalysisSettingsWrite,
+    AnalysisTemplates,
+    AnalysisTemplateWrite,
+    AnalysisSelection,
+    Analyze,
+    AnalysisCancel,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -70,6 +77,13 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::RecallIndex => (true, "/v1/recall/index", &["mode"]),
         Operation::Recall => (true, "/v1/recall", &["q", "scope", "limit", "rerank"]),
         Operation::RecallContext => (true, "/v1/recall/context", &["items"]),
+        Operation::AnalysisSettings => (false, "/v1/analysis/settings", &[]),
+        Operation::AnalysisSettingsWrite => (true, "/v1/analysis/settings", &["settings", "credentials"]),
+        Operation::AnalysisTemplates => (false, "/v1/analysis/templates", &[]),
+        Operation::AnalysisTemplateWrite => (true, "/v1/analysis/template", &["path", "revision", "content"]),
+        Operation::AnalysisSelection => (true, "/v1/analysis/selection", &["path", "revision", "profile_id"]),
+        Operation::Analyze => (true, "/v1/analyses", &["request_id", "source_path", "source_revision", "draft_path", "draft_revision", "profile_id"]),
+        Operation::AnalysisCancel => (true, "/v1/analysis/cancel", &["id"]),
     };
     let object = input
         .as_object()
@@ -79,6 +93,12 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
             "VALIDATION_ERROR",
             "Bridge field is not permitted",
         ));
+    }
+    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses") {
+        if serde_json::to_vec(input).map(|bytes| bytes.len() > 450000).unwrap_or(true) {
+            return Err(Failure::new("VALIDATION_ERROR", "Analysis request exceeds its bound"));
+        }
+        return Ok((true, route.to_string(), vec![]));
     }
     if post && route.starts_with("/v1/recall") {
         if serde_json::to_vec(input).map(|bytes| bytes.len() > 32768).unwrap_or(true) {

@@ -20,11 +20,11 @@ const categories: { state: SourceState; title: string; caption: string; tone: st
   { state: 'discarded', title: 'Discarded', caption: 'Retained for cleanup', tone: 'slate', icon: 'trash' },
 ];
 const healthTones = { ready: 'green', missing: 'orange', invalid: 'red', unsupported: 'violet' };
-export function SourceBrowser({ page, counts, query, changeQuery, document, selectedPath, documentError, listError, select, close, open, connected, offset, setOffset, compilerActions, active, refresh, currentBatch }: {
+export function SourceBrowser({ page, counts, query, changeQuery, document, selectedPath, documentError, listError, select, close, open, connected, offset, setOffset, compilerActions, active, refresh, currentBatch, analyzerSource }: {
   page: SourcePage | null; counts: SourceCounts | null; query: SourcesQuery; changeQuery: (query: SourcesQuery) => void;
   document: Document | null; selectedPath: string | null; documentError?: Failure | undefined; listError?: Failure | undefined;
   select: (path: string) => void; close: () => void; open: (target: 'obsidian' | 'original') => void; connected: boolean; offset: number; setOffset: (offset: number) => void;
-  compilerActions?: ReactNode; active: boolean; refresh: () => void; currentBatch?: SourceBatch | null | undefined;
+  compilerActions?: ReactNode; active: boolean; refresh: () => void; currentBatch?: SourceBatch | null | undefined; analyzerSource?: string | null;
 }) {
   const [selected, setSelected] = useState<Record<string, Source>>({});
   const handledBatch = useRef(currentBatch?.status === 'completed' ? currentBatch.id : null);
@@ -65,7 +65,7 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
       </tr>)}</tbody></table></div>
       {!page?.items.length && <p className="empty">{connected ? '没有符合条件的 Source。可刷新 Vault 或更改筛选。' : '连接 Core 后查看资料。'}</p>}
       {page && <div className="pagination"><span>{page.total} Sources · Generation {page.index_generation}</span><button disabled={offset === 0 || !connected} onClick={() => setOffset(Math.max(0, offset - 20))}>Previous</button><button disabled={offset + 20 >= page.total || !connected} onClick={() => setOffset(offset + 20)}>Next</button></div>}
-      <SourceBatchActions selected={selectedItems} clear={() => setSelected({})} disabled={!connected || active} refresh={refresh} currentBatch={currentBatch} discardedView={query.view === 'discarded'} />
+      <SourceBatchActions selected={selectedItems} clear={() => setSelected({})} disabled={!connected || active && !analyzerSource || Boolean(analyzerSource && selectedItems.some(item => item.path.toLowerCase() === analyzerSource.toLowerCase()))} modelBusy={Boolean(analyzerSource)} refresh={refresh} currentBatch={currentBatch} discardedView={query.view === 'discarded'} />
     </section><div className="source-inspector">{document ? <Detail document={document} close={close} open={open} error={documentError}>{compilerActions}</Detail> : documentError ? <DocumentFailure error={documentError} path={selectedPath} close={close} /> : <aside className="panel inspector-empty"><span className="empty-symbol blue"><Icon name="file" /></span><h2>A closer look</h2><p>选择 Source 查看 Annotation、属性和原始引用。</p></aside>}</div></div>
   </div>;
 }

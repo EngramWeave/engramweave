@@ -26,7 +26,8 @@ export class SourceBatches {
   private readonly filename: string;
   private readonly native = new PropertyNative();
   private readonly releaseAttributes = retainWindowsAttributes();
-  constructor(private readonly config: Config, private readonly db: Database.Database, private readonly compiler: CompilerJobs, private readonly scanBusy: () => boolean) {
+  constructor(private readonly config: Config, private readonly db: Database.Database, private readonly compiler: CompilerJobs, private readonly scanBusy: () => boolean,
+    private readonly guardAnalysis: (input: SourceBatchRequest) => void = () => {}) {
     this.filename = path.join(config.data_dir, 'source-batch.json');
   }
   async initialize() {
@@ -80,6 +81,7 @@ export class SourceBatches {
       return this.current;
     }
     if (this.stopping || this.busy() || this.compiler.busy() || this.scanBusy()) throw new CoreError('JOB_BUSY', 'Wait for the active Core operation before starting a batch', 409);
+    this.guardAnalysis(input);
     if (new Set(input.items.map(item => item.path.toLowerCase())).size !== input.items.length || input.items.some(item => !item.path.startsWith('20_Sources/'))) throw new CoreError('VALIDATION_ERROR', 'Select distinct Source paths', 400);
     this.input = input;
     this.current = { id: input.id, action: input.action, status: 'running', items: input.items.map(item => ({ path: item.path, status: 'pending', job_id: null, error: null })) };

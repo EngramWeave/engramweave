@@ -44,8 +44,8 @@ refresh 仍读取全部候选并计算 hash，只复用未变化文件的解析�
 
 同路径更新保留内部 ID；移动/改名产生 missing + 新路径新 ID，不猜测重命名。同 URL/hash 的不同路径不合并。来源链为 Knowledge → Source Record → inline 内容、本地 Asset 或外部 locator；受限 Wiki Link 支持 alias/anchor，不做 basename 模糊搜索。外部 URI 只标 unverified，不联网或执行 scheme。
 
-Registry SQLite 保存 documents/jobs/meta/compiler_jobs，位于 Vault 外，当前 schema 3；验证后原子迁移 schema 1／2。语义缓存使用独立的 semantic.sqlite。损坏或不兼容库不会自动删除；显式离线恢复取得独占运行权，隔离数据库及 journal/wal/shm 到新备份目录，再从全部受支持文件 rebuild。失败保留备份与诊断。恢复保持路径、完整阶段、生命周期、Annotation、正文及支持的语义查询；仅缺失/空阶段补 pending 并更新 revision，不保证内部 ID、旧 Job 历史或原扫描时间。
+Registry SQLite 保存 documents/jobs/meta/compiler_jobs/analyzer_jobs，位于 Vault 外，当前 schema 4；验证后原子迁移 schema 1／2／3。语义缓存使用独立的 semantic.sqlite。损坏或不兼容库不会自动删除；显式离线恢复取得独占运行权，隔离数据库及 journal/wal/shm 到新备份目录，再从全部受支持文件 rebuild。失败保留备份与诊断。恢复保持路径、完整阶段、生命周期、Annotation、正文及支持的语义查询；仅缺失/空阶段补 pending 并更新 revision，不保证内部 ID、旧 Job 历史或原扫描时间。保留的合法 Analyzer 回执可恢复相应结果，见 [Draft Analyzer](analyzer.md)。
 
-当前支持 Windows 本地 NTFS、单 Vault 和本机 Node 宿主；不承诺网络盘、云占位文件、多 Vault、跨平台安装包、OCR、外部网页存活或找回用户删除的资产。Core 可写入明确 Capture 请求的新 Source、登记时缺失/空阶段的补写，以及显式 Compiler 的新 Draft 和 pending→compiled 阶段；不写正式 Knowledge。两项 Analyzer、人工 Review 动作和整合仍在后续实现。
+当前支持 Windows 本地 NTFS、单 Vault 和本机 Node 宿主；不承诺网络盘、云占位文件、多 Vault、跨平台安装包、OCR、外部网页存活或找回用户删除的资产。Core 可写入明确 Capture 请求的新 Source、登记时缺失/空阶段的补写，以及显式 Compiler 的新 Draft 和 pending→compiled 阶段；不写正式 Knowledge。独立 Analyzer 不改正文；人工 Review 动作和整合仍在后续实现。
 
 Sources 的浏览、筛选、Health 与批量生命周期合同见 [Sources](sources.md)。用户可编辑 Compiler 模板与重复执行见 [Compiler](compiler.md)。

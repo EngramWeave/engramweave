@@ -28,7 +28,7 @@ Compiler 的提示词位于 Vault 的 `90_System/Prompts/Compiler.md`。首次�
 
 每个成功任务新增 `30_Drafts/<request-id>.md`，模型标题不决定路径。文件原样保留 Source 的 captured_at、annotation 属性值（缺失仍缺失，空值或 null 仍保留）；并包含 `type: draft`、`title`、`lifecycle_status`、指向 Source 的 `sources` Wiki Links、`compiled_source_revision` 和正文；已存在的 Draft、用户属性与正文均不覆盖。Source 只通过既有原生写入器变更 pending→compiled，原正文、Annotation 和其他属性保留。Capture 回执重放识别原内容的精确 pending 补写；compiled 推进还需关联 Draft 记录匹配输入 revision 的文件证明，返回当前 revision。没有该证明的手工阶段修改或其他用户变动仍冲突；保存和重放均不依赖 SQLite。
 
-Draft 读取只开放 `30_Drafts/**/*.md`，继承有界稳定读取、路径与链接检查；与 Source／Knowledge 的通用 GET、登记和搜索分开。相关 Draft 从文件中的 `sources` 关联查找，不依赖数据库内部 ID。无效 Draft 报诊断，缺失与歧义不猜测修复。Source 改名的自动回链修复、完整 diff／restore、Recompile 的人工动作入口及 Analyzer 尚未实现。
+Draft 读取只开放 `30_Drafts/**/*.md`，继承有界稳定读取、路径与链接检查；与 Source／Knowledge 的通用 GET、登记和搜索分开。相关 Draft 从文件中的 `sources` 关联查找，不依赖数据库内部 ID。无效 Draft 报诊断，缺失与歧义不猜测修复。独立分析入口见 [Draft Analyzer](analyzer.md)。Source 改名的自动回链修复、完整 diff／restore 和 Recompile 的人工动作入口尚未实现。
 
 ## 发布与恢复
 

@@ -57,6 +57,13 @@ async function request<T extends TSchema>(
   return result;
 }
 export const client = {
+  analysisSettings: () => request('analysis_settings', API.analysisSettings.schema.response[200]),
+  saveAnalysisSettings: (input: Static<typeof API.analysisSettingsWrite.schema.body>) => request('analysis_settings_write', API.analysisSettingsWrite.schema.response[200], input),
+  analysisTemplates: () => request('analysis_templates', API.analysisTemplates.schema.response[200]),
+  saveAnalysisTemplate: (input: Static<typeof API.analysisTemplateWrite.schema.body>) => request('analysis_template_write', API.analysisTemplateWrite.schema.response[200], input),
+  analysisSelection: (input: Static<typeof API.analysisSelection.schema.body>) => request('analysis_selection', API.analysisSelection.schema.response[200], input),
+  analyze: (input: import('@engramweave/contracts').AnalyzeRequest) => request('analyze', API.analyze.schema.response[202], input),
+  cancelAnalysis: (id: string) => request('analysis_cancel', API.analysisCancel.schema.response[200], { id }),
   info: () => native<HostInfo>('host_info'),
   connect: (start: boolean) =>
     native<{

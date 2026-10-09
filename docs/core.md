@@ -1,6 +1,6 @@
 # 本地 Core
 
-Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。正式知识正文写入尚未实现。
+Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。两项独立 AI 分析、Profile 和只读工具见 [Draft Analyzer](analyzer.md)。正式知识正文写入尚未实现。
 
 Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop.md)。Native Host 创建的 Core 通过 `ENGRAMWEAVE_HOST_STDIN=1` 启用私有 stdin 生命周期控制：固定一行 `{"type":"stop"}` 或父管道关闭触发正常停止；普通独立 CLI 不读取 stdin 命令，也不开放 HTTP 停止路由。
 

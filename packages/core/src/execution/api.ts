@@ -4,7 +4,10 @@ import { compilerResult } from '../compiler/input.js';
 
 export const resultJsonSchema = { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title', 'body'], additionalProperties: false };
 export async function executeApi(settings: CompilerSettings, key: string, prompt: string, signal: AbortSignal, instructions: string) {
-  const format = settings.output_format === 'json_schema' ? { type: 'json_schema', json_schema: { name: 'compiler_result', strict: true, schema: resultJsonSchema } }
+  return compilerResult(await executeApiText(settings, key, prompt, signal, instructions, resultJsonSchema, 'compiler_result'), settings.output_format === 'text');
+}
+export async function executeApiText(settings: CompilerSettings, key: string, prompt: string, signal: AbortSignal, instructions: string, schema: object, name: string): Promise<string> {
+  const format = settings.output_format === 'json_schema' ? { type: 'json_schema', json_schema: { name, strict: true, schema } }
     : settings.output_format === 'json_object' ? { type: 'json_object' } : undefined;
   let response: Response;
   try {
@@ -25,10 +28,10 @@ export async function executeApi(settings: CompilerSettings, key: string, prompt
     const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     const choice = value.choices?.[0];
     if (choice?.finish_reason !== 'stop' || choice.message?.refusal || choice.message?.tool_calls?.length || typeof choice.message?.content !== 'string') throw new Error('incomplete');
-    return compilerResult(choice.message.content, settings.output_format === 'text');
+    return choice.message.content;
   } catch (error) {
     if (signal.aborted) throw new CoreError('EXECUTION_FAILED', 'API response stopped or exceeded its time limit');
     if (error instanceof CoreError) throw error;
-    throw new CoreError('INVALID_MODEL_OUTPUT', 'API returned an incomplete, refused or invalid Compiler result', 422);
+    throw new CoreError('INVALID_MODEL_OUTPUT', 'API returned an incomplete, refused or invalid task result', 422);
   }
 }

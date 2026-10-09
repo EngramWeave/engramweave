@@ -4,6 +4,7 @@ import { client, failure, type Failure, type JobPage } from './client';
 import { ErrorNotice } from './Feedback';
 import './compiler.css';
 import { lifecycleLabel } from './status-labels';
+import { DraftAnalysis } from './DraftAnalysis';
 
 export function SourceCompiler({ document, jobs, active, onStarted, onPublished, generation }: {
   document: Document; jobs: JobPage | null; active: boolean; onStarted: () => void; onPublished: () => void; generation?: number | undefined;
@@ -54,5 +55,6 @@ export function SourceCompiler({ document, jobs, active, onStarted, onPublished,
       <button onClick={() => { void client.open(item.path, 'obsidian').catch(error => setError(failure(error))); }}>Open in Obsidian</button>
     </li>)}</ul>}
     {draft && <details className="draft-preview" open><summary>{draft.title}</summary><pre>{draft.body}</pre></details>}
+    <DraftAnalysis key={document.path} document={document} drafts={drafts} jobs={jobs} active={active} onStarted={onStarted} onPublished={onPublished} />
   </section>;
 }

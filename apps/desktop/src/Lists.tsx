@@ -19,10 +19,10 @@ export function Jobs({ page }: { page: JobPage | null }) {
         <article key={job.id}>
           <div className="section-heading">
             <strong>
-              {job.kind === 'compile_source' ? 'Compiler' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
+              {job.kind === 'compile_source' ? 'Compiler' : job.kind === 'analyze_draft' ? 'Draft Analyzer' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
             </strong>
             <span>
-              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : `已处理 ${job.processed_files} 个文件`}
+              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : job.kind === 'analyze_draft' ? `Review ${job.review.status} / Relation ${job.relation.status}` : `已处理 ${job.processed_files} 个文件`}
             </span>
           </div>
           <p className="path">
@@ -47,6 +47,7 @@ export function Jobs({ page }: { page: JobPage | null }) {
             </p>
           ))}
           {job.kind === 'compile_source' && <p className="path">{job.source_path}{job.draft_path ? ` → ${job.draft_path}` : ''}</p>}
+          {job.kind === 'analyze_draft' && <><p className="path">{job.source_path} → {job.draft_path} · {job.profile_id}</p>{(['review','relation'] as const).map(t => job[t].error && <p className="notice warning" key={t}>{t} · {job[t].error!.message}</p>)}</>}
         </article>
       ))}
     </div>

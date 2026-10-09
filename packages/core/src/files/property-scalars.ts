@@ -3,7 +3,8 @@ import { isAlias, isMap, isScalar, parseDocument } from 'yaml';
 import { LIMITS } from '@engramweave/contracts';
 import { FileProblem } from './read.js';
 
-export function editScalarProperty(bytes: Buffer, key: string, target: string): Buffer {
+export function editScalarProperty(bytes: Buffer, key: string, target: string, quoted = false): Buffer {
+  const literal = quoted ? JSON.stringify(target) : target;
   const text = bytes.toString('utf8');
   const bom = text.startsWith('\uFEFF') ? 1 : 0;
   const opening = /^---\r?\n/.exec(text.slice(bom));
@@ -19,7 +20,7 @@ export function editScalarProperty(bytes: Buffer, key: string, target: string): 
     const value = pair.value;
     if ((!isScalar(value) && !isAlias(value)) || !value.range) throw new FileProblem('PROPERTY_WRITE_UNSUPPORTED', 'invalid', 'Stage property cannot be safely edited');
     from = start + value.range[0]; to = start + value.range[1];
-    replacement = from === to ? `${target} ` : target;
+    replacement = from === to ? `${literal} ` : literal;
     if (isScalar(value) && value.srcToken?.type === 'block-scalar') {
       // Empty block scalars have no submitted text; preserve header comments and blank lines.
       const header = value.srcToken.props.find(token => token.type === 'block-scalar-header');
@@ -27,7 +28,7 @@ export function editScalarProperty(bytes: Buffer, key: string, target: string): 
     }
   } else if (yaml.contents.flow && yaml.contents.range) {
     from = to = start + yaml.contents.range[0] + 1;
-    replacement = `${key}: ${target}, `;
+    replacement = `${key}: ${literal}, `;
   } else {
     from = to = start;
     let indent = '';
@@ -40,7 +41,7 @@ export function editScalarProperty(bytes: Buffer, key: string, target: string): 
         from = to = lineStart; indent = prefix;
       }
     }
-    replacement = `${indent}${key}: ${target}${opening[0].endsWith('\r\n') ? '\r\n' : '\n'}`;
+    replacement = `${indent}${key}: ${literal}${opening[0].endsWith('\r\n') ? '\r\n' : '\n'}`;
   }
   const edited = Buffer.concat([bytes.subarray(0, Buffer.byteLength(text.slice(0, from))), Buffer.from(replacement), bytes.subarray(Buffer.byteLength(text.slice(0, to)))]);
   if (edited.length > LIMITS.markdown_bytes) throw new FileProblem('FILE_TOO_LARGE', 'unsupported', 'Normalized Markdown exceeds the file size limit');

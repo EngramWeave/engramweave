@@ -38,7 +38,10 @@ CREATE TABLE compiler_jobs (
 );
 CREATE UNIQUE INDEX one_active_compiler ON compiler_jobs((1)) WHERE status IN ('queued','running');`;
 const version2Schema = legacySchema.replace('PRAGMA user_version=1;', '') + compilerSchema + '\nPRAGMA user_version=2;';
-const schema = version2Schema.replace("CHECK(kind IN ('source','knowledge'))", "CHECK(kind IN ('source','knowledge','idea','research'))").replace('PRAGMA user_version=2;', 'PRAGMA user_version=3;');
+const version3Schema = version2Schema.replace("CHECK(kind IN ('source','knowledge'))", "CHECK(kind IN ('source','knowledge','idea','research'))").replace('PRAGMA user_version=2;', 'PRAGMA user_version=3;');
+const analyzerSchema = `CREATE TABLE analyzer_jobs (id TEXT PRIMARY KEY, job_json TEXT NOT NULL CHECK(json_valid(job_json)), request_json TEXT NOT NULL CHECK(json_valid(request_json)));
+CREATE UNIQUE INDEX one_active_analyzer ON analyzer_jobs((1)) WHERE json_extract(job_json,'$.status') IN ('queued','running');`;
+const schema = version3Schema.replace('PRAGMA user_version=3;', '') + analyzerSchema + '\nPRAGMA user_version=4;';
 const columns = {
   documents: 'id path_key path kind state revision size mtime title source_type captured_at original_locator metadata_json asset_json diagnostics_json annotation body_markdown title_norm body_norm annotation_norm metadata_norm indexed_at'.split(' '),
   jobs: 'id kind mode status created_at started_at finished_at processed_files summary_json error_json'.split(' '),
@@ -69,12 +72,12 @@ export async function openDatabase(config: Config): Promise<Database.Database> {
       initialize();
     } else {
       const legacy = version === 1;
-      if (![1, 2, SCHEMA_VERSION].includes(version as number) || tables.map(table => table.name).join(',') !== (legacy ? 'documents,jobs,meta' : 'compiler_jobs,documents,jobs,meta')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Unsupported database schema');
-      for (const [table, required] of Object.entries(legacy ? columns : { ...columns, compiler_jobs: compilerColumns })) {
+      if (![1, 2, 3, SCHEMA_VERSION].includes(version as number) || tables.map(table => table.name).join(',') !== (legacy ? 'documents,jobs,meta' : version === 4 ? 'analyzer_jobs,compiler_jobs,documents,jobs,meta' : 'compiler_jobs,documents,jobs,meta')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Unsupported database schema');
+      for (const [table, required] of Object.entries(legacy ? columns : { ...columns, compiler_jobs: compilerColumns, ...(version === 4 ? { analyzer_jobs: ['id','job_json','request_json'] } : {}) })) {
         const actual = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
         if (actual.map(column => column.name).join(',') !== required.join(',')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Database layout does not match its version');
       }
-      for (const statement of (legacy ? legacySchema : version === 2 ? version2Schema : schema).split(';').map(item => item.trim()).filter(item => item.startsWith('CREATE'))) {
+      for (const statement of (legacy ? legacySchema : version === 2 ? version2Schema : version === 3 ? version3Schema : schema).split(';').map(item => item.trim()).filter(item => item.startsWith('CREATE'))) {
         const name = /^CREATE (?:TABLE|UNIQUE INDEX) (\w+)/.exec(statement)?.[1];
         const actual = db.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(name) as { sql: string } | undefined;
         if (!actual || normalizeDdl(actual.sql) !== normalizeDdl(statement)) throw new CoreError('SCHEMA_UNSUPPORTED', 'Database constraints do not match their version');
@@ -82,13 +85,14 @@ export async function openDatabase(config: Config): Promise<Database.Database> {
       const meta = indexMeta(db);
       if (!meta || meta.schema_version !== version || !Number.isSafeInteger(meta.index_generation) || meta.index_generation < 0) throw new CoreError('SCHEMA_UNSUPPORTED', 'Invalid database binding metadata');
       const roots: unknown = JSON.parse(meta.known_scan_roots);
-      if (!Array.isArray(roots) || roots.some(root => !(version === 3 ? ['10_Ideas', '20_Sources', '40_Knowledge', '50_Research'] : ['20_Sources', '40_Knowledge']).includes(root))) throw new CoreError('SCHEMA_UNSUPPORTED', 'Invalid scan root metadata');
+      if (!Array.isArray(roots) || roots.some(root => !(Number(version) >= 3 ? ['10_Ideas', '20_Sources', '40_Knowledge', '50_Research'] : ['20_Sources', '40_Knowledge']).includes(root))) throw new CoreError('SCHEMA_UNSUPPORTED', 'Invalid scan root metadata');
       if (meta.vault_path_key !== pathKey(config.vault_path)) throw new CoreError('VAULT_MISMATCH', 'Database belongs to another Vault');
       if (version !== SCHEMA_VERSION) db.transaction(() => {
         if (legacy) db!.exec(compilerSchema);
         db!.exec('ALTER TABLE documents RENAME TO documents_old;');
         db!.exec(schema.split(';').find(statement => statement.trim().startsWith('CREATE TABLE documents'))!);
         db!.exec('INSERT INTO documents SELECT * FROM documents_old; DROP TABLE documents_old;');
+        db!.exec(analyzerSchema);
         db!.prepare('UPDATE meta SET schema_version=? WHERE id=1').run(SCHEMA_VERSION);
         db!.pragma(`user_version=${SCHEMA_VERSION}`);
       })();

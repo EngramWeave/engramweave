@@ -7,6 +7,7 @@ import { windowsAttributes } from './windows.js';
 
 export const documentPathKey = (value: string) => value.toLowerCase();
 export const excludedName = (name: string) => name.startsWith('.') || name.startsWith('~') || /(?:\.tmp|\.temp|\.swp|~)$/i.test(name);
+export const analysisTemplatePath = (input: string) => /^90_System\/Prompts\/(Review|Relation)\/[a-zA-Z0-9_-]+\.md$/.test(input);
 
 export function normalizeVaultPath(input: string): string {
   const parts = input.split('/');
@@ -27,7 +28,7 @@ export function markdownPath(input: string, allowDraft = false): string {
 
 /** Both scans and detail reads check each path segment without following links. */
 export async function resolveMarkdown(vault: string, input: string, nativeAttributesChecked = false): Promise<string> {
-  return resolveVaultFile(vault, input === '90_System/Prompts/Compiler.md' ? input : markdownPath(input, input.startsWith('30_Drafts/')), nativeAttributesChecked);
+  return resolveVaultFile(vault, input === '90_System/Prompts/Compiler.md' || analysisTemplatePath(input) ? input : markdownPath(input, input.startsWith('30_Drafts/')), nativeAttributesChecked);
 }
 
 /** Asset checks share the same containment and native attribute boundary as documents. */

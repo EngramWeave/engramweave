@@ -71,3 +71,7 @@ Sources 支持六个 View、Filter Chips、排序和底部稳定多选工具栏�
 ## Semantic Recall
 
 Settings 提供独立 Embedding／可选 Reranker 的 endpoint、模型和凭据、服务测试、首次建立、增量重试和重建。Search 的 Semantic 入口覆盖 Knowledge／Ideas／Research，Keyword 保留现有检索。System Status 的 Semantic 与 Registry Index 分开，错误不进入 Sources Health。首次建立与后续 Refresh 的行为及证据合同见 [语义召回](semantic-recall.md)。检索模型等待使用已验证连接的独立快照，不能阻塞宿主启停或浏览操作。
+
+## Draft Analyzer
+
+Settings 提供 Analysis Profile、两项模板内容、各自模型／路径及 Relation 的三档复用偏好。Sources Inspector 可修改 active pending Source 的预设引用，明确选择一份 Draft 后点击 Analyze Draft。多 Draft 不自动挑选；任务显示 Review／Relation 独立状态与所属错误，取消使用独立连接快照，不阻塞宿主生命周期。分析结果正文留给 Obsidian 侧边栏，不在 Desktop 增加审阅面板。配置、证据和恢复合同见 [Draft Analyzer](analyzer.md)。

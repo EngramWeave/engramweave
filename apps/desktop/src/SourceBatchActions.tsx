@@ -12,7 +12,7 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
     <div className="section-heading"><h3>{title}</h3><button aria-label="Close dialog" onClick={close}>×</button></div>{children}
   </dialog>;
 }
-export function SourceBatchActions({ selected, clear, disabled, refresh, currentBatch, discardedView }: { selected: Source[]; clear: () => void; disabled: boolean; refresh: () => void; currentBatch?: SourceBatch | null | undefined; discardedView: boolean }) {
+export function SourceBatchActions({ selected, clear, disabled, refresh, currentBatch, discardedView, modelBusy = false }: { selected: Source[]; clear: () => void; disabled: boolean; refresh: () => void; currentBatch?: SourceBatch | null | undefined; discardedView: boolean; modelBusy?: boolean }) {
   const [batch, setBatch] = useState<SourceBatch | null>(null);
   const [error, setError] = useState<Failure>();
   const [previews, setPreviews] = useState<Preview[] | null>(null);
@@ -90,7 +90,7 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
         <button disabled={blocked} onClick={() => { void previewAction('delete'); }}>Delete permanently</button>
         <button disabled={blocked} onClick={() => { void submit('restore'); }}>Restore selected</button>
       </> : <>
-        <button disabled={blocked} onClick={() => { void submit('compile'); }}>Compile selected</button>
+        <button disabled={blocked || modelBusy} onClick={() => { void submit('compile'); }}>Compile selected</button>
         <button disabled={blocked} onClick={() => { void previewAction('discard'); }}>Discard selected</button>
         <button disabled={blocked} onClick={() => { void previewAction('discard_drafts'); }}>Discard Drafts</button>
       </>}

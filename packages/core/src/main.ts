@@ -13,6 +13,7 @@ import type { CoreServices } from './http/context.js';
 import { recoverDatabase } from './storage/recover.js';
 import { retainWindowsAttributes } from './files/windows.js';
 import { SemanticRecall } from './recall/index.js';
+import { AnalyzerJobs } from './jobs/analyzer.js';
 
 export async function startCore(input: Config) {
   const releaseAttributes = retainWindowsAttributes();
@@ -41,13 +42,16 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     database = await openDatabase(config);
     let compiler: CompilerJobs;
     let batches: SourceBatches;
+    let analyzer: AnalyzerJobs;
     let recall: SemanticRecall | undefined;
-    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy()), async () => { await recall?.afterRefresh(); });
-    compiler = new CompilerJobs(database, config, () => jobs.active() !== null);
+    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy()), async () => { await recall?.afterRefresh(); });
+    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy()));
     await compiler.initialize();
-    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null);
+    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null, input => analyzer?.guardBatch(input));
     recall = new SemanticRecall(config, database);
-    services = { db: database, jobs, compiler, batches, recall, instance_id: instance.id };
+    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy()));
+    services = { db: database, jobs, compiler, batches, recall, analyzer, instance_id: instance.id };
+    await analyzer.initialize();
     await batches.initialize();
     runtime.status = 'ready';
     let closed = false;
@@ -55,11 +59,11 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+      try { await server.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
       finally { try { database?.close(); } finally { try { await instance?.close(); } finally { await releaseAttributes(); } } }
     } };
   } catch (error) {
-    try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+    try { await server.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
     finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }

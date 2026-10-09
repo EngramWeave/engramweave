@@ -9,7 +9,7 @@ import { runProcess } from './process.js';
 export const defaultSettings: CompilerSettings = { route: 'codex', model: '', endpoint: 'https://api.openai.com/v1', codex_path: '', output_format: 'json_schema', reasoning_effort: 'default', timeout_seconds: 300 };
 export const localEndpoint = (endpoint: string) => { try { return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(endpoint).hostname); } catch { return false; } };
 export const endpointKey = (endpoint: string) => new URL(endpoint).href.replace(/\/$/, '');
-function validateSettings(settings: CompilerSettings) {
+export function validateSettings(settings: CompilerSettings) {
   if (!Value.Check(CompilerSettingsSchema, settings)) throw new CoreError('CONFIG_ERROR', 'Compiler settings fields are invalid', 400);
   if (settings.endpoint) {
     let uri: URL;
@@ -41,8 +41,9 @@ export async function regularRead(filename: string, limit: number): Promise<Buff
     throw new CoreError('CONFIG_ERROR', 'Execution settings or credential storage is unsafe or unavailable', 400);
   }
 }
-export async function atomicWrite(filename: string, bytes: string) {
-  await regularRead(filename, 32_768);
+export async function atomicWrite(filename: string, bytes: string, limit = 32_768) {
+  if (Buffer.byteLength(bytes) > limit) throw new CoreError('PAYLOAD_TOO_LARGE', 'Stored record exceeds its bound', 413);
+  await regularRead(filename, limit);
   const temporary = `${filename}.${randomUUID()}.tmp`;
   await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600, flush: true });
   await rename(temporary, filename);

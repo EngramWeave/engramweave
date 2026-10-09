@@ -37,7 +37,7 @@ describe('explicit offline database isolation and file-driven rebuild', () => {
       recovery = { missing_database_initialized_empty: true, explicit_rebuild: true };
     } else {
       if (scenario === 'corrupt') await writeFile(database, 'This is a corrupt isolated SQLite file');
-      else { const db = new Database(database); db.pragma('user_version=4'); db.close(); }
+      else { const db = new Database(database); db.pragma('user_version=99'); db.close(); }
       const originalDatabase = await readFile(database);
       await expect(startCore(config)).rejects.toMatchObject({ code: scenario === 'corrupt' ? 'DATABASE_ERROR' : 'SCHEMA_UNSUPPORTED' });
       expect(await readFile(database)).toEqual(originalDatabase);

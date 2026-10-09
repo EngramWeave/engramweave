@@ -9,6 +9,7 @@ import { publishFile } from '../files/publication.js';
 import { parseMarkdown } from '../source/parse.js';
 import { pendingSourceBytes, registeredSourceBytes, compiledSourceBytes } from '../source/properties.js';
 import { listDrafts } from '../drafts/files.js';
+import { sourceProfileBytes } from '../analysis/selection.js';
 
 async function ensureParent(vault: string, relative: string): Promise<void> {
   try { await resolveVaultDirectory(vault, relative); return; }
@@ -46,7 +47,8 @@ async function existingMatch(vault: string, relative: string, bytes: Buffer): Pr
 export async function createCapture(vault: string, input: CaptureRequest): Promise<CaptureResponse> {
   const relative = markdownPath(input.path);
   if (!relative.startsWith('20_Sources/')) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Capture requires a Source target', 403);
-  const bytes = Buffer.from(input.markdown, 'utf8');
+  const original = Buffer.from(input.markdown, 'utf8');
+  const bytes = input.analysis_profile === undefined ? original : sourceProfileBytes(original, input.analysis_profile);
   if (bytes.length > LIMITS.markdown_bytes) throw new CoreError('PAYLOAD_TOO_LARGE', 'Capture Markdown exceeds the byte limit', 413);
   const parsed = parseMarkdown(relative, bytes);
   if (parsed.state !== 'ready' || !['web', 'manual'].includes(parsed.source_type ?? '') || parsed.asset?.kind !== 'inline_markdown' || !parsed.body_markdown.trim()) {

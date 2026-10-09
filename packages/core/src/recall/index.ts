@@ -149,14 +149,16 @@ export class SemanticRecall {
     }
     return hits.flatMap(hit => valid.has(hit.chunk_id) ? [valid.get(hit.chunk_id)!] : []);
   }
-  async recall(query: RecallQuery): Promise<RecallResponse> {
+  async recall(query: RecallQuery, externalSignal?: AbortSignal): Promise<RecallResponse> {
+    const signal = externalSignal ? AbortSignal.any([this.abort.signal, externalSignal]) : this.abort.signal;
+    signal.throwIfAborted();
     if (!query.q.trim()) throw new CoreError('EMPTY_QUERY', 'Enter a semantic search query', 400);
     const started = performance.now(); const coverage = await this.status();
     if (!coverage.initialized || coverage.state === 'rebuild_required') throw new CoreError('CONFIG_ERROR', 'Build a compatible semantic index before semantic search', 409);
     if (!coverage.indexed_chunks) return { items: [], coverage, reranker: 'disabled', diagnostics: [], timings: { embedding_ms: 0, retrieval_ms: 0, rerank_ms: 0, total_ms: performance.now() - started } };
     const { settings } = await this.settings.read(); const diagnostics: RecallResponse['diagnostics'] = [];
     const embeddingStart = performance.now();
-    const [vector] = await embed(settings, [queryInput(settings, query.q)], await this.settings.key('embedding', settings.endpoint), this.abort.signal);
+    const [vector] = await embed(settings, [queryInput(settings, query.q)], await this.settings.key('embedding', settings.endpoint), signal);
     const embeddingMs = performance.now() - embeddingStart;
     const retrievalStart = performance.now();
     const scope = query.scope ?? 'all';
@@ -167,13 +169,14 @@ export class SemanticRecall {
     if ((query.rerank ?? settings.reranker_enabled) && hits.length) {
       const t = performance.now();
       try {
-        const scores = await rerank(settings, query.q, hits.map(hit => `${hit.title}\n${hit.heading}\n${hit.text}`), await this.settings.key('reranker', settings.reranker_endpoint), this.abort.signal);
+        const scores = await rerank(settings, query.q, hits.map(hit => `${hit.title}\n${hit.heading}\n${hit.text}`), await this.settings.key('reranker', settings.reranker_endpoint), signal);
         hits = hits.map((hit, i) => ({ ...hit, rerank_score: scores[i]! })).sort((a, b) => b.rerank_score! - a.rerank_score! || b.score - a.score);
         ranking = 'applied';
       } catch { ranking = 'failed'; diagnostics.push({ code: 'RERANK_FAILED', message: 'Reranker failed; results retain the mixed retrieval ranking.', path: null }); }
       rerankMs = performance.now() - t;
     }
     hits = await this.fresh(hits, diagnostics);
+    signal.throwIfAborted();
     const perNote = new Map<string, number>(); const selected = new Set<string>(); const items: RecallHit[] = []; let bytes = 0; let truncated = false;
     for (const hit of hits) {
       if (!selected.has(hit.path) && selected.size >= (query.limit ?? 20) || (perNote.get(hit.path) ?? 0) >= 3) continue;

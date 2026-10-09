@@ -20,14 +20,14 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
   server.route({ ...API.scans, handler(request, reply) { return reply.code(202).send(services().jobs.submit((request.body as ScanRequest).mode)); } });
   server.route({ ...API.jobs, handler(request) {
     const { limit, offset } = pagination(request.query as PaginationQuery);
-    const { jobs, compiler } = services();
+    const { jobs, compiler, analyzer } = services();
     const scans = jobs.list(Number.MAX_SAFE_INTEGER, 0);
-    const items = [...scans.items, ...(compiler?.all() ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+    const items = [...scans.items, ...(compiler?.all() ?? []), ...(analyzer?.all() ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
     return { items: items.slice(offset, offset + limit), total: items.length, limit, offset };
   } });
   server.route({ ...API.job, handler(request) {
     const id = (request.params as { id: string }).id;
-    const job = services().jobs.get(id) ?? services().compiler?.get(id);
+    const job = services().jobs.get(id) ?? services().compiler?.get(id) ?? services().analyzer?.get(id);
     if (!job) throw new CoreError('JOB_NOT_FOUND', 'Job does not exist', 404);
     return job;
   } });
@@ -67,7 +67,7 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
       catch { semantic = { state: 'failed', stale_documents: 0, error: 'Semantic index is unavailable; inspect Recall settings and rebuild explicitly.' }; }
     }
     const status: Status = { status: 'ready', core_version: CORE_VERSION, api_version: API_VERSION, instance_id,
-      vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? null,
+      vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? services().analyzer?.active() ?? null,
       index_generation: meta.index_generation, last_scan_at: meta.last_scan_at, counts, scan_roots: roots, limits: LIMITS, source_batch: services().batches?.latest() ?? null,
       diagnostics: roots.filter(root => !root.available).map(root => ({ code: 'SCAN_ROOT_UNAVAILABLE', message: 'Scan root is currently absent or unavailable', path: root.path })) };
     if (semantic) status.semantic_index = semantic;

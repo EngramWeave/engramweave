@@ -98,7 +98,7 @@ impl Host {
             request = request.bearer_auth(token);
         }
         request = request.query(query);
-        if route == "/v1/recall" || route == "/v1/recall/test" {
+        if route == "/v1/recall" || route == "/v1/recall/test" || route == "/v1/analysis/cancel" {
             request = request.timeout(Duration::from_secs(610));
         }
         if let Some(body) = body {

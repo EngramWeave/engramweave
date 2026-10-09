@@ -3,6 +3,15 @@
 .compiler-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .compiler-form input, .compiler-form select { width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid #dce6ff; border-radius: 8px; background: #fff; padding: 8px 10px; color: #10204f; }
 .compiler-saved { margin-left: 12px; color: #00a977; }
+.analysis-profile { border: 1px solid #dce6ff; border-radius: 10px; padding: 14px; margin: 16px 0; }
+.analysis-profile summary { cursor: pointer; margin-bottom: 12px; }
+.analysis-task { border: 1px solid #dce6ff; border-radius: 8px; margin: 14px 0; padding: 12px; }
+.analysis-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+.analysis-template-editor { width: 100%; min-height: 280px; box-sizing: border-box; resize: vertical; font-family: monospace; padding: 12px; border: 1px solid #dce6ff; border-radius: 8px; }
+.draft-analysis { margin-top: 20px; border-top: 1px solid #dce6ff; padding-top: 16px; display: grid; gap: 10px; }
+.draft-analysis label { display: grid; gap: 6px; font-size: 12px; }
+.draft-analysis select { width: 100%; min-height: 36px; border: 1px solid #dce6ff; border-radius: 8px; }
+.draft-analysis p { overflow-wrap: anywhere; font-size: 12px; }
 .compiler-form input[type="checkbox"] { width: auto; min-height: 0; margin-right: 8px; }
 .semantic-status { border: 1px solid #dce6ff; border-radius: 10px; padding: 12px; margin: 16px 0; }
 .source-compiler { border-top: 1px solid #dce6ff; padding: 16px; }

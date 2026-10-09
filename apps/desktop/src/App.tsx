@@ -25,6 +25,7 @@ import {
 } from './SourceBrowser';
 import { Jobs, Results } from './Lists';
 import { CompilerSettings } from './CompilerSettings';
+import { AnalysisSettings } from './AnalysisSettings';
 import { SemanticSettings, SemanticSearch } from './SemanticRecall';
 import { SourceCompiler } from './SourceCompiler';
 import { DocumentFailure, ErrorNotice, ErrorToast, type ErrorPlacement } from './Feedback';
@@ -396,6 +397,7 @@ export function App() {
               </button>
             </div>
             <CompilerSettings connected={connected} />
+            <AnalysisSettings connected={connected} />
             <SemanticSettings connected={connected} generation={status?.index_generation} onIndexChange={() => { void refresh().catch(error => report(error, 'operations')); }} />
             {errors.operations && <ErrorNotice error={errors.operations} />}
             <p className="hint">
@@ -428,6 +430,7 @@ export function App() {
         {view === 'sources' && (
           <SourceBrowser
             compilerActions={document?.kind === 'source' ? <SourceCompiler key={document.path} document={document} jobs={jobs} active={Boolean(active)} generation={status?.index_generation} onStarted={() => { void refresh().catch(error => report(error, 'document')); }} onPublished={() => { void select(document.path); }} /> : undefined}
+            analyzerSource={status?.active_job?.kind === 'analyze_draft' ? status.active_job.source_path : null}
             page={sources}
             counts={sourceCounts}
             query={sourceQuery}

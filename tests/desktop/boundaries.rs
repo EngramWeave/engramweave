@@ -138,6 +138,15 @@ fn changing_profile_requires_desktop_restart() {
 }
 
 #[test]
+fn analysis_bridge_exposes_only_fixed_bounded_actions() {
+    assert_eq!(route(Operation::AnalysisSettings, &json!({})).unwrap().1, "/v1/analysis/settings");
+    assert_eq!(route(Operation::Analyze, &json!({"source_path":"20_Sources/source.md","draft_path":"30_Drafts/draft.md"})).unwrap().1, "/v1/analyses");
+    assert!(route(Operation::Analyze, &json!({"url":"http://example.com"})).is_err());
+    assert!(route(Operation::AnalysisTemplateWrite, &json!({"path":"90_System/Prompts/Review/Knowledge.md","revision":"old","content":"x".repeat(450001)})).is_err());
+    assert!(route(Operation::AnalysisCancel, &json!({"id":"test","authorization":"secret"})).is_err());
+}
+
+#[test]
 fn recall_routes_retain_fixed_boundary_and_connection_snapshot_cannot_stop_core() {
     assert_eq!(route(Operation::Recall, &json!({"q":"meaning", "rerank":true})).unwrap().1, "/v1/recall");
     assert!(route(Operation::Recall, &json!({"q":"meaning", "url":"http://outside"})).is_err());
