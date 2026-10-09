@@ -7,7 +7,7 @@ import type { Document, Job } from '@engramweave/contracts';
 
 describe('frozen P1 contracts', () => {
   it('compiles every request and response schema for runtime use', () => {
-    expect(Object.keys(API)).toHaveLength(17);
+    expect(Object.keys(API)).toHaveLength(24);
     for (const route of Object.values(API)) {
       for (const [name, schema] of Object.entries(route.schema)) {
         if (name === 'response') for (const response of Object.values(schema as Record<string, TSchema>)) expect(TypeCompiler.Compile(response)).toBeDefined();

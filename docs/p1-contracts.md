@@ -1,6 +1,6 @@
 # 文件与接口合同（P1 基础及 P2 A 扩展）
 
-P2 B 的 Compiler、Draft 和 schema 2 迁移扩展见 [Compiler 与 Draft](compiler.md)；本文保留 Source／Knowledge、扫描、读取和 Capture 的基础合同。
+P2 B 的 Compiler／Draft 扩展见 [Compiler 与 Draft](compiler.md)，C1 的 Ideas／Research 读取、schema 3 迁移及向量检索见 [语义召回](semantic-recall.md)。本文保留基础接口；阶段性权限说明按当前扩展补充。
 
 唯一 API Schema 和推导类型位于 [contracts](../packages/contracts/src/index.ts)。Core 与 Desktop 使用同一份契约；数据库内部 ID 不写入用户 Markdown。部署、采集、扫描和恢复命令见 [Core](core.md)，本机宿主和原生打开见 [Desktop](desktop.md)。
 
@@ -16,9 +16,9 @@ P2 B 的 Compiler、Draft 和 schema 2 迁移扩展见 [Compiler 与 Draft](comp
 
 Source 的 `processing_status` 接受 `pending/compiled/reviewed/planned/archived`。Registry 对缺失、null、空字符串分别补 processing_status: pending 和 lifecycle_status: active，包含历史和 discarded 材料；补写后重新读取文件并计算 revision。完整阶段在 refresh、rebuild 和离线恢复中保持。详情 GET 仍只读，尚未登记的空阶段返回 null；非法非空值或类型使 Source invalid。
 
-Source 和 Knowledge 独立返回 `lifecycle_status=active/discarded`；缺失/null/空字符串按 active 读取，不补写。无有效文件属性的 invalid/missing/unsupported 列表项返回 null。登记字段仍为 `state=ready/invalid/missing/unsupported`，Job 字段仍为 `status=queued/running/succeeded/failed/interrupted`，各自独立。阶段和生命周期投影来自 metadata，错误及次数属于 Core。当前 Job 仍只有扫描；计数在实际任务实现时加入，不写 Source Properties。
+Source 和 Knowledge 独立返回 `lifecycle_status=active/discarded`；缺失/null/空字符串按 active 读取，不补写。无有效文件属性的 invalid/missing/unsupported 列表项返回 null。登记字段仍为 `state=ready/invalid/missing/unsupported`，Job 字段仍为 `status=queued/running/succeeded/failed/interrupted`，各自独立。阶段和生命周期投影来自 metadata，错误及次数属于 Core。扫描和 Compiler Job 独立保存；语义索引有独立状态。计数属于实际任务，不写 Source Properties。
 
-安全属性补写及中断恢复见 [Core](core.md#属性补写与恢复)。本切片只登记文件已有阶段，不提供编译、Recompile、Review、discard 或归档动作。
+安全属性补写及中断恢复见 [Core](core.md#属性补写与恢复)。登记本身只读取／规范化阶段；Compiler 和显式 Source 生命周期入口见对应扩展合同，Review 与正式归档留在后续阶段。
 
 ## 九个 API
 
@@ -34,7 +34,7 @@ Source 和 Knowledge 独立返回 `lifecycle_status=active/discarded`；缺失/n
 | `GET /v1/search` | 默认 Knowledge，支持 Sources/all、字面 AND、字段和元数据过滤 |
 | `POST /v1/captures` | 仅新建 web/manual inline Raw Source；首次 201；原字节或精确 pending 补写重放 200；compiled 精确形式还需关联 Draft 的输入 revision 证明，其他差异 409 |
 
-health 外均需认证，Host 固定为配置的 `127.0.0.1:port`，浏览器 Origin 被拒绝。请求拒绝未知字段。公共字段用 snake_case、列表用 `items/total/limit/offset`，默认 limit=20、最大100；错误统一为 `error.code/message/details`，不含 token、堆栈或正文。无任意 SQL、文件读写、通用 Job、Source 删除/更新、Canonical 写入或 AI 接口。
+health 外均需认证，Host 固定为配置的 `127.0.0.1:port`，浏览器 Origin 被拒绝。请求拒绝未知字段。公共字段用 snake_case、列表用 `items/total/limit/offset`，默认 limit=20、最大100；错误统一为 `error.code/message/details`，不含 token、堆栈或正文。不提供任意 SQL、通用文件读写或正式笔记正文写入。Compiler、Source 清理和 Recall 仅通过各自明确的受限接口执行。
 
 ## revision、索引和恢复边界
 
@@ -44,7 +44,7 @@ refresh 仍读取全部候选并计算 hash，只复用未变化文件的解析�
 
 同路径更新保留内部 ID；移动/改名产生 missing + 新路径新 ID，不猜测重命名。同 URL/hash 的不同路径不合并。来源链为 Knowledge → Source Record → inline 内容、本地 Asset 或外部 locator；受限 Wiki Link 支持 alias/anchor，不做 basename 模糊搜索。外部 URI 只标 unverified，不联网或执行 scheme。
 
-SQLite 只保存 documents/jobs/meta 三张表及可重建投影，位于 Vault 外，Schema 仍为 1。损坏或不兼容库不会自动删除；显式离线恢复取得独占运行权，隔离数据库及 journal/wal/shm 到新备份目录，再从全部受支持文件 rebuild。失败保留备份与诊断。恢复保持路径、完整阶段、生命周期、Annotation、正文及支持的语义查询；仅缺失/空阶段补 pending 并更新 revision，不保证内部 ID、旧 Job 历史或原扫描时间。
+Registry SQLite 保存 documents/jobs/meta/compiler_jobs，位于 Vault 外，当前 schema 3；验证后原子迁移 schema 1／2。语义缓存使用独立的 semantic.sqlite。损坏或不兼容库不会自动删除；显式离线恢复取得独占运行权，隔离数据库及 journal/wal/shm 到新备份目录，再从全部受支持文件 rebuild。失败保留备份与诊断。恢复保持路径、完整阶段、生命周期、Annotation、正文及支持的语义查询；仅缺失/空阶段补 pending 并更新 revision，不保证内部 ID、旧 Job 历史或原扫描时间。
 
 当前支持 Windows 本地 NTFS、单 Vault 和本机 Node 宿主；不承诺网络盘、云占位文件、多 Vault、跨平台安装包、OCR、外部网页存活或找回用户删除的资产。Core 可写入明确 Capture 请求的新 Source、登记时缺失/空阶段的补写，以及显式 Compiler 的新 Draft 和 pending→compiled 阶段；不写正式 Knowledge。两项 Analyzer、人工 Review 动作和整合仍在后续实现。
 

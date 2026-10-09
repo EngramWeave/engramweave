@@ -138,6 +138,59 @@ fn changing_profile_requires_desktop_restart() {
 }
 
 #[test]
+fn recall_routes_retain_fixed_boundary_and_connection_snapshot_cannot_stop_core() {
+    assert_eq!(route(Operation::Recall, &json!({"q":"meaning", "rerank":true})).unwrap().1, "/v1/recall");
+    assert!(route(Operation::Recall, &json!({"q":"meaning", "url":"http://outside"})).is_err());
+    let fixture = Fixture::new();
+    let mut owner = fixture.host(); owner.start().unwrap();
+    fs::create_dir_all(fixture.root.join("vault/10_Ideas")).unwrap();
+    fs::create_dir_all(fixture.root.join("vault/50_Research")).unwrap();
+    fs::write(fixture.root.join("vault/10_Ideas/note.md"), "# Idea\nPlain Markdown").unwrap();
+    fs::write(fixture.root.join("vault/50_Research/note.md"), "# Research\nPlain Markdown").unwrap();
+    for path in ["10_Ideas/note.md", "50_Research/note.md"] {
+        assert!(document_uri(&mut owner, path.into(), OpenTarget::Obsidian).unwrap().contains("obsidian://open"));
+    }
+    let mut snapshot = owner.recall_connection().unwrap();
+    assert_eq!(snapshot.request(Operation::RecallStatus, json!({})).unwrap()["state"], "not_built");
+    assert_eq!(snapshot.stop().unwrap_err().code, "INSTANCE_UNCERTAIN");
+    assert_eq!(owner.request(Operation::Status, json!({})).unwrap()["status"], "ready");
+    owner.stop().unwrap();
+}
+
+#[test]
+#[ignore = "Requires the explicitly configured local Embedding and Reranker services"]
+fn recall_native_bridge_with_real_local_models() {
+    let embedding_endpoint = "http://127.0.0.1:8095/v1";
+    let reranker_endpoint = "http://127.0.0.1:8086/v1";
+    let client = reqwest::blocking::Client::builder().no_proxy().build().unwrap();
+    let model = |endpoint: &str| -> String {
+        let response: serde_json::Value = client.get(format!("{endpoint}/models")).send().unwrap().json().unwrap();
+        response["data"][0]["id"].as_str().unwrap().into()
+    };
+    let fixture = Fixture::new(); let mut owner = fixture.host(); owner.start().unwrap();
+    fs::create_dir_all(fixture.root.join("vault/10_Ideas")).unwrap();
+    fs::write(fixture.root.join("vault/10_Ideas/privacy.md"), "# Privacy\nRun embedding models locally so that private diary passages stay on the user's machine.").unwrap();
+    let scan = owner.request(Operation::Scan, json!({"mode":"refresh"})).unwrap();
+    for _ in 0..100 {
+        if owner.request(Operation::Job, json!({"id":scan["job"]["id"]})).unwrap()["status"] == "succeeded" { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    owner.request(Operation::RecallSettingsWrite, json!({"settings":{
+        "endpoint":embedding_endpoint, "model":model(embedding_endpoint), "query_instruction":"Given a query, retrieve related personal notes.",
+        "timeout_seconds":60, "reranker_enabled":false, "reranker_endpoint":reranker_endpoint, "reranker_model":model(reranker_endpoint), "candidates":40
+    }})).unwrap();
+    owner.request(Operation::RecallIndex, json!({"mode":"build"})).unwrap();
+    for _ in 0..200 {
+        if owner.request(Operation::RecallStatus, json!({})).unwrap()["state"] == "idle" { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let mut connection = owner.recall_connection().unwrap();
+    let result = connection.request(Operation::Recall, json!({"q":"不上传日记也能按意思找资料吗？", "scope":"ideas", "rerank":true})).unwrap();
+    assert_eq!(result["reranker"], "applied"); assert_eq!(result["items"][0]["path"], "10_Ideas/privacy.md");
+    owner.stop().unwrap();
+}
+
+#[test]
 fn compiler_settings_native_bridge_keeps_credentials_write_only() {
     let fixture = Fixture::new();
     let mut desktop = fixture.host();

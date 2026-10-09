@@ -89,7 +89,7 @@ export function Detail({
             <span className="preview-mark blue">
               <Icon
                 name={
-                  document.kind === 'knowledge'
+                  document.kind !== 'source'
                     ? 'note'
                     : document.source_type === 'web'
                       ? 'link'
@@ -102,7 +102,7 @@ export function Detail({
               <span>
                 {typeof document.metadata.author === 'string'
                   ? document.metadata.author
-                  : (document.source_type ?? 'Knowledge')}
+                  : (document.source_type ?? (document.kind === 'idea' ? 'Idea' : document.kind === 'research' ? 'Research' : 'Knowledge'))}
               </span>
               {description && <p>{description}</p>}
             </div>
@@ -112,7 +112,7 @@ export function Detail({
               <Icon name="file" />
               Type
             </dt>
-            <dd>{document.source_type ?? 'Knowledge'}</dd>
+            <dd>{document.source_type ?? (document.kind === 'idea' ? 'Idea' : document.kind === 'research' ? 'Research' : 'Knowledge')}</dd>
             <dt>
               <Icon name="layers" />
               Processing

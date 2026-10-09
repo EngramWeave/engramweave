@@ -25,6 +25,7 @@ import {
 } from './SourceBrowser';
 import { Jobs, Results } from './Lists';
 import { CompilerSettings } from './CompilerSettings';
+import { SemanticSettings, SemanticSearch } from './SemanticRecall';
 import { SourceCompiler } from './SourceCompiler';
 import { DocumentFailure, ErrorNotice, ErrorToast, type ErrorPlacement } from './Feedback';
 
@@ -45,6 +46,8 @@ export function App() {
   const [scope, setScope] =
     useState<NonNullable<SearchQuery['scope']>>('knowledge');
   const [query, setQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('semantic');
+  useEffect(() => { globalThis.document.querySelector('.content-panel')?.scrollTo({ top: 0 }); }, [view]);
   const [searchInput, setSearchInput] = useState<SearchQuery | null>(null);
   const selection = useRef(0);
   const connectionEpoch = useRef(0);
@@ -142,11 +145,12 @@ export function App() {
     setJobs(jobs);
     return (
       status.active_job !== null ||
+      status.semantic_index?.state === 'running' ||
       jobs.items.some((job) => ['queued', 'running'].includes(job.status))
     );
   }, []);
   useEffect(() => {
-    if (!connected || !active) return;
+    if (!connected || (!active && status?.semantic_index?.state !== 'running')) return;
     const epoch = connectionEpoch.current;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -168,7 +172,7 @@ export function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [connected, active, refresh, report]);
+  }, [connected, active, status?.semantic_index?.state, refresh, report]);
   useEffect(() => {
     if (!connected || (view !== 'sources' && view !== 'dashboard')) return;
     const epoch = connectionEpoch.current;
@@ -254,6 +258,7 @@ export function App() {
   const search = (event: FormEvent, offset = 0) => {
     event.preventDefault();
     navigate('search');
+    setSearchMode('keyword');
     selection.current++;
     setDocument(null);
     setSelectedPath(null);
@@ -391,6 +396,7 @@ export function App() {
               </button>
             </div>
             <CompilerSettings connected={connected} />
+            <SemanticSettings connected={connected} generation={status?.index_generation} onIndexChange={() => { void refresh().catch(error => report(error, 'operations')); }} />
             {errors.operations && <ErrorNotice error={errors.operations} />}
             <p className="hint">
               无活动任务时停止轮询。状态为上次确认结果；断线后需显式重新连接。
@@ -472,6 +478,8 @@ export function App() {
         {view === 'search' && (
           <section>
             <h1>查找资料</h1>
+            <div className="connection-actions"><button onClick={() => setSearchMode('semantic')} disabled={searchMode === 'semantic'}>Semantic</button><button onClick={() => setSearchMode('keyword')} disabled={searchMode === 'keyword'}>Keyword</button></div>
+            {searchMode === 'semantic' ? <SemanticSearch connected={connected} generation={status?.index_generation} query={query} setQuery={setQuery} select={select} /> : <>
             <form className="search-form" onSubmit={search}>
               <label>
                 范围
@@ -482,6 +490,8 @@ export function App() {
                   }
                 >
                   <option value="knowledge">Knowledge</option>
+                  <option value="ideas">Ideas</option>
+                  <option value="research">Research</option>
                   <option value="sources">Sources</option>
                   <option value="all">全部</option>
                 </select>
@@ -556,6 +566,7 @@ export function App() {
                 </button>
               </div>
             )}
+            </>}
           </section>
         )}
         {document && view === 'search' && (

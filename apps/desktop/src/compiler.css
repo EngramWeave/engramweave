@@ -3,6 +3,8 @@
 .compiler-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .compiler-form input, .compiler-form select { width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid #dce6ff; border-radius: 8px; background: #fff; padding: 8px 10px; color: #10204f; }
 .compiler-saved { margin-left: 12px; color: #00a977; }
+.compiler-form input[type="checkbox"] { width: auto; min-height: 0; margin-right: 8px; }
+.semantic-status { border: 1px solid #dce6ff; border-radius: 10px; padding: 12px; margin: 16px 0; }
 .source-compiler { border-top: 1px solid #dce6ff; padding: 16px; }
 .source-compiler .section-heading { flex-wrap: wrap; gap: 8px; }
 .source-compiler h3 { margin: 0; font-size: 14px; }

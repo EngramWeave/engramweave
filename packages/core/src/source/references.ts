@@ -56,10 +56,10 @@ export async function resolveReference(vault: string, record: string, raw: strin
 export async function resolveDocumentReferences(vault: string, record: string, parsed: ParsedDocument): Promise<Reference[]> {
   parsed.diagnostics = parsed.diagnostics.filter(item => !referenceCodes.has(item.code));
   if (parsed.state !== 'ready') return [];
-  const raw = parsed.kind === 'knowledge' ? stringList(parsed.metadata.sources)
+  const raw = parsed.kind !== 'source' ? stringList(parsed.metadata.sources)
     : [parsed.original_locator, typeof parsed.metadata.asset === 'string' ? parsed.metadata.asset : null].filter((value): value is string => value !== null);
   const references: Reference[] = [];
-  for (const locator of raw) references.push(await resolveReference(vault, record, locator, parsed.kind === 'knowledge'));
+  for (const locator of raw) references.push(await resolveReference(vault, record, locator, parsed.kind !== 'source'));
   if (parsed.asset && parsed.asset.kind !== 'inline_markdown') {
     // Resolve the raw locator, never a previously cached normalized asset path.
     const locator = typeof parsed.metadata.asset === 'string' ? parsed.metadata.asset : parsed.original_locator!;

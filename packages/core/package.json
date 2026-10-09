@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "build": "node ../../scripts/build-windows-files.mjs && tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "scripts": {
+    "build": "node ../../scripts/build-windows-files.mjs && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
   "dependencies": {
     "@engramweave/contracts": "0.1.0",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
+    "sqlite-vec": "0.1.9",
     "yaml": "2.9.1"
   }
 }

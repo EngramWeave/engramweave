@@ -8,7 +8,7 @@ import { retainFinishedJobs } from '../jobs/retention.js';
 import type { FileRead } from '../files/read.js';
 
 export interface DocumentRow {
-  id: string; path_key: string; path: string; kind: 'source' | 'knowledge'; state: Source['state'];
+  id: string; path_key: string; path: string; kind: ParsedDocument['kind']; state: Source['state'];
   revision: string | null; size: number | null; mtime: number | null; title: string; source_type: string | null;
   captured_at: string | null; original_locator: string | null; metadata_json: string; asset_json: string | null;
   diagnostics_json: string; annotation: string; body_markdown: string; title_norm: string; body_norm: string;
@@ -65,7 +65,7 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
         if (!old) summary.added++;
         else if (old.state === 'ready' && old.revision === projection.revision) summary.unchanged++;
         else summary.updated++;
-        if (parsed.kind === 'source') summary.source_count++; else summary.knowledge_count++;
+        if (parsed.kind === 'source') summary.source_count++; else if (parsed.kind === 'knowledge') summary.knowledge_count++;
       }
       const searchable = parsed.state === 'ready';
       const metadata = searchable ? parsed.metadata : old?.kind === 'source' ? JSON.parse(old.metadata_json) : {};

@@ -1,6 +1,6 @@
 # 本地 Core
 
-Core 只处理一个 Vault，通过显式扫描登记 `20_Sources/**/*.md` 和 `40_Knowledge/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、文本检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；正式知识写入尚未实现。
+Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。正式知识正文写入尚未实现。
 
 Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop.md)。Native Host 创建的 Core 通过 `ENGRAMWEAVE_HOST_STDIN=1` 启用私有 stdin 生命周期控制：固定一行 `{"type":"stop"}` 或父管道关闭触发正常停止；普通独立 CLI 不读取 stdin 命令，也不开放 HTTP 停止路由。
 
@@ -66,11 +66,11 @@ GET `/v1/documents?path=...` 只读取受限路径的当前文件。metadata、a
 
 Source列表与Source详情分别返回已发布投影和当前文件的processing_status，支持pending/compiled/reviewed/planned/archived。Registry 为缺失、YAML null、空字符串分别补 processing_status: pending 和 lifecycle_status: active，包含历史和discarded材料；其他非空值或类型使Source invalid。GET不写属性，尚未登记的空阶段返回null。完整阶段在扫描及数据库重建中保持，不由普通正文编辑、登记或Job结果推断阶段。
 
-Source和Knowledge独立返回lifecycle_status，active/discarded保留原值；缺失/null/空字符串读取为active，不补写。非法值使文件invalid；invalid/missing/unsupported列表项返回null。API中Source.state表示registration_status，Job.status表示job_status，沿用字段名。Job仍只执行扫描；错误、运行历史和后续重试/重编译次数属于Core，不回写文件。
+Source和Knowledge独立返回lifecycle_status，active/discarded保留原值；缺失/null/空字符串读取为active，不补写。非法值使文件invalid；invalid/missing/unsupported列表项返回null。API中Source.state表示registration_status，Job.status表示job_status，沿用字段名。扫描和 Compiler Job 分别保存，语义索引状态独立展示；错误、运行历史和后续重试/重编译次数属于Core，不回写文件。
 
 文件的indexed_at只在扫描实际稳定读取并计算revision后刷新，补属性后重新读取最终字节，refresh复用解析也须重新读取字节；读取失败或missing保留先前校验时间，首次读取失败为null。列表indexed_at和status.last_scan_at表示一代投影发布完成，不能代表每条异常文件都读取成功。unchanged表示本轮读取后Record字节未变；Asset状态另行判断。详情读取不更新索引、时间或阶段投影。
 
-Search默认scope=knowledge，可选sources/all。q按空白拆成最多8词，AND字面子串匹配，统一NFC和Unicode小写。字段为title/body/annotation/metadata；metadata只索引URL、source_type、tags，description等扩展字段不进入检索。支持source_type、单tag和按目录段匹配的path_prefix过滤；空q至少需一个过滤。
+Keyword Search 默认 scope=knowledge，可选 ideas/research/sources/all；独立混合召回见 [语义召回](semantic-recall.md)。q按空白拆成最多8词，AND字面子串匹配，统一NFC和Unicode小写。字段为title/body/annotation/metadata；metadata只索引URL、source_type、tags，description等扩展字段不进入检索。支持source_type、单tag和按目录段匹配的path_prefix过滤；空q至少需一个过滤。
 
 结果按Knowledge优先、Source中paper优先、标题精确/包含优先、path_key排序。Annotation片段以user_context标注；独立Record正文以record_body标注。列表统一items/total/limit/offset；默认20、最多100。结果携带generation和indexed_at，generation变化后重新分页。
 
@@ -80,7 +80,7 @@ Source必须具有type=raw_source、非空source_type。日期保持原精度；
 
 普通Source没有asset时，正文是inline Markdown；`.source.md`必须有asset，或有可识别的外部source locator。非inline的source_content为null，record_body只表示Record自身描述，不能当作附件正文。Asset检查不读取二进制内容。
 
-Wiki Link保留raw、alias和anchor。无`./`或`../`前缀的目标按Vault相对路径解析；显式相对路径以当前Record目录为起点，规范化后仍必须位于Vault内。来源文档链接限于20_Sources和40_Knowledge，可省略`.md`；省略时检查原目标和追加`.md`的候选，两者都存在则ambiguous，不搜索全Vault同名文件。锚点不验证段落。隐藏/临时路径、Windows设备名/ADS、symlink/junction和大小写冲突均被拒绝。允许的外部http/https/zotero URI只标unverified，不联网或执行scheme。
+Wiki Link保留raw、alias和anchor。无`./`或`../`前缀的目标按Vault相对路径解析；显式相对路径以当前Record目录为起点，规范化后仍必须位于Vault内。来源文档链接限于10_Ideas、20_Sources、40_Knowledge和50_Research，可省略`.md`；省略时检查原目标和追加`.md`的候选，两者都存在则ambiguous，不搜索全Vault同名文件。锚点不验证段落。隐藏/临时路径、Windows设备名/ADS、symlink/junction和大小写冲突均被拒绝。允许的外部http/https/zotero URI只标unverified，不联网或执行scheme。
 
 Knowledge的metadata.sources和Source的source/asset原字符串均通过original_references返回解析结果。Asset状态为available/missing/unverified/unsupported；引用歧义或越界通过original_references的ambiguous/outside_scope及Asset诊断表达，登记state仍可为ready。详情检查当前资产可访问性，列表保存最后成功扫描的状态；两种扫描模式都会重新检查Asset，Record字节不变也不跳过。index_stale仅比较Record字节投影，不表示资产检查时间。
 

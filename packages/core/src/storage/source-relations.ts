@@ -54,7 +54,7 @@ export class SourceRelations {
     });
     for (const key of this.drafts.keys()) if (!draftPaths.has(key)) this.drafts.delete(key);
     const records: Contribution[] = drafts.items.filter(draft => draft.lifecycle_status === 'active').map(draft => ({ path: draft.path, revision: draft.revision, kind: 'draft', title: draft.title, sources: [...new Set(draft.sources.map(value => value.toLowerCase()))] }));
-    const rows = this.db.prepare("SELECT path FROM documents WHERE kind='knowledge' AND state='ready'").all() as { path: string }[];
+    const rows = this.db.prepare("SELECT path FROM documents WHERE kind IN ('knowledge','research') AND state='ready'").all() as { path: string }[];
     const knowledgePaths = new Set<string>();
     for (const row of rows) {
       const key = row.path.toLowerCase(); knowledgePaths.add(key);

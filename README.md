@@ -158,9 +158,9 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 - web/manual Markdown Capture 和离线数据库投影恢复。
 - Tauri Desktop 的 Core 启停／连接、状态、Sources、扫描 Jobs、Search 与原生打开。
 
-当前扫描范围是 `20_Sources` 和 `40_Knowledge`；保存 Capture 后仍需显式扫描。P2 A 支持五个处理阶段和独立生命周期，登记时为缺失或空阶段补 `pending`，保护正文、Annotation 和其他属性。P2 B 支持 Desktop 配置 API／Codex 和显式单 Source 正文编译，每次成功新增一份 Draft，保留旧文件与用户编辑；未 archived 的 Source 可有多份 Draft。两项 Analyzer、人工 Review 动作和 ChangeSets 尚未实现。状态、执行和恢复边界见 [Core 使用说明](docs/core.md)及 [Compiler 与 Draft](docs/compiler.md)。
+当前扫描范围是 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`；保存 Capture 后仍需显式扫描。P2 A 支持五个处理阶段和独立生命周期，登记时为缺失或空阶段补 `pending`，保护正文、Annotation 和其他属性。P2 B 支持 Desktop 配置 API／Codex 和显式单 Source 正文编译，每次成功新增一份 Draft，保留旧文件与用户编辑；未 archived 的 Source 可有多份 Draft。两项 Analyzer、人工 Review 动作和 ChangeSets 尚未实现。C1 提供三类笔记的 BM25＋Embedding 混合召回、可选 Reranker、显式首次建立和 Refresh 增量更新。状态、执行和恢复边界见 [Core 使用说明](docs/core.md)、[Compiler 与 Draft](docs/compiler.md)及 [语义召回](docs/semantic-recall.md)。
 
-P2 计划接入 Zotero 选段投递、状态与调度、基本语义召回、API／Codex 编译分析和 Obsidian 人工审阅。P3 完成统一 Planner、ChangeSet 审查与执行、Git 提交和再次找回，形成首个实用闭环。完整编译、语义检索、整合、维护与科研增强尚未交付。
+P2 计划接入 Zotero 选段投递、状态与调度、API／Codex 分析和 Obsidian 人工审阅。P3 完成统一 Planner、ChangeSet 审查与执行、Git 提交和再次找回，形成首个实用闭环。两项 Analyzer、完整审阅整合、维护与科研增强尚未交付。
 
 ---
 

@@ -12,7 +12,7 @@ const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 const context = (row: DocumentRow, field: Field): SearchResult['snippet_context'] => {
   if (field === 'annotation') return 'user_context';
   if (field === 'metadata' || field === 'title') return field;
-  if (row.kind === 'knowledge') return 'knowledge';
+  if (row.kind !== 'source') return row.kind;
   const asset = row.asset_json ? JSON.parse(row.asset_json) as { kind: string } : null;
   return asset?.kind === 'inline_markdown' ? 'source_content' : 'record_body';
 };
@@ -34,7 +34,7 @@ export function searchDocuments(db: Database.Database, query: SearchQuery) {
   const conditions = ["state='ready'"];
   const parameters: string[] = [];
   const scope = query.scope ?? 'knowledge';
-  if (scope !== 'all') { conditions.push('kind=?'); parameters.push(scope === 'knowledge' ? 'knowledge' : 'source'); }
+  if (scope !== 'all') { conditions.push('kind=?'); parameters.push(scope === 'sources' ? 'source' : scope === 'ideas' ? 'idea' : scope); }
   if (query.source_type !== undefined) { conditions.push('source_type=?'); parameters.push(query.source_type); }
   for (const term of terms) {
     conditions.push(`(${fields.map(field => `instr(${columns[field]},?)>0`).join(' OR ')})`);

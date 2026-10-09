@@ -51,20 +51,26 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
       sum(CASE WHEN kind='source' AND json_extract(metadata_json,'$.processing_status')='pending'
         AND coalesce(json_extract(metadata_json,'$.lifecycle_status'),'') <> 'discarded' THEN 1 ELSE 0 END) AS pending
       FROM documents GROUP BY kind,state`).all() as { kind: string; state: string; count: number; pending: number }[];
-    const counts = { sources: 0, knowledge: 0, invalid: 0, missing: 0, unsupported: 0, pending: 0 };
+    const counts = { sources: 0, knowledge: 0, ideas: 0, research: 0, invalid: 0, missing: 0, unsupported: 0, pending: 0 };
     for (const row of rows) {
       counts.pending += row.pending;
-      if (row.state === 'ready') counts[row.kind === 'source' ? 'sources' : 'knowledge'] += row.count;
+      if (row.state === 'ready') counts[row.kind === 'source' ? 'sources' : row.kind === 'idea' ? 'ideas' : row.kind as 'knowledge' | 'research'] += row.count;
       else counts[row.state as 'invalid' | 'missing' | 'unsupported'] += row.count;
     }
     const roots = await Promise.all(SCAN_ROOTS.map(async root => {
       try { const info = await lstat(path.join(config.vault_path, root)); return { path: root, available: info.isDirectory() && !info.isSymbolicLink() }; }
       catch { return { path: root, available: false }; }
     }));
+    let semantic: NonNullable<Status['semantic_index']> | undefined;
+    if (services().recall) {
+      try { const result = await services().recall!.status(); semantic = { state: result.state, stale_documents: result.stale_documents, error: result.error }; }
+      catch { semantic = { state: 'failed', stale_documents: 0, error: 'Semantic index is unavailable; inspect Recall settings and rebuild explicitly.' }; }
+    }
     const status: Status = { status: 'ready', core_version: CORE_VERSION, api_version: API_VERSION, instance_id,
       vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? null,
       index_generation: meta.index_generation, last_scan_at: meta.last_scan_at, counts, scan_roots: roots, limits: LIMITS, source_batch: services().batches?.latest() ?? null,
       diagnostics: roots.filter(root => !root.available).map(root => ({ code: 'SCAN_ROOT_UNAVAILABLE', message: 'Scan root is currently absent or unavailable', path: root.path })) };
+    if (semantic) status.semantic_index = semantic;
     return status;
   } });
 }

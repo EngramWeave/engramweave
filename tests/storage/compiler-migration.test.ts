@@ -7,6 +7,7 @@ import { compilerFixture, waitCompiler } from '../helpers/compiler.js';
 import { listDrafts } from '../../packages/core/src/drafts/files.js';
 import { recoverDatabase } from '../../packages/core/src/storage/recover.js';
 import { randomUUID } from 'node:crypto';
+import { legacyDatabase } from '../helpers/legacy-database.js';
 
 describe('B storage migration and asset recovery', () => {
   it('upgrades exact v1 schema atomically while retaining binding, existing jobs and index metadata', async () => {
@@ -14,12 +15,12 @@ describe('B storage migration and asset recovery', () => {
     try {
       await mkdir(runtime.config.data_dir);
       let db = await openDatabase(runtime.config);
-      db.exec('DROP TABLE compiler_jobs; UPDATE meta SET schema_version=1,index_generation=7; PRAGMA user_version=1;');
+      legacyDatabase(db, 1); db.exec('UPDATE meta SET index_generation=7;');
       db.prepare("INSERT INTO jobs(id,kind,mode,status,created_at,finished_at) VALUES('old','scan_vault','refresh','succeeded','2026-10-01T00:00:00Z','2026-10-01T00:01:00Z')").run();
       db.close();
       db = await openDatabase(runtime.config);
-      expect(db.pragma('user_version', { simple: true })).toBe(2);
-      expect(db.prepare('SELECT index_generation,schema_version FROM meta').get()).toEqual({ index_generation: 7, schema_version: 2 });
+      expect(db.pragma('user_version', { simple: true })).toBe(3);
+      expect(db.prepare('SELECT index_generation,schema_version FROM meta').get()).toEqual({ index_generation: 7, schema_version: 3 });
       expect(db.prepare('SELECT status FROM jobs WHERE id=?').get('old')).toEqual({ status: 'succeeded' });
       expect(db.prepare('SELECT count(*) AS total FROM compiler_jobs').get()).toEqual({ total: 0 });
       db.close();

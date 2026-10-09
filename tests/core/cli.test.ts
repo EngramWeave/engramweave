@@ -43,7 +43,7 @@ it('runs the built standalone CLI and stops through its owned IPC channel with r
     expect(output).not.toContain(isolated.config.vault_path);
     expect(output).not.toContain('secret');
     expect(await readdir(isolated.config.vault_path)).toEqual([]);
-    expect(await readdir(isolated.config.data_dir)).toEqual(['core.sqlite', 'token']);
+    expect(await readdir(isolated.config.data_dir)).toEqual(['core.sqlite', 'semantic.sqlite', 'token']);
   } finally {
     if (child.exitCode === null && child.signalCode === null) { child.kill(); await exited; }
     await isolated.cleanup();

@@ -30,8 +30,8 @@ export function registerDocumentRoutes(server: FastifyInstance, config: Config, 
       lifecycle_status: parsed.lifecycle_status,
       original_references: references,
     };
-    if (parsed.kind === 'knowledge') {
-      const document: Document = { ...common, kind: 'knowledge', record_path: null, source_type: null, original_locator: null,
+    if (parsed.kind !== 'source') {
+      const document: Document = { ...common, kind: parsed.kind, record_path: null, source_type: null, original_locator: null,
         captured_at: null, asset: null, source_content: null, record_body: null, body: parsed.body_markdown };
       return document;
     }

@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const LIMITS = Object.freeze({
   markdown_bytes: 5 * 1024 * 1024,
   capture_json_bytes: 8 * 1024 * 1024,
@@ -17,7 +17,7 @@ export const LIMITS = Object.freeze({
   max_limit: 100,
   retained_finished_jobs: 100,
 });
-export const SCAN_ROOTS = ['20_Sources', '40_Knowledge'] as const;
+export const SCAN_ROOTS = ['10_Ideas', '20_Sources', '40_Knowledge', '50_Research'] as const;
 const object = <T extends Record<string, TSchema>>(properties: T) => Type.Object(properties, { additionalProperties: false });
 const enumeration = <T extends string>(values: readonly T[]) => Type.Union(values.map(value => Type.Literal(value)));
 const nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
@@ -28,7 +28,7 @@ const instant = Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{
 export const RevisionSchema = Type.String({ pattern: '^[a-fA-F0-9]{64}$' });
 // Filesystem containment and reparse-point checks are additionally required at use sites.
 export const VaultPathSchema = Type.String({ minLength: 1, pattern: '^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:\\x00-\\x1f])(?!.*//)(?!.*\\/$).+$' });
-export const ScopedMarkdownPathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^(20_Sources|40_Knowledge)/.+\\.[mM][dD]$' })]);
+export const ScopedMarkdownPathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^(10_Ideas|20_Sources|40_Knowledge|50_Research)/.+\\.[mM][dD]$' })]);
 export const CapturePathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^20_Sources/.+\\.[mM][dD]$' })]);
 export const ConfigSchema = object({
   config_version: Type.Literal(1), vault_path: nonempty, data_dir: nonempty,
@@ -58,7 +58,7 @@ export const PROCESSING_STATUSES = ['pending', 'compiled', 'reviewed', 'planned'
 export const ProcessingStatusSchema = nullable(enumeration(PROCESSING_STATUSES));
 export const LIFECYCLE_STATUSES = ['active', 'discarded'] as const;
 export const LifecycleStatusSchema = nullable(enumeration(LIFECYCLE_STATUSES));
-export const DocumentKindSchema = enumeration(['source', 'knowledge']);
+export const DocumentKindSchema = enumeration(['source', 'knowledge', 'idea', 'research']);
 export const ScanModeSchema = enumeration(['refresh', 'rebuild']);
 export const JobStatusSchema = enumeration(['queued', 'running', 'succeeded', 'failed', 'interrupted']);
 export const ScanSummarySchema = object({
@@ -125,6 +125,8 @@ const documentCommon = {
 const sourceCommon = { ...documentCommon, kind: Type.Literal('source'), record_path: VaultPathSchema,
   source_type: nonempty, original_locator: nullable(text), captured_at: nullable(text),
   processing_status: ProcessingStatusSchema, body: Type.Null() };
+const libraryCommon = { ...documentCommon, record_path: Type.Null(), source_type: Type.Null(), original_locator: Type.Null(), captured_at: Type.Null(),
+  asset: Type.Null(), source_content: Type.Null(), record_body: Type.Null(), body: text };
 export const DocumentSchema = Type.Union([
   object({ ...sourceCommon,
     asset: object({ ...AssetSchema.properties, kind: Type.Literal('inline_markdown') }),
@@ -134,10 +136,9 @@ export const DocumentSchema = Type.Union([
     asset: object({ ...AssetSchema.properties, kind: enumeration(['vault_file', 'external_ref']) }),
     source_content: Type.Null(), record_body: text,
   }),
-  object({ ...documentCommon, kind: Type.Literal('knowledge'), record_path: Type.Null(),
-    source_type: Type.Null(), original_locator: Type.Null(), captured_at: Type.Null(),
-    asset: Type.Null(), source_content: Type.Null(), record_body: Type.Null(), body: text,
-  }),
+  object({ ...libraryCommon, kind: Type.Literal('knowledge') }),
+  object({ ...libraryCommon, kind: Type.Literal('idea') }),
+  object({ ...libraryCommon, kind: Type.Literal('research') }),
 ]);
 export type Document = Static<typeof DocumentSchema>;
 export const SearchFieldSchema = enumeration(['title', 'body', 'annotation', 'metadata']);
@@ -145,7 +146,7 @@ export const SearchResultSchema = object({
   id: nonempty, path: VaultPathSchema, kind: DocumentKindSchema, title: text, source_type: nullable(text),
   revision: RevisionSchema, matched_fields: Type.Array(SearchFieldSchema, { minItems: 1 }),
   snippet: Type.String({ maxLength: LIMITS.snippet_characters }), snippet_field: SearchFieldSchema,
-  snippet_context: enumeration(['source_content', 'record_body', 'knowledge', 'user_context', 'metadata', 'title']),
+  snippet_context: enumeration(['source_content', 'record_body', 'knowledge', 'idea', 'research', 'user_context', 'metadata', 'title']),
 });
 export type SearchResult = Static<typeof SearchResultSchema>;
 export const PaginationQuerySchema = object({
@@ -184,7 +185,7 @@ export const SourceBatchSchema = object({ id: nonempty, action: enumeration(['co
 export type SourceBatch = Static<typeof SourceBatchSchema>;
 export const DiscardPreviewSchema = object({ source: LifecycleTargetSchema, drafts: Type.Array(object({ ...RelatedTargetSchema.properties, title: Type.Optional(text) })), references: Type.Array(LifecycleTargetSchema) });
 export const SearchQuerySchema = object({ ...PaginationQuerySchema.properties,
-  scope: Type.Optional(enumeration(['knowledge', 'sources', 'all'])),
+  scope: Type.Optional(enumeration(['knowledge', 'ideas', 'research', 'sources', 'all'])),
   q: Type.Optional(Type.String({ maxLength: LIMITS.query_characters })),
   fields: Type.Optional(Type.String({ pattern: '^(title|body|annotation|metadata)(,(title|body|annotation|metadata))*$' })),
   source_type: Type.Optional(nonempty), tag: Type.Optional(nonempty), path_prefix: Type.Optional(VaultPathSchema),
@@ -202,17 +203,64 @@ export const StatusSchema = object({
   ...HealthSchema.properties, instance_id: nonempty, vault_path: nonempty, data_dir: nonempty,
   database_initialized: Type.Boolean(), active_job: nullable(AnyJobSchema),
   index_generation: count, last_scan_at: nullable(instant),
-  counts: object({ sources: count, knowledge: count, invalid: count, missing: count, unsupported: count, pending: Type.Optional(count) }),
+  counts: object({ sources: count, knowledge: count, ideas: Type.Optional(count), research: Type.Optional(count), invalid: count, missing: count, unsupported: count, pending: Type.Optional(count) }),
   scan_roots: Type.Array(object({ path: enumeration(SCAN_ROOTS), available: Type.Boolean() })),
   limits: object(Object.fromEntries(Object.entries(LIMITS).map(([key, value]) => [key, Type.Literal(value)]))),
   diagnostics: DiagnosticsSchema,
   source_batch: Type.Optional(nullable(SourceBatchSchema)),
+  semantic_index: Type.Optional(object({ state: enumeration(['not_built', 'idle', 'running', 'failed', 'interrupted', 'rebuild_required']), stale_documents: count, error: nullable(text) })),
 });
 export type Status = Static<typeof StatusSchema>;
 const empty = object({});
 const errors = { 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema, 409: ErrorSchema, 413: ErrorSchema, 422: ErrorSchema, 500: ErrorSchema, 503: ErrorSchema };
+export const RecallSettingsSchema = object({
+  endpoint: Type.String({ maxLength: 2000 }), model: Type.String({ maxLength: 512 }),
+  query_instruction: Type.String({ maxLength: 2000 }), timeout_seconds: Type.Integer({ minimum: 5, maximum: 300 }),
+  reranker_enabled: Type.Boolean(), reranker_endpoint: Type.String({ maxLength: 2000 }), reranker_model: Type.String({ maxLength: 512 }),
+  candidates: Type.Integer({ minimum: 20, maximum: 50 }),
+});
+export type RecallSettings = Static<typeof RecallSettingsSchema>;
+export const RecallSettingsResponseSchema = object({ settings: RecallSettingsSchema, api_key_configured: Type.Boolean(), reranker_key_configured: Type.Boolean() });
+export const RecallSettingsWriteSchema = object({ settings: RecallSettingsSchema, api_key: Type.Optional(Type.String({ maxLength: 8192 })), reranker_key: Type.Optional(Type.String({ maxLength: 8192 })) });
+export const RecallStatusSchema = object({
+  state: enumeration(['not_built', 'idle', 'running', 'failed', 'interrupted', 'rebuild_required']),
+  initialized: Type.Boolean(), indexed_documents: count, indexed_chunks: count, eligible_documents: count, stale_documents: count,
+  fingerprint: nullable(text), indexed_at: nullable(instant), generation: count,
+  processed_documents: count, embedded_chunks: count, reused_chunks: count,
+  error: nullable(text), diagnostics: DiagnosticsSchema,
+});
+export type RecallStatus = Static<typeof RecallStatusSchema>;
+export const RecallQuerySchema = object({
+  q: Type.String({ minLength: 1, maxLength: 2000 }),
+  scope: Type.Optional(enumeration(['all', 'knowledge', 'ideas', 'research'])),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })), rerank: Type.Optional(Type.Boolean()),
+});
+export type RecallQuery = Static<typeof RecallQuerySchema>;
+export const RecallHitSchema = object({
+  chunk_id: nonempty, path: ScopedMarkdownPathSchema, kind: enumeration(['knowledge', 'idea', 'research']),
+  title: text, heading: text, revision: RevisionSchema, text: text,
+  start_line: Type.Integer({ minimum: 1 }), end_line: Type.Integer({ minimum: 1 }),
+  score: Type.Number(), channels: Type.Array(enumeration(['bm25', 'embedding'])),
+  rerank_score: nullable(Type.Number()),
+});
+export type RecallHit = Static<typeof RecallHitSchema>;
+export const RecallResponseSchema = object({
+  items: Type.Array(RecallHitSchema), coverage: RecallStatusSchema,
+  reranker: enumeration(['disabled', 'applied', 'failed']), diagnostics: DiagnosticsSchema,
+  timings: object({ embedding_ms: Type.Number(), retrieval_ms: Type.Number(), rerank_ms: Type.Number(), total_ms: Type.Number() }),
+});
+export type RecallResponse = Static<typeof RecallResponseSchema>;
+export const RecallContextRequestSchema = object({ items: Type.Array(object({ chunk_id: nonempty, path: ScopedMarkdownPathSchema, revision: RevisionSchema }), { minItems: 1, maxItems: 60 }) });
+export const RecallContextResponseSchema = object({ items: Type.Array(RecallHitSchema), diagnostics: DiagnosticsSchema, truncated: Type.Boolean() });
 /** Implemented endpoints. Schema declarations do not register unimplemented handlers. */
 export const API = {
+  recallSettings: { method: 'GET', url: '/v1/recall/settings', schema: { querystring: empty, response: { ...errors, 200: RecallSettingsResponseSchema } } },
+  recallSettingsWrite: { method: 'POST', url: '/v1/recall/settings', schema: { querystring: empty, body: RecallSettingsWriteSchema, response: { ...errors, 200: RecallSettingsResponseSchema } } },
+  recallTest: { method: 'POST', url: '/v1/recall/test', schema: { querystring: empty, body: empty, response: { ...errors, 200: object({ dimensions: count, reranker: enumeration(['disabled','available']) }) } } },
+  recallStatus: { method: 'GET', url: '/v1/recall/status', schema: { querystring: empty, response: { ...errors, 200: RecallStatusSchema } } },
+  recallIndex: { method: 'POST', url: '/v1/recall/index', schema: { querystring: empty, body: object({ mode: enumeration(['build', 'update', 'rebuild']) }), response: { ...errors, 202: RecallStatusSchema } } },
+  recall: { method: 'POST', url: '/v1/recall', schema: { querystring: empty, body: RecallQuerySchema, response: { ...errors, 200: RecallResponseSchema } } },
+  recallContext: { method: 'POST', url: '/v1/recall/context', schema: { querystring: empty, body: RecallContextRequestSchema, response: { ...errors, 200: RecallContextResponseSchema } } },
   health: { method: 'GET', url: '/v1/health', schema: { querystring: empty, response: { ...errors, 200: HealthSchema, 503: HealthSchema } } },
   status: { method: 'GET', url: '/v1/status', schema: { querystring: empty, response: { ...errors, 200: StatusSchema } } },
   scans: { method: 'POST', url: '/v1/scans', schema: { body: ScanRequestSchema, querystring: empty, response: { ...errors, 202: ScanResponseSchema } } },

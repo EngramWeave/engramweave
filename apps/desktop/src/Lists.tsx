@@ -4,6 +4,8 @@ const contexts: Record<string, string> = {
   source_content: '原文内容',
   record_body: 'Record 说明',
   knowledge: '知识正文',
+  idea: 'Idea 正文',
+  research: 'Research 正文',
   user_context: '用户上下文 · Annotation',
   metadata: '元数据',
   title: '标题',
@@ -73,7 +75,7 @@ export function Results({
             <button className="text-button" onClick={() => select(item.path)}>
               {item.title || item.path}
             </button>
-            <span>{item.kind === 'source' ? 'Source' : 'Knowledge'}</span>
+            <span>{item.kind === 'source' ? 'Source' : item.kind === 'idea' ? 'Idea' : item.kind === 'research' ? 'Research' : 'Knowledge'}</span>
           </div>
           <p className="path">{item.path}</p>
           <p className="field-label">

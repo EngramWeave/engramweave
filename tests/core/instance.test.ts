@@ -25,7 +25,7 @@ describe('real runtime ownership', () => {
     expect(second.instance_id).not.toBe(first.instance_id);
     expect(await readFile(path.join(config.data_dir, 'token'), 'utf8')).toBe(token);
     expect(await readdir(config.vault_path)).toEqual([]);
-    expect(await readdir(config.data_dir)).toEqual(['core.sqlite', 'instance.lock', 'token']);
+    expect(await readdir(config.data_dir)).toEqual(['core.sqlite', 'instance.lock', 'semantic.sqlite', 'token']);
   });
   it('rejects second instances on both the same port and a different port before modifying ownership', async () => {
     const { config } = await fixture();

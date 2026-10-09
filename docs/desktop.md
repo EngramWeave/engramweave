@@ -67,3 +67,7 @@ TypeScript 与 Core 测试使用 Vitest。Rust 宿主安全边界需要直接执
 实现参考：[Tauri 权限](https://v2.tauri.app/security/permissions/)、[原生命令](https://v2.tauri.app/develop/calling-rust/)、[Obsidian URI](https://help.obsidian.md/Extending+Obsidian/Obsidian+URI)。
 
 Sources 支持六个 View、Filter Chips、排序和底部稳定多选工具栏，执行反馈使用 Toast，目标及详细结果使用独立弹窗。前五个 View 支持 Compile／Discard／Discard Drafts，Discarded 支持永久删除／Restore。Annotation 为首个详情标签页，只显示 active Draft；Processing 与 Lifecycle 分别直接显示 processing_status 和 lifecycle_status，独立于 Health。交互及操作范围见 [Sources](sources.md)。
+
+## Semantic Recall
+
+Settings 提供独立 Embedding／可选 Reranker 的 endpoint、模型和凭据、服务测试、首次建立、增量重试和重建。Search 的 Semantic 入口覆盖 Knowledge／Ideas／Research，Keyword 保留现有检索。System Status 的 Semantic 与 Registry Index 分开，错误不进入 Sources Health。首次建立与后续 Refresh 的行为及证据合同见 [语义召回](semantic-recall.md)。检索模型等待使用已验证连接的独立快照，不能阻塞宿主启停或浏览操作。

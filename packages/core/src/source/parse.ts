@@ -6,13 +6,14 @@ import { markdownPath } from '../files/paths.js';
 
 export type Diagnostic = Source['diagnostics'][number];
 export interface ParsedDocument {
-  kind: 'source' | 'knowledge'; state: 'ready' | 'invalid' | 'unsupported';
+  kind: 'source' | 'knowledge' | 'idea' | 'research'; state: 'ready' | 'invalid' | 'unsupported';
   title: string; source_type: string | null; captured_at: string | null; original_locator: string | null;
   processing_status: Source['processing_status']; lifecycle_status: Source['lifecycle_status'];
   metadata: Record<string, unknown>; annotation: string; body_markdown: string;
   asset: Asset | null; diagnostics: Diagnostic[];
 }
 export const normalizeText = (text: string) => text.normalize('NFC').toLowerCase();
+export const documentKind = (relative: string): ParsedDocument['kind'] => relative.startsWith('20_Sources/') ? 'source' : relative.startsWith('10_Ideas/') ? 'idea' : relative.startsWith('50_Research/') ? 'research' : 'knowledge';
 export const processingStatus = (value: unknown): Source['processing_status'] =>
   typeof value === 'string' && PROCESSING_STATUSES.includes(value as typeof PROCESSING_STATUSES[number]) ? value as NonNullable<Source['processing_status']> : null;
 export const lifecycleStatus = (value: unknown): Source['lifecycle_status'] =>
@@ -51,7 +52,7 @@ export function jsonCompatible(value: unknown, seen = new Set<object>(), depth =
 
 export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
   markdownPath(relative);
-  const kind = relative.split('/')[0] === '20_Sources' ? 'source' : 'knowledge';
+  const kind = documentKind(relative);
   const diagnostics: Diagnostic[] = [];
   const report = (code: string, message: string) => diagnostics.push({ code, message, path: relative });
   const result: ParsedDocument = { kind, state: 'ready', title: path.posix.basename(relative, path.posix.extname(relative)), source_type: null,
@@ -82,7 +83,7 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
     } catch { return fail('INVALID_YAML', 'Frontmatter contains invalid or excessive aliases'); }
   }
   if (kind === 'source' && metadata.type !== 'raw_source') return fail('UNSUPPORTED_TYPE', 'Source requires type raw_source', 'unsupported');
-  if (kind === 'knowledge' && metadata.type === 'raw_source') return fail('DIRECTORY_TYPE_CONFLICT', 'Raw Source cannot be read as Knowledge');
+  if (kind !== 'source' && metadata.type === 'raw_source') return fail('DIRECTORY_TYPE_CONFLICT', 'Raw Source cannot be read as a library note');
   if (metadata.annotation != null && typeof metadata.annotation !== 'string') return fail('INVALID_ANNOTATION', 'Annotation must be a string or null');
   if (metadata.title != null && typeof metadata.title !== 'string') return fail('INVALID_TITLE', 'Title must be a string');
   if (!validList(metadata.author) || !validList(metadata.tags)) return fail('INVALID_LIST', 'Author and tags must be strings or string lists');
@@ -123,7 +124,7 @@ export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
 
 export function problemDocument(relative: string, error: unknown): ParsedDocument {
   const problem = error instanceof FileProblem ? error : new FileProblem('FILE_READ_ERROR', 'invalid', 'Document could not be read safely');
-  return { kind: relative.startsWith('20_Sources/') ? 'source' : 'knowledge', state: problem.state,
+  return { kind: documentKind(relative), state: problem.state,
     title: path.posix.basename(relative), source_type: null, captured_at: null, original_locator: null, processing_status: null, lifecycle_status: null,
     metadata: {}, annotation: '', body_markdown: '', asset: null,
     diagnostics: [{ code: problem.code, message: problem.message, path: relative }] };

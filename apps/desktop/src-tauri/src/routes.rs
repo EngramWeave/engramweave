@@ -20,6 +20,13 @@ pub enum Operation {
     SourceBatch,
     SourceBatchStatus,
     DiscardPreview,
+    RecallSettings,
+    RecallSettingsWrite,
+    RecallTest,
+    RecallStatus,
+    RecallIndex,
+    Recall,
+    RecallContext,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -56,6 +63,13 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::SourceBatch => (true, "/v1/source-batches", &["id", "action", "items"]),
         Operation::SourceBatchStatus => (false, "/v1/source-batches", &["id"]),
         Operation::DiscardPreview => (false, "/v1/source-discard-preview", &["path"]),
+        Operation::RecallSettings => (false, "/v1/recall/settings", &[]),
+        Operation::RecallSettingsWrite => (true, "/v1/recall/settings", &["settings", "api_key", "reranker_key"]),
+        Operation::RecallTest => (true, "/v1/recall/test", &[]),
+        Operation::RecallStatus => (false, "/v1/recall/status", &[]),
+        Operation::RecallIndex => (true, "/v1/recall/index", &["mode"]),
+        Operation::Recall => (true, "/v1/recall", &["q", "scope", "limit", "rerank"]),
+        Operation::RecallContext => (true, "/v1/recall/context", &["items"]),
     };
     let object = input
         .as_object()
@@ -65,6 +79,12 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
             "VALIDATION_ERROR",
             "Bridge field is not permitted",
         ));
+    }
+    if post && route.starts_with("/v1/recall") {
+        if serde_json::to_vec(input).map(|bytes| bytes.len() > 32768).unwrap_or(true) {
+            return Err(Failure::new("VALIDATION_ERROR", "Recall request exceeds its bound"));
+        }
+        return Ok((true, route.to_string(), vec![]));
     }
     if route == "/v1/compiler/settings" && post {
         if !object.get("settings").map(Value::is_object).unwrap_or(false)

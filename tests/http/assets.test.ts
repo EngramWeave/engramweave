@@ -29,7 +29,8 @@ it('follows K1 → R1/A1 → Asset and rechecks missing/restored assets with unc
   expect(detailMissing).toMatchObject({ index_stale: false, revision: firstItem.revision, asset: { availability: 'missing' }, diagnostics: [{ code: 'ASSET_MISSING' }] });
   expect((await (await request('/v1/sources')).json()).items.find((item: { path: string }) => item.path === recordPath).asset.availability).toBe('available');
   const missingScan = await scan();
-  expect(missingScan).toMatchObject({ summary: { unchanged: 5, invalid: 0, warnings: [{ code: 'ASSET_MISSING', path: recordPath }] } });
+  expect(missingScan).toMatchObject({ summary: { unchanged: 5, invalid: 0 } });
+  expect(missingScan.summary!.warnings.filter(warning => warning.code === 'ASSET_MISSING')).toEqual([{ code: 'ASSET_MISSING', message: 'Asset reference is missing', path: recordPath }]);
   const missingList = await (await request('/v1/sources')).json();
   expect(missingList.items.find((item: { path: string }) => item.path === recordPath)).toMatchObject({ id: firstItem.id, revision: firstItem.revision, state: 'ready', asset: { availability: 'missing' } });
   await writeFile(path.join(config.vault_path, assetPath), assetBytes);

@@ -12,6 +12,7 @@ import { SourceBatches } from './jobs/source-batches.js';
 import type { CoreServices } from './http/context.js';
 import { recoverDatabase } from './storage/recover.js';
 import { retainWindowsAttributes } from './files/windows.js';
+import { SemanticRecall } from './recall/index.js';
 
 export async function startCore(input: Config) {
   const releaseAttributes = retainWindowsAttributes();
@@ -40,11 +41,13 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     database = await openDatabase(config);
     let compiler: CompilerJobs;
     let batches: SourceBatches;
-    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy()));
+    let recall: SemanticRecall | undefined;
+    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy()), async () => { await recall?.afterRefresh(); });
     compiler = new CompilerJobs(database, config, () => jobs.active() !== null);
     await compiler.initialize();
     batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null);
-    services = { db: database, jobs, compiler, batches, instance_id: instance.id };
+    recall = new SemanticRecall(config, database);
+    services = { db: database, jobs, compiler, batches, recall, instance_id: instance.id };
     await batches.initialize();
     runtime.status = 'ready';
     let closed = false;
@@ -52,11 +55,11 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); }
+      try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
       finally { try { database?.close(); } finally { try { await instance?.close(); } finally { await releaseAttributes(); } } }
     } };
   } catch (error) {
-    try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); }
+    try { await server.close(); const batchClose = services?.batches?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
     finally { try { database?.close(); } finally { await instance?.close(); } }
     throw error;
   }

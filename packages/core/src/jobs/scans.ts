@@ -14,7 +14,7 @@ const asJob = (row: JobRow): Job => ({ id: row.id, kind: row.kind, mode: row.mod
 export class ScanJobs {
   private running: Promise<void> | null = null;
   private stopping = false;
-  constructor(private readonly db: Database.Database, private readonly vault: string, private readonly compilerBusy: () => boolean = () => false) {
+  constructor(private readonly db: Database.Database, private readonly vault: string, private readonly compilerBusy: () => boolean = () => false, private readonly afterScan: () => Promise<void> = async () => {}) {
     // Persisted activity is not runnable after a process restart; never pretend it is live.
     db.transaction(() => {
       db.prepare("UPDATE jobs SET status='interrupted',finished_at=?,error_json=? WHERE status IN ('queued','running')")
@@ -47,6 +47,8 @@ export class ScanJobs {
     try {
       this.db.prepare("UPDATE jobs SET status='running',started_at=? WHERE id=?").run(new Date().toISOString(), id);
       await scanVault(this.db, this.vault, id, mode, processed => { this.db.prepare('UPDATE jobs SET processed_files=? WHERE id=?').run(processed, id); });
+      // Registration is already committed. Semantic failures must never rewrite that outcome.
+      try { await this.afterScan(); } catch { /* Independent semantic status owns its errors. */ }
     } catch (error) {
       const safe = error instanceof CoreError ? { code: error.code, message: error.message, details: null }
         : { code: 'IO_ERROR', message: 'Scan could not be completed', details: null };

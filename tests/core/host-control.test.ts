@@ -58,6 +58,7 @@ it('ignores unknown private-pipe messages and stops cleanly when the native host
     expect(output).not.toContain(token);
     expect(await readdir(isolated.config.data_dir)).toEqual([
       'core.sqlite',
+      'semantic.sqlite',
       'token',
     ]);
     expect(await readdir(isolated.config.vault_path)).toEqual([]);

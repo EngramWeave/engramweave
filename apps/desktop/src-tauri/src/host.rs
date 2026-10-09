@@ -41,6 +41,7 @@ struct Descriptor {
     vault_path_key: String,
     data_dir_key: String,
 }
+#[derive(Clone)]
 struct Connection {
     profile: Profile,
     token: String,
@@ -97,6 +98,9 @@ impl Host {
             request = request.bearer_auth(token);
         }
         request = request.query(query);
+        if route == "/v1/recall" || route == "/v1/recall/test" {
+            request = request.timeout(Duration::from_secs(610));
+        }
         if let Some(body) = body {
             request = request.json(body);
         }
@@ -357,6 +361,15 @@ impl Host {
             ));
         }
         Ok(self.info())
+    }
+    // Model waits use a connection snapshot, without holding the Desktop lifecycle mutex.
+    // The ordinary request still verifies the instance descriptor and token at use time.
+    pub fn recall_connection(&mut self) -> Result<Host> {
+        self.check_child()?;
+        let mut snapshot = Host::new(self.profile_path.clone());
+        snapshot.connection = Some(self.connection.as_ref().ok_or_else(|| Failure::new("CORE_UNAVAILABLE", "Connect Core explicitly"))?.clone());
+        snapshot.frozen_profile = self.frozen_profile.clone();
+        Ok(snapshot)
     }
     pub fn request(&mut self, operation: Operation, input: Value) -> Result<Value> {
         self.check_child()?;

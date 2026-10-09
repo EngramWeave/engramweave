@@ -158,6 +158,9 @@ export function Shell({
                 {status ? `Generation ${status.index_generation}` : '—'}
               </span>
             </div>
+            {status?.semantic_index && <div className="system-row" title={status.semantic_index.error ?? undefined}>
+              <i className={`status-dot ${status.semantic_index.state === 'idle' ? 'online' : ''}`} /><span>Semantic</span><span>{status.semantic_index.state}{status.semantic_index.stale_documents ? ` · ${status.semantic_index.stale_documents} stale` : ''}</span>
+            </div>}
           </div>
           <div className="sidebar-footer">
             <span>v0.1.0</span>

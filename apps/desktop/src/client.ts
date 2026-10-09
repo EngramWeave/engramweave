@@ -84,6 +84,13 @@ export const client = {
   sourceBatch: (input: SourceBatchRequest) => request('source_batch', API.sourceBatch.schema.response[202], input),
   sourceBatchStatus: (id: string) => request('source_batch_status', API.sourceBatchStatus.schema.response[200], { id }),
   discardPreview: (path: string) => request('discard_preview', API.discardPreview.schema.response[200], { path }),
+  recallSettings: () => request('recall_settings', API.recallSettings.schema.response[200]),
+  saveRecallSettings: (settings: import('@engramweave/contracts').RecallSettings, api_key?: string, reranker_key?: string) => request('recall_settings_write', API.recallSettingsWrite.schema.response[200], { settings, ...(api_key ? { api_key } : {}), ...(reranker_key ? { reranker_key } : {}) }),
+  recallTest: () => request('recall_test', API.recallTest.schema.response[200]),
+  recallStatus: () => request('recall_status', API.recallStatus.schema.response[200]),
+  recallIndex: (mode: 'build' | 'update' | 'rebuild') => request('recall_index', API.recallIndex.schema.response[202], { mode }),
+  recall: (input: import('@engramweave/contracts').RecallQuery) => request('recall', API.recall.schema.response[200], input),
+  recallContext: (items: { path: string; revision: string; chunk_id: string }[]) => request('recall_context', API.recallContext.schema.response[200], { items }),
 };
 export type SourcePage = Awaited<ReturnType<typeof client.sources>>;
 export type JobPage = Awaited<ReturnType<typeof client.jobs>>;
