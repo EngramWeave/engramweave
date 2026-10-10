@@ -328,11 +328,31 @@ export const PublishDraftRequestSchema = object({
   related_drafts: Type.Array(object({ path: DraftPathSchema, revision: RevisionSchema }), { minItems: 1, maxItems: 100 }),
 });
 export type PublishDraftRequest = Static<typeof PublishDraftRequestSchema>;
+export const HumanReviewRequestSchema = object({
+  request_id: CompileRequestSchema.properties.request_id,
+  action: enumeration(['idea', 'complete', 'cancel']),
+  source_path: CapturePathSchema, source_revision: RevisionSchema,
+  draft_path: DraftPathSchema, draft_revision: RevisionSchema,
+  note: Type.String({ maxLength: 8000 }),
+});
+export type HumanReviewRequest = Static<typeof HumanReviewRequestSchema>;
+export const HumanReviewResponseSchema = object({ request_id: nonempty, action: enumeration(['idea', 'complete', 'cancel']),
+  status: Type.Literal('completed'), idea_path: nullable(ScopedMarkdownPathSchema), reused: Type.Boolean() });
+export type HumanReviewResponse = Static<typeof HumanReviewResponseSchema>;
+export const HumanReviewContextSchema = object({ selected_draft: nullable(DraftPathSchema), intent: nullable(text) });
+export type HumanReviewContext = Static<typeof HumanReviewContextSchema>;
+export const ReviewActionReceiptSchema = Type.Union([
+  object({ status: Type.Literal('not_found'), request: Type.Null(), result: Type.Null() }),
+  object({ status: Type.Literal('unfinished'), request: Type.Union([HumanReviewRequestSchema, RecompileRequestSchema]), result: Type.Null() }),
+  object({ status: Type.Literal('completed'), request: Type.Union([HumanReviewRequestSchema, RecompileRequestSchema]), result: Type.Union([HumanReviewResponseSchema, RecompileResponseSchema]) }),
+]);
+export type ReviewActionReceipt = Static<typeof ReviewActionReceiptSchema>;
 export const DraftReviewSchema = object({
   draft: DraftSchema, source: DocumentSchema, related_drafts: Type.Array(ReviewTargetSchema),
   diagnostics: DiagnosticsSchema, analysis: nullable(AnalyzerJobSchema),
   analyses: Type.Optional(object({ review: nullable(AnalyzerJobSchema), relation: nullable(AnalyzerJobSchema) })),
   publication: nullable(object({ request: PublishDraftRequestSchema, status: enumeration(['completed', 'unfinished']), error: nullable(text) })),
+  human_review: Type.Optional(HumanReviewContextSchema),
 });
 export type DraftReview = Static<typeof DraftReviewSchema>;
 export const PublishDraftResponseSchema = object({
@@ -342,6 +362,8 @@ export const PublishDraftResponseSchema = object({
 export type PublishDraftResponse = Static<typeof PublishDraftResponseSchema>;
 /** Implemented endpoints. Schema declarations do not register unimplemented handlers. */
 export const API = {
+  humanReview: { method: 'POST', url: '/v1/human-review', schema: { querystring: empty, body: HumanReviewRequestSchema, response: { ...errors, 200: HumanReviewResponseSchema } } },
+  reviewAction: { method: 'GET', url: '/v1/review-action', schema: { querystring: object({ id: CompileRequestSchema.properties.request_id }), response: { ...errors, 200: ReviewActionReceiptSchema } } },
   processingSettings: { method: 'GET', url: '/v1/processing/settings', schema: { querystring: empty, response: { ...errors, 200: ProcessingSettingsSchema } } },
   processingSettingsWrite: { method: 'POST', url: '/v1/processing/settings', schema: { querystring: empty, body: ProcessingSettingsSchema, response: { ...errors, 200: ProcessingSettingsSchema } } },
   processingState: { method: 'GET', url: '/v1/processing/state', schema: { querystring: empty, response: { ...errors, 200: object({ schedule: ScheduleStateSchema, active: nullable(ProcessingRoundSchema), latest: nullable(ProcessingRoundSchema) }) } } },

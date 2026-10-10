@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { API, type Config, type DraftReview, type PublishDraftRequest } from '@engramweave/contracts';
+import { API, type Config, type DraftReview, type PublishDraftRequest, type HumanReviewRequest } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { readDraft } from '../drafts/files.js';
 import { sourceRelations } from '../storage/source-relations.js';
@@ -17,7 +17,19 @@ export function registerReviewRoutes(server: FastifyInstance, config: Config, se
     const analysis = current.analyzer?.latestForDraft(draft.path) ?? null;
     return { draft, source, related_drafts: targets.drafts, diagnostics: targets.diagnostics, analysis,
       analyses: { review: current.analyzer?.latestForDraft(draft.path, 'review') ?? null, relation: current.analyzer?.latestForDraft(draft.path, 'relation') ?? null },
-      publication: await current.publications?.forDraft(draft.path) ?? null };
+      publication: await current.publications?.forDraft(draft.path) ?? null,
+      human_review: await current.humanReview?.context(source.path, draft.path) ?? { selected_draft: null, intent: null } };
+  } });
+  server.route({ ...API.humanReview, handler(request) {
+    const service = services().humanReview;
+    if (!service) throw new CoreError('CORE_UNAVAILABLE', 'Human Review is unavailable', 503);
+    return service.submit(request.body as HumanReviewRequest);
+  } });
+  server.route({ ...API.reviewAction, async handler(request) {
+    const id = (request.query as { id: string }).id; const current = services();
+    const receipt = await current.humanReview?.receipt(id);
+    if (receipt && receipt.status !== 'not_found') return receipt;
+    return await current.recompile?.receipt(id) ?? { status: 'not_found', request: null, result: null };
   } });
   server.route({ ...API.publishDraft, handler(request) {
     const service = services().publications;

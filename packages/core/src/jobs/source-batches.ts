@@ -27,7 +27,8 @@ export class SourceBatches {
   private readonly native = new PropertyNative();
   private readonly releaseAttributes = retainWindowsAttributes();
   constructor(private readonly config: Config, private readonly db: Database.Database, private readonly compiler: CompilerJobs, private readonly scanBusy: () => boolean,
-    private readonly guardAnalysis: (input: SourceBatchRequest) => void = () => {}) {
+    private readonly guardAnalysis: (input: SourceBatchRequest) => void = () => {},
+    private readonly revokeReview: (target: string) => Promise<void> = async () => {}) {
     this.filename = path.join(config.data_dir, 'source-batch.json');
   }
   async initialize() {
@@ -101,7 +102,7 @@ export class SourceBatches {
     if (!target.path.startsWith('30_Drafts/')) {
       updateCompiledSource(this.db, target.path, committed, parseMarkdown(target.path, committed.bytes));
     }
-    if (status === 'discarded') sourceRelations(this.db, this.config.vault_path).removed(target.path);
+    if (status === 'discarded') { sourceRelations(this.db, this.config.vault_path).removed(target.path); await this.revokeReview(target.path); }
     return committed.revision;
   }
   private async execute() {
@@ -158,6 +159,7 @@ export class SourceBatches {
               }
               for (const target of selected) if (!marked.has(target.path.toLowerCase())) marked.set(target.path.toLowerCase(), await this.mark(target, 'discarded', native, files.get(target.path)!));
             }
+            if (input.action === 'restore' && parsed.lifecycle_status === 'discarded') await this.revokeReview(item.path);
             if (input.action !== 'discard_drafts') await this.mark(item, input.action === 'restore' ? 'active' : 'discarded', native, current);
             else this.db.prepare('UPDATE meta SET index_generation=index_generation+1 WHERE id=1').run();
           }

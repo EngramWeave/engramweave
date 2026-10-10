@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { Value } from '@sinclair/typebox/value';
-import { RecompileRequestSchema, type Config, type RecompileRequest, type RecompileResponse } from '@engramweave/contracts';
+import { RecompileRequestSchema, type Config, type RecompileRequest, type RecompileResponse, type ReviewActionReceipt } from '@engramweave/contracts';
 import type Database from 'better-sqlite3';
 import { CoreError } from '../errors.js';
 import { readMarkdown } from '../files/read.js';
@@ -26,7 +26,9 @@ export class RecompileActions {
   private readonly idle: (() => void)[] = [];
   private readonly unfinished = new Set<string>();
   private readonly directory: string;
-  constructor(private readonly config: Config, private readonly db: Database.Database, private readonly otherBusy: () => boolean) { this.directory = path.join(config.data_dir, 'recompile-actions'); }
+  constructor(private readonly config: Config, private readonly db: Database.Database, private readonly otherBusy: () => boolean,
+    private readonly revoke: (source: string, id: string) => Promise<void> = async () => {},
+    private readonly otherAccepted: (id: string) => Promise<boolean> = async () => false) { this.directory = path.join(config.data_dir, 'recompile-actions'); }
   busy() { return this.writing || this.unfinished.size > 0; }
   count(relative: string) { return (this.db.prepare('SELECT count(*) AS count FROM recompile_actions WHERE path_key=?').get(relative.toLowerCase()) as { count: number }).count; }
   private async ready(create = false) {
@@ -66,6 +68,7 @@ export class RecompileActions {
       let record = await this.read(request.request_id); const reused = Boolean(record);
       if (record && !isDeepStrictEqual(record.request, request)) throw new CoreError('PATH_CONFLICT', 'Recompile request ID belongs to different feedback or input', 409);
       if (record?.completed) { this.recordCount(record); return { path: request.source_path, revision: record.after, recompile_count: this.count(request.source_path), reused: true }; }
+      if (!record && await this.otherAccepted(request.request_id)) throw new CoreError('PATH_CONFLICT', 'Recompile ID already belongs to another Review action', 409);
       if (this.otherBusy() || [...this.unfinished].some(id => id !== request.request_id)) throw new CoreError('JOB_BUSY', 'Finish the active operation or unresolved Recompile action', 409);
       if (!record) {
         const source = await readMarkdown(this.config.vault_path, request.source_path); const parsed = parseMarkdown(request.source_path, source.bytes);
@@ -83,6 +86,12 @@ export class RecompileActions {
     } finally { this.writing = false; for (const resolve of this.idle.splice(0)) resolve(); }
   }
   async close() { this.stopping = true; if (this.writing) await new Promise<void>(resolve => this.idle.push(resolve)); }
+  async receipt(id: string): Promise<ReviewActionReceipt> {
+    const record = await this.read(id);
+    if (!record) return { status: 'not_found', request: null, result: null };
+    return record.completed ? { status: 'completed', request: record.request, result: { path: record.request.source_path, revision: record.after, recompile_count: this.count(record.request.source_path), reused: true } }
+      : { status: 'unfinished', request: record.request, result: null };
+  }
   private async finish(record: RecompileRecord) {
     const native = new PropertyNative(); const relative = record.request.source_path;
     try {
@@ -92,6 +101,7 @@ export class RecompileActions {
       if (![record.before, record.after].includes(source.revision)) throw new CoreError('SOURCE_CHANGED', 'Source changed during Recompile; preserve feedback receipt and restore its approved version', 409);
       if (source.revision !== record.after) source = await writeSourceProperties(this.config.vault_path, relative, source, Buffer.from(record.source_bytes,'base64'), native);
       updateCompiledSource(this.db, relative, source, parseMarkdown(relative, source.bytes));
+      await this.revoke(relative, record.request.request_id);
       record.completed = true; await this.save(record); this.recordCount(record); this.unfinished.delete(record.request.request_id);
     } finally { await native.close(); }
   }

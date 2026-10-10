@@ -7,7 +7,7 @@ import { API } from '@engramweave/contracts';
 import { httpRuntime, finishedJob } from '../helpers/http.js';
 import { pendingSample, copyRealSamples, manualSource, realSamples, sha256 } from '../helpers/fixtures.js';
 
-it('validates real wire responses for all nine P1 endpoints and rejects undeclared inputs without asset writes', async () => {
+it('validates wire responses and rejects undeclared inputs across every registered endpoint without asset writes', async () => {
   const runtime = await httpRuntime(copyRealSamples);
   const checks: { route: keyof typeof API; status: number; fields: string[] }[] = [];
   const verify = async (route: keyof typeof API, response: Response) => {
@@ -68,7 +68,7 @@ it('validates real wire responses for all nine P1 endpoints and rejects undeclar
       expect(JSON.stringify(error)).not.toContain('private-input');
       expect(JSON.stringify(error)).not.toContain(runtime.config.vault_path);
     }
-    expect(new Set(checks.map(check => check.route)).size).toBe(42);
+    expect(new Set(checks.map(check => check.route)).size).toBe(44);
     expect((await (await runtime.request('/v1/jobs')).json()).total).toBe(1);
     expect(await readFile(path.join(runtime.config.vault_path, capture.path), 'utf8')).toBe(capture.markdown.replace('---\n', '---\nprocessing_status: pending\n'));
     const hashes = [];

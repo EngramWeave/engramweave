@@ -36,7 +36,8 @@ export class DraftPublications {
   private readonly byDraft = new Map<string, { request: PublishDraftRequest; status: 'completed' | 'unfinished'; error: string | null }>();
   private readonly directory: string;
   constructor(private readonly config: Config, private readonly db: Database.Database, private readonly otherBusy: () => boolean,
-    private readonly analysis: (id: string) => { draft_path: string; source_path: string; status: string } | undefined) {
+    private readonly analysis: (id: string) => { draft_path: string; source_path: string; status: string } | undefined,
+    private readonly revoke: (source: string, id: string) => Promise<void> = async () => {}) {
     this.directory = path.join(config.data_dir, 'draft-publications');
   }
   busy() { return this.active || this.unfinished.size > 0; }
@@ -193,6 +194,7 @@ export class DraftPublications {
       updateCompiledSource(this.db, record.request.source_path, source, parseMarkdown(record.request.source_path, source.bytes));
       upsertLibraryDocument(this.db, record.request.target_path, target, parseMarkdown(record.request.target_path, target.bytes));
       sourceRelations(this.db, vault).invalidate();
+      await this.revoke(record.request.source_path, record.request.request_id);
       record.phase = 'completed'; record.error = null; await this.save(record);
       this.unfinished.delete(record.request.request_id);
     } finally { await native.close(); }
