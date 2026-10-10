@@ -14,6 +14,8 @@ Property normalization uses deterministic YAML-node byte edits and a locked Wind
 
 ## Processing and runtime state ownership
 
+Zotero Capture publishes selected text and/or comments as inline paper Sources through the existing Capture API. Paper Capture requires a bounded personal/group Zotero item locator and does not copy or fetch PDF assets. Safe new Captures remain permitted while models run; existing targets and active-round Source paths remain blocked until idle. Capture still does not register files or invoke models. Desktop opens current paper item locators through a restricted native command and displays paper as Paper. See [the adapter context](../engramweave-zotero/CONTEXT.md).
+
 Source Record Properties own `processing_status`: `pending / compiled / reviewed / planned / archived`. Core stores a rebuildable projection. Source, Draft, and formal knowledge Properties independently own `lifecycle_status: active | discarded`, preserving the content stage. Core separately owns registration (`ready / invalid / missing / unsupported`) and Job execution (`queued / running / succeeded / failed / interrupted`). Error details and retry/recompile counts remain Core runtime data.
 
 Source Registry fills an absent or empty processing property with `pending`, preserving submitted body, Annotation, and other metadata. This includes historical material. Database rebuilding reads intact stage properties rather than resetting them; file damage is handled through file history or backup recovery.

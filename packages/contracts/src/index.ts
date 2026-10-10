@@ -234,6 +234,7 @@ export const ScanRequestSchema = object({ mode: ScanModeSchema });
 export type ScanRequest = Static<typeof ScanRequestSchema>;
 export const ScanResponseSchema = object({ job: JobSchema, reused: Type.Boolean() });
 export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: Type.String({ minLength: 1 }), analysis_profile: Type.Optional(AnalysisProfileIdSchema) });
+export const PaperLocatorSchema = Type.String({ pattern: '^zotero://select/(?:library|groups/[1-9][0-9]*)/items/[A-Z0-9]{8}$' });
 export const CaptureResponseSchema = object({ path: CapturePathSchema, revision: RevisionSchema, created: Type.Boolean(), scan_required: Type.Literal(true) });
 export type CaptureRequest = Static<typeof CaptureRequestSchema>;
 export type CaptureResponse = Static<typeof CaptureResponseSchema>;

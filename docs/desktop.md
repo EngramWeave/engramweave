@@ -39,7 +39,7 @@ Sources 使用列表与属性预览并排的布局。顶部六个 View 为 All S
 
 文档读取错误显示在对应详情区域，仍保留所选行和路径；Source 列表、搜索、连接与显式操作错误分别显示在各自区域。错误详情默认折叠，不在工作区顶部展开 JSON。没有合适局部位置的错误使用可关闭的悬浮提示，6 秒后消失。切换页面、关闭详情或更改选择时清除相应错误；旧页面或旧选择的异步失败不会重新出现。
 
-“在 Obsidian 中打开”由已验证的 Vault 与文档路径生成编码 URI；“打开原网页”只接受该文档的 HTTP/HTTPS 定位且拒绝嵌入凭证。不能由前端提供 URI。Zotero 等定位仅显示。所有打开操作由用户点击触发；需要系统注册 Obsidian URI 和默认浏览器。未注册的隔离 Vault 可能需要先在 Obsidian 中手工打开。
+“在 Obsidian 中打开”由已验证的 Vault 与文档路径生成编码 URI；“打开原网页”只接受该文档的 HTTP/HTTPS 定位且拒绝嵌入凭证。paper Source 提供 Open in Zotero，只允许当前文档的 `zotero://select/library/items/<key>` 或 `zotero://select/groups/<group-id>/items/<key>`，拒绝额外查询、片段、凭证和其他命令。不能由前端提供 URI。所有打开操作由用户点击触发；需要系统注册相应 URI 和默认浏览器。未注册的隔离 Vault 可能需要先在 Obsidian 中手工打开。类型筛选以 Paper 展示新论文 Source，历史实际类型仍从 Registry facets 展示。
 
 ## Compiler 与 Draft
 

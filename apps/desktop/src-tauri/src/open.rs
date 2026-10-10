@@ -42,6 +42,9 @@ pub fn document_uri(host: &mut Host, path: String, target: OpenTarget) -> Result
             let uri = Url::parse(locator).map_err(|_| {
                 Failure::new("VALIDATION_ERROR", "Original locator is not a webpage URL")
             })?;
+            if document["source_type"] == "paper" && valid_zotero_item(&uri) {
+                return Ok(uri.to_string());
+            }
             if !["http", "https"].contains(&uri.scheme())
                 || uri.host_str().is_none()
                 || !uri.username().is_empty()
@@ -55,6 +58,20 @@ pub fn document_uri(host: &mut Host, path: String, target: OpenTarget) -> Result
             Ok(uri.to_string())
         }
     }
+}
+
+fn valid_zotero_item(uri: &Url) -> bool {
+    if uri.scheme() != "zotero" || uri.host_str() != Some("select") || uri.port().is_some()
+        || !uri.username().is_empty() || uri.password().is_some() || uri.query().is_some() || uri.fragment().is_some()
+    { return false; }
+    let Some(path) = uri.path().strip_prefix('/') else { return false; };
+    let parts: Vec<_> = path.split('/').collect();
+    let key = match parts.as_slice() {
+        ["library", "items", key] => *key,
+        ["groups", group, "items", key] if !group.starts_with('0') && !group.is_empty() && group.bytes().all(|b| b.is_ascii_digit()) => *key,
+        _ => return false,
+    };
+    key.len() == 8 && key.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
 }
 
 pub fn launch(uri: &str) -> Result<()> {

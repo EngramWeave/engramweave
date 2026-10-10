@@ -88,11 +88,13 @@ API 使用[共享契约](../packages/contracts/src/index.ts)，文件和接口�
 
 ## Capture
 
-POST `/v1/captures` 接收path和markdown，拒绝未知字段和非字符串值。path只允许20_Sources内安全Markdown路径；Core仅按请求创建目标父目录。输入须为完整的web/manual inline Raw Source，具有非空正文；不接受Knowledge、独立Asset Record、其他Source类型或正文编辑。URL只作为metadata读取，不抓取网页。已有合法processing_status按原字节保留，不生成归档属性。
+POST `/v1/captures` 接收path和markdown，拒绝未知字段和非字符串值。path只允许20_Sources内安全Markdown路径；Core仅按请求创建目标父目录。输入须为完整的web/manual/paper inline Raw Source；web/manual 具有非空正文，paper 允许非空正文或非空 Annotation，并要求受限的 `zotero://select/library/items/<key>` 或 `zotero://select/groups/<group-id>/items/<key>` 引用。不接受Knowledge、独立Asset Record、其他Source类型或正文编辑。定位只作为metadata读取，不抓取网页或PDF。已有合法processing_status按原字节保留，不生成归档属性。
 
 JSON请求最多8MiB，UTF-8 Markdown最多5MiB，均按字节限制，超限413；流式请求同样受限制。输入验证后，目标同目录排他创建`.engramweave-capture-<UUID>.tmp`，完整写入、flush、关闭，再以NTFS硬链接创建最终路径。已有目标无法被硬链接替换；不支持硬链接时明确失败，没有rename/copy覆盖回退。清理仅删除本次请求创建且仍能确认身份的临时文件。
 
 首次创建201、created=true；目标路径和全部字节相同、经同一Registry补pending规则形成精确相同字节，或该形式推进为compiled且关联Draft记录了匹配输入revision时，重放返回200、created=false及当前文件hash，不重置阶段。正文、Annotation、其他属性、换行或其他阶段差异仍返回409 PATH_CONFLICT，不做YAML语义宽松比较。返回path/revision/created/scan_required=true。文件保存不调用SQLite，也不创建Job或更新投影；随后显式scan才登记。数据库写入失败不会撤回已保存文件。服务尚未初始化或停止时Capture返回503。
+
+活动 Compiler／Analyzer／processing round 期间仍允许新增 Capture，不让模型执行阻塞阅读采集。此时已有目标或属于活动轮次的 Source 返回409 JOB_BUSY，待任务结束再重试；扫描和其他写动作的互斥保持。未完成的 Recompile／入库恢复保护继续生效。插件的冻结请求与保存回执规则见 [Zotero](../../engramweave-zotero/README.md)。
 
 以下命令沿用前面的 `$coreHeaders`，只在隔离测试 Vault 中创建新的 Manual Source；网页 Source 可读取已有完整 Markdown 后使用同一接口提交。
 
@@ -157,6 +159,14 @@ npm exec -- vitest run tests/capture tests/http/captures.test.ts tests/storage/r
 ```
 
 采集可在Core关闭时由现有Clipper直接落盘。验证这条路径应实际剪藏后启动Core、检查尚未扫描时列表为空，再显式扫描、读详情、用真实正文词查询、确认首次登记只补阶段，重复扫描后比较完整文件哈希。仓库模板版本不等于浏览器实际安装版本，应分别记录。
+
+Zotero 使用 Core API 保存；原生验收步骤见插件 README。Paper 的真实模型测试使用隔离 Vault，要求本机 `127.0.0.1:8094/v1` 的 `qwen3.8-27b` 已启动；它验证 Capture 后显式 Compiler／Review／Relation 的结果及 Draft 回链／属性保留，不替代人工选段与正文质量检查：
+
+```powershell
+$env:ENGRAMWEAVE_E1_LIVE = '1'
+try { npm exec -- vitest run tests/capture/paper-real.test.ts }
+finally { Remove-Item Env:ENGRAMWEAVE_E1_LIVE -ErrorAction SilentlyContinue }
+```
 
 性能基准使用现有 Vitest、构建后的独立 Core、真实 loopback HTTP 和 SQLite。它构造 500 份、合计 25 MiB 的隔离 Markdown，其中两份 R1 仅预补 pending，其他 Source 也预填阶段，以测量登记吞吐而非批量属性写入；分别测首次 refresh、重复 refresh 和 rebuild，以及正文、Annotation、多词、元数据筛选五类查询。每类查询预热 3 次后测 30 次，以最近秩法计算 p95。扫描计时包含提交和完成轮询，查询计时包含 HTTP 和 JSON 解码；不清空 OS 文件缓存，不代表冷盘或最大限额性能。目标为每次扫描 ≤15 秒、每类热查询 p95≤1 秒，并比较所有文件前后哈希。
 

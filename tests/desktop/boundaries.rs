@@ -138,6 +138,30 @@ fn changing_profile_requires_desktop_restart() {
 }
 
 #[test]
+fn paper_original_locators_are_restricted_to_zotero_item_selection() {
+    let fixture = Fixture::new();
+    let mut owner = fixture.host(); owner.start().unwrap();
+    for (locator, allowed) in [
+        ("zotero://select/library/items/PAPER123", true),
+        ("zotero://select/groups/42/items/PAPER123", true),
+        ("zotero://select/groups/0/items/PAPER123", false),
+        ("zotero://select/library/items/PAPER123?command=edit", false),
+        ("zotero://user:password@select/library/items/PAPER123", false),
+        ("zotero://select/library/items/%50APER123", false),
+        ("zotero://open-pdf/library/items/PDF12345?page=2", false),
+        ("file:///C:/secret", false),
+    ] {
+        let path = "20_Sources/paper.md";
+        fs::write(fixture.root.join("vault").join(path), format!("---\ntype: raw_source\nsource_type: paper\nsource: {locator}\n---\nSelected text")).unwrap();
+        let result = document_uri(&mut owner, path.into(), OpenTarget::Original);
+        assert_eq!(result.is_ok(), allowed, "{locator}");
+    }
+    fs::write(fixture.root.join("vault/20_Sources/paper.md"), "---\ntype: raw_source\nsource_type: manual\nsource: zotero://select/library/items/PAPER123\n---\nManual").unwrap();
+    assert!(document_uri(&mut owner,"20_Sources/paper.md".into(),OpenTarget::Original).is_err());
+    owner.stop().unwrap();
+}
+
+#[test]
 fn processing_bridge_limits_workflow_and_recompile_fields() {
     assert_eq!(route(Operation::Processing, &json!({"request_id":"id","mode":"analyze","items":[{"draft_path":"30_Drafts/a.md","task":"review"}]})).unwrap().1,"/v1/processing-rounds");
     assert_eq!(route(Operation::ProcessingSettingsWrite, &json!({"enabled":false,"mode":"daily","daily_time":"03:00","time_zone":"Asia/Shanghai","interval_minutes":60,"max_retries":2})).unwrap().1,"/v1/processing/settings");

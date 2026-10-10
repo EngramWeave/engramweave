@@ -138,8 +138,8 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 | 形态 | 角色 | 当前进度 |
 |---|---|---|
 | 🖥️ **Desktop + Core** | Desktop 管理配置、状态与任务；Core 独立承担处理和工作流 | 本地 Core 与 Desktop 基础已实现 |
-| 🔌 **Obsidian** | 原生阅读、编辑和导航，插件提供工作流侧边栏 | 工作流插件待实现 |
-| 📚 **Zotero** | 管理论文和书目，插件投递明确选择的阅读材料 | 投递插件计划纳入 P2 |
+| 🔌 **Obsidian** | 原生阅读、编辑和导航，插件提供工作流侧边栏 | MVP 侧边栏与人工直接入库已实现；完整 Review Note／Intent 待实现 |
+| 📚 **Zotero** | 管理论文和书目，插件投递明确选择的阅读材料 | Windows Zotero 10.0.x PDF 选段／批注 Capture；[安装说明](../engramweave-zotero/README.md) |
 | 📎 **Web / Manual Capture** | 复用已有 Web Clipper 与模板，或通过 Core 保存规范 Source | 已支持基础文件投递和 web/manual Capture API |
 | 📱 **其他采集端** | 按需要扩展 Mobile、多模态和远程采集 | 后续阶段 |
 
@@ -162,7 +162,7 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 
 当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。最小 Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian MVP 支持人工直接入库；完整 Review Note、Intent、Planner 和 ChangeSet 尚未实现。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)和 [Processing](docs/processing.md)。
 
-P2 后续接入 Zotero 选段投递、完整 Review Note／Intent 与编辑差异恢复。P3 完成统一 Planner、ChangeSet 审查执行及 Git，MVP 人工直接入库继续保留。完整审阅整合、维护与科研增强尚未交付。
+Zotero 插件将明确选中的 PDF 段落／高亮／批注保存为独立 Paper Source，保留 Annotation 和原位置，后续通过 Core 处理。P2 后续接入完整 Review Note／Intent 与编辑差异恢复。P3 完成统一 Planner、ChangeSet 审查执行及 Git，MVP 人工直接入库继续保留。完整审阅整合、维护与科研增强尚未交付。
 
 ---
 

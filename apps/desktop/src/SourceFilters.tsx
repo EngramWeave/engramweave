@@ -3,7 +3,7 @@ import type { SourcesQuery } from '@engramweave/contracts';
 
 type Dimension = 'types' | 'tags' | 'time_ranges' | 'stages' | 'issues';
 const labels: Record<Dimension, string> = { types: 'Type', tags: 'Tags', time_ranges: 'Captured Time', stages: 'processing_status', issues: 'Issue' };
-export const typeLabel = (value: string) => ({ web: 'Web', manual: 'Manual', zotero: 'Zotero', desktop: 'Desktop' })[value as 'web'] ?? value.charAt(0).toUpperCase() + value.slice(1);
+export const typeLabel = (value: string) => ({ web: 'Web', manual: 'Manual', paper: 'Paper', zotero: 'Zotero', desktop: 'Desktop' })[value as 'web'] ?? value.charAt(0).toUpperCase() + value.slice(1);
 const values = (encoded?: string): string[] => encoded ? JSON.parse(encoded) : [];
 type TimeRange = { from: string; to: string; label: string };
 export function SourceFilters({ query, change, facets, connected }: {
@@ -35,7 +35,7 @@ export function SourceFilters({ query, change, facets, connected }: {
     const range = { from: start.toISOString(), to: end.toISOString(), label: time === 'Custom range' ? `${from} – ${to}` : time };
     if (!timeRanges.some(item => item.from === range.from && item.to === range.to) && timeRanges.length < 20) change({ ...query, time_ranges: JSON.stringify([...timeRanges, range]) });
   };
-  const options = currentDimension === 'types' ? [...new Set(['web', 'manual', 'zotero', 'desktop', ...facets.types])]
+  const options = currentDimension === 'types' ? [...new Set(['web', 'manual', 'paper', 'desktop', ...facets.types])]
     : currentDimension === 'tags' ? facets.tags.filter(tag => tag.toLowerCase().includes(tagInput.toLowerCase()))
       : currentDimension === 'stages' ? ['compiled', 'reviewed', 'planned'] : ['missing', 'invalid', 'unsupported'];
   const hasFilters = allowed.some(key => Boolean(query[key])) || Boolean(query.recompile);

@@ -31,6 +31,7 @@ export function Detail({
       panel.current?.scrollIntoView({ block: 'start' });
   }, [document.path]);
   const webpage = /^https?:\/\//i.test(document.original_locator ?? '');
+  const zotero = document.source_type === 'paper' && /^zotero:\/\/select\/(?:library|groups\/[1-9][0-9]*)\/items\/[A-Z0-9]{8}$/.test(document.original_locator ?? '');
   const tags = Array.isArray(document.metadata.tags)
     ? document.metadata.tags.filter(
         (value): value is string => typeof value === 'string',
@@ -248,10 +249,10 @@ export function Detail({
             <Icon name="external" />
             Open in Obsidian
           </button>
-          {webpage && (
+          {(webpage || zotero) && (
             <button onClick={() => open('original')}>
               <Icon name="link" />
-              View in Browser
+              {zotero ? 'Open in Zotero' : 'View in Browser'}
             </button>
           )}
         </div>
