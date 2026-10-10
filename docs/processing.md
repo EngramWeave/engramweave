@@ -26,7 +26,7 @@ Retry Review／Retry Relation 允许先前成功或失败的具体 active Draft 
 
 **Request Recompile** 要求 active Draft 及 active 的 pending／compiled／reviewed Source。反馈追加到原 Annotation，Source 仅回到 pending，不立即执行模型；旧 Draft、正文和编辑全部保留。后续明确或已启用的计划可以另产新稿。每个成功的新请求计数一次；重放、再次 Run Compiler、自动模型重试和 Draft 数量不计入 Recompile count。Sources 显示计数，Pending 可筛 First compile／Recompile requested。该指标不写入 YAML。
 
-`data_dir/recompile-actions/` 的幂等回执保存反馈和受保护写入前后版本。重启仅恢复确定性写入并重建计数；当前内容与批准前后版本冲突时保留文件／回执，阻止竞争变更。恢复明确版本后重试原请求。已完成请求不重写后来编辑的文件；diff／rollback 和完整 Review Note 动作仍未提供。
+`data_dir/recompile-actions/` 的幂等回执保存反馈和受保护写入前后版本。重启仅恢复确定性写入并重建计数；当前内容与批准前后版本冲突时保留文件／回执，阻止竞争变更。恢复明确版本后重试原请求。已完成请求不重写后来编辑的文件。完整 Review Note 动作见 [Human Review](human-review.md)；旧稿保护由独立 Draft 保留提供，不要求跨稿 diff 或独立 rollback 界面。
 
 ## 数据、接口与验收
 
