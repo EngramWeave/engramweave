@@ -1,6 +1,6 @@
 # 本地 Core
 
-Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。两项独立 AI 分析、Profile 和只读工具见 [Draft Analyzer](analyzer.md)。正式知识正文写入尚未实现。
+Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。两项独立 AI 分析、Profile 和只读工具见 [Draft Analyzer](analyzer.md)。[Human Review](human-review.md) 可保存每份 Draft 自己的 Intent 和当前选择；正式入库仅支持独立的人工 MVP 例外，Planner／ChangeSet 留在 P3。
 
 Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop.md)。Native Host 创建的 Core 通过 `ENGRAMWEAVE_HOST_STDIN=1` 启用私有 stdin 生命周期控制：固定一行 `{"type":"stop"}` 或父管道关闭触发正常停止；普通独立 CLI 不读取 stdin 命令，也不开放 HTTP 停止路由。
 
@@ -36,7 +36,7 @@ npm run core -- --config D:/path/to/config.json
 
 SQLite 缺失时建立空库，generation=0。health 在数据库初始化成功后返回200 ready；初始化期间返回503。ready 表示运行和数据库可用，不代表已扫描。损坏、版本或约束不匹配、Vault 绑定不同的数据库明确报错，保留文件，不自动删除或恢复。
 
-SQLite schema_version=2，在documents/jobs/meta之外加入compiler_jobs。严格验证schema 1后事务迁移，保留旧文档、扫描历史与Vault绑定；处理阶段和生命周期仍保存在metadata_json投影中，没有独立阶段列。documents.indexed_at允许null，以表示文件尚未成功读取校验。带indexed_at NOT NULL等不匹配约束的数据库返回SCHEMA_UNSUPPORTED，不自动转换或删除。验证不同布局时使用独立data_dir并保留旧库。
+SQLite 当前 schema_version=5，包含 documents、jobs、meta、compiler_jobs、analyzer_jobs、processing_rounds、execution_attempts、recompile_actions。严格验证 schema 1–4 的布局后事务迁移，保留旧文档、历史与 Vault 绑定；处理阶段和生命周期仍保存在 metadata_json 投影中，没有独立阶段列。documents.indexed_at 允许 null，以表示文件尚未成功读取校验。带 indexed_at NOT NULL 等不匹配约束的数据库返回 SCHEMA_UNSUPPORTED，不自动转换或删除。Human Review 的输入和 Intent 使用独立持久回执，不依赖新增数据库表。验证不同布局时使用独立 data_dir 并保留旧库。
 
 Ctrl+C 正常停止；宿主持有的 Node IPC 可发送 `{type:"stop"}` 请求停止。正常停止等待当前扫描结束，移除本实例描述，保留数据库和 token；不开放 shutdown HTTP。遗留活动扫描在新进程启动时标 interrupted，须显式重试。
 
@@ -66,7 +66,7 @@ GET `/v1/documents?path=...` 只读取受限路径的当前文件。metadata、a
 
 Source列表与Source详情分别返回已发布投影和当前文件的processing_status，支持pending/compiled/reviewed/planned/archived。Registry 为缺失、YAML null、空字符串分别补 processing_status: pending 和 lifecycle_status: active，包含历史和discarded材料；其他非空值或类型使Source invalid。GET不写属性，尚未登记的空阶段返回null。完整阶段在扫描及数据库重建中保持，不由普通正文编辑、登记或Job结果推断阶段。
 
-Source和Knowledge独立返回lifecycle_status，active/discarded保留原值；缺失/null/空字符串读取为active，不补写。非法值使文件invalid；invalid/missing/unsupported列表项返回null。API中Source.state表示registration_status，Job.status表示job_status，沿用字段名。扫描和 Compiler Job 分别保存，语义索引状态独立展示；错误、运行历史和后续重试/重编译次数属于Core，不回写文件。
+Source 和 Knowledge 独立返回 lifecycle_status，active/discarded 保留原值。Source 缺失／null／空字符串在登记时补 active；普通 Knowledge／Ideas／Research 缺失时读取为 active，不补写。非法值使文件 invalid；异常文件可保留最近可读阶段／生命周期投影，不能据此视为当前文件有效。API 中 Source.state 表示 registration_status，Job.status 表示 job_status，沿用字段名。扫描、Compiler 和 Analyzer Job 分别保存，语义索引状态独立展示；错误、运行历史和重试／Recompile 计数属于 Core，不回写文件。
 
 文件的indexed_at只在扫描实际稳定读取并计算revision后刷新，补属性后重新读取最终字节，refresh复用解析也须重新读取字节；读取失败或missing保留先前校验时间，首次读取失败为null。列表indexed_at和status.last_scan_at表示一代投影发布完成，不能代表每条异常文件都读取成功。unchanged表示本轮读取后Record字节未变；Asset状态另行判断。详情读取不更新索引、时间或阶段投影。
 
@@ -140,7 +140,7 @@ npm run core -- --recover --config D:/path/to/config.json
 
 命令使用与Core一致的data_dir命名管道独占锁，不对任意PID发送信号；活动Core、无法确认退出的旧实例描述都会阻止恢复。它重新校验Vault/data_dir边界，仅操作配置应用数据目录内的core.sqlite、core.sqlite-journal、core.sqlite-wal、core.sqlite-shm，预检全部成员必须是非链接的普通文件，硬链接别名也被拒绝。token、其他数据文件、Vault资产不参与隔离。
 
-每次以独立recovery-时间-UUID目录保留旧数据库家族，再创建新库并执行一次rebuild。成功输出core_recovered、backup_dir、isolated_files与成功Job。备份不会自动删除；缺库也可直接按普通启动/扫描流程恢复，不必先隔离。
+每次以独立 recovery-时间-UUID 目录保留旧数据库家族，再创建新库并执行一次 rebuild。成功输出 core_recovered、backup_dir、isolated_files 与成功 Job。随后正常启动同一配置，加载 Human Review／Recompile／Publication／Analyzer 外部记录，核对每份 Draft 的 Intent、当前及已撤销选择和 Recompile 计数。备份不会自动删除；缺库也可直接按普通启动／扫描流程恢复，不必先隔离。完整备份范围、冲突处理和核对步骤见 [备份与 P2 恢复](recovery.md)。
 
 文件隔离由逐个文件移动完成；如果中途失败，已移入备份的文件和仍在原位的成员都保留，错误输出backup_dir和isolated_files。新库创建或扫描失败也保留旧备份、新库及可持久化的失败Job诊断，不自动回滚覆盖文件。确认原因后可以再次显式恢复；每次使用新备份目录。恢复允许内部ID/Job历史变化，路径、完整阶段、生命周期、Annotation、正文与支持的语义查询均从文件重建。缺失/空阶段仍补pending并更新revision，其他文件保持原hash；不从文件推造旧错误或次数。
 
@@ -180,3 +180,7 @@ finally { Remove-Item Env:P1_PERFORMANCE -ErrorAction SilentlyContinue }
 性能测试默认跳过，不增加普通 `npm test` 的机器相关耗时。测量条件、逐次耗时和哈希保存在 gitignored `.local/p1/evidence/t13-performance.json`；与其他重负载任务同时运行会改变结果。
 
 Sources 的浏览、筛选、Health 与批量生命周期合同见 [Sources](sources.md)。用户可编辑 Compiler 模板与重复执行见 [Compiler](compiler.md)。
+
+P2 的 opt-in 基准为 `tests/performance/p2.test.ts` 和 `tests/performance/embedding-real.test.ts`。前者用 `ENGRAMWEAVE_F_PERF=1` 测独立 Core 的登记、查询、Draft 侧栏和清理；后者用 `ENGRAMWEAVE_F_REAL_EMBEDDING=1` 比较同一组输入的真实单条／批量推理，不代表全库质量。它们读取 `.local/p2-f/corpus/` 的有权使用的 Markdown 副本及 `corpus-manifest.json`（每项 `path/bytes/sha256`），不自动解压或导入用户活动 Vault。复制时只取安全 Markdown 路径，不执行笔记指令；记录字节 hash，遵守单文件／总量限制。
+
+`ENGRAMWEAVE_F_PERF_LABEL` 区分前后记录；真实推理可用 `ENGRAMWEAVE_F_BATCH_SIZES=1,4,4,1` 控制有界对照顺序。测试默认跳过；计时条件和逐次样本在 `.local/p2-f/performance/`。第一次完整反链预览与热预览必须分开解释：Draft 只读优化将整库正式引用检查移到需要它的预览／删除流程，不能把这项必要工作计为消失。

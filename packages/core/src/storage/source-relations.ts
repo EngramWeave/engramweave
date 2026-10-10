@@ -17,9 +17,12 @@ const stamp = (info: { ino: number; size: number; mtimeMs: number; ctimeMs: numb
 /** Disposable per-file metadata and inverse link projection; mutation bytes are never served from this cache. */
 export class SourceRelations {
   private pending: Promise<void> | null = null;
+  private pendingDraftsOnly = false;
   private generation = -1;
   private expires = 0;
   private diagnostics: { code: string; message: string; path: string }[] = [];
+  private draftDiagnostics: typeof this.diagnostics = [];
+  private referenceDiagnostics: typeof this.diagnostics = [];
   private drafts = new Map<string, { stamp: string; draft: Draft }>();
   private knowledge = new Map<string, { stamp: string; revision: string; parsed: ParsedDocument }>();
   private contributions = new Map<string, string>();
@@ -28,13 +31,15 @@ export class SourceRelations {
       CREATE TEMP TABLE source_relations (source_key TEXT NOT NULL, path_key TEXT NOT NULL, PRIMARY KEY(source_key,path_key));
       CREATE INDEX temp.source_relations_file ON source_relations(path_key);`);
   }
-  async refresh(force = false, freshReferences = false): Promise<void> {
-    if (this.pending) { await this.pending; if (freshReferences) return this.refresh(true, true); return; }
+  async refreshDrafts() { await this.refresh(true, false, true); }
+  async refresh(force = false, freshReferences = false, draftsOnly = false): Promise<void> {
+    if (this.pending) { const pendingDraftsOnly = this.pendingDraftsOnly; await this.pending; if (freshReferences || !draftsOnly && pendingDraftsOnly) return this.refresh(true, freshReferences); return; }
     if (!force && this.generation === indexMeta(this.db).index_generation && Date.now() < this.expires) return;
-    this.pending = this.reconcile(freshReferences);
+    this.pendingDraftsOnly = draftsOnly;
+    this.pending = this.reconcile(freshReferences, draftsOnly);
     try { await this.pending; } finally { this.pending = null; }
   }
-  private async reconcile(freshReferences: boolean) {
+  private async reconcile(freshReferences: boolean, draftsOnly: boolean) {
     const generation = indexMeta(this.db).index_generation;
     const draftPaths = new Set<string>();
     let draftBytes = 0;
@@ -53,8 +58,9 @@ export class SourceRelations {
       this.drafts.set(key, { stamp: observation, draft }); return draft;
     });
     for (const key of this.drafts.keys()) if (!draftPaths.has(key)) this.drafts.delete(key);
+    this.draftDiagnostics = [...drafts.diagnostics];
     const records: Contribution[] = drafts.items.filter(draft => draft.lifecycle_status === 'active').map(draft => ({ path: draft.path, revision: draft.revision, kind: 'draft', title: draft.title, sources: [...new Set(draft.sources.map(value => value.toLowerCase()))] }));
-    const rows = this.db.prepare("SELECT path FROM documents WHERE kind IN ('knowledge','research') AND state='ready'").all() as { path: string }[];
+    const rows = draftsOnly ? [] : this.db.prepare("SELECT path FROM documents WHERE kind IN ('knowledge','research') AND state='ready'").all() as { path: string }[];
     const knowledgePaths = new Set<string>();
     for (const row of rows) {
       const key = row.path.toLowerCase(); knowledgePaths.add(key);
@@ -76,7 +82,13 @@ export class SourceRelations {
         records.push({ path: row.path, revision: cached.revision, kind: 'knowledge', title: cached.parsed.title, sources: [...new Set(references.flatMap(reference => reference.target_path ? [reference.target_path.toLowerCase()] : []))] });
       } catch { drafts.diagnostics.push({ code: 'REFERENCE_UNREADABLE', message: 'A formal reference could not be checked safely', path: row.path }); }
     }
-    for (const key of this.knowledge.keys()) if (!knowledgePaths.has(key)) this.knowledge.delete(key);
+    if (draftsOnly) {
+      // Draft browsing does not need to inspect the whole formal library. Destructive previews still refresh it.
+      for (const value of this.contributions.values()) { const record: Contribution = JSON.parse(value); if (record.kind === 'knowledge') records.push(record); }
+    } else {
+      for (const key of this.knowledge.keys()) if (!knowledgePaths.has(key)) this.knowledge.delete(key);
+      this.referenceDiagnostics = drafts.diagnostics.slice(this.draftDiagnostics.length);
+    }
     const next = new Map(records.map(record => [record.path.toLowerCase(), JSON.stringify(record)]));
     this.db.transaction(() => {
       const removeEdges = this.db.prepare('DELETE FROM temp.source_relations WHERE path_key=?');
@@ -91,16 +103,16 @@ export class SourceRelations {
         for (const source of record.sources) link.run(source, key);
       }
     })();
-    this.contributions = next; this.diagnostics = drafts.diagnostics;
-    this.generation = generation; this.expires = Date.now() + 10_000;
+    this.contributions = next; this.diagnostics = [...this.draftDiagnostics, ...this.referenceDiagnostics];
+    if (!draftsOnly) { this.generation = generation; this.expires = Date.now() + 10_000; }
   }
-  targets(source: string) {
+  targets(source: string, draftsOnly = false) {
     const rows = this.db.prepare(`SELECT f.path,f.revision,f.kind,f.title FROM temp.source_relations r
       JOIN temp.relation_files f ON f.path_key=r.path_key WHERE r.source_key=? ORDER BY f.path`).all(source.toLowerCase()) as Target[];
-    return { drafts: rows.filter(row => row.kind === 'draft').map(({ path, revision, title }) => ({ path, revision, title })), references: rows.filter(row => row.kind === 'knowledge').map(({ path, revision }) => ({ path, revision })), diagnostics: this.diagnostics };
+    return { drafts: rows.filter(row => row.kind === 'draft').map(({ path, revision, title }) => ({ path, revision, title })), references: rows.filter(row => row.kind === 'knowledge').map(({ path, revision }) => ({ path, revision })), diagnostics: draftsOnly ? this.draftDiagnostics : this.diagnostics };
   }
-  related(source: string) {
-    const targets = this.targets(source);
+  related(source: string, draftsOnly = false) {
+    const targets = this.targets(source, draftsOnly);
     return { ...targets, drafts: targets.drafts.map(target => this.drafts.get(target.path.toLowerCase())!.draft) };
   }
   removed(relative: string) {

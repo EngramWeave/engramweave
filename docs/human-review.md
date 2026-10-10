@@ -29,6 +29,8 @@ Review Complete 要求 Source 为 compiled／reviewed，不要求任何 Analyzer
 
 断线或未知送达保留原请求，提供 Check Result／Retry Original；重载后仍可查明，绝不自动重投。重试验证原 Vault 并沿用原 ID。确定的 HTTP 拒绝会查询接受回执；未接受时释放冻结请求，保留输入供修改，已部分接受时保留原恢复入口。
 
+完整备份与实际数据库缺失／损坏的离线恢复→启动核对步骤见 [备份与 P2 恢复](recovery.md)。侧栏同一轮 Review／Relation 使用同一结果 ID 时，在一次刷新内合并读取；不同 ID 分别读取，不跨刷新缓存结果或跳过过期检查。
+
 ## 验证
 
 Core `tests/review/` 覆盖精确 Idea 输入、独占发布、选择切换、取消、旧回执、Recompile 与启动恢复；`tests/http/human-review.test.ts` 覆盖真实 HTTP Schema、认证和范围。插件测试覆盖会话输入、后续编辑保护、原 Vault 绑定、有界恢复和不自动重投。

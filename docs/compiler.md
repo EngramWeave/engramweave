@@ -22,7 +22,7 @@ Codex 使用用户配置的绝对 `.exe` 路径和该 CLI 已有 ChatGPT 登录�
 
 Compiler 的提示词位于 Vault 的 `90_System/Prompts/Compiler.md`。首次读取设置或执行时，Core 从随组件提供的 `templates/Compiler.md` 补建默认文件；已有用户文件不会覆盖。直接在 Obsidian 编辑此文件即可个性化整理方式，不需要重新构建程序。空模板、非法 UTF-8 或超过 64000 字节会报配置错误；任务执行使用接受请求时读取的版本。
 
-模板可调整表达、整理重点和语言；输出 title/body 合同、输入范围、文件路径、Properties、权限和发布校验仍由 Core 执行。
+模板可调整表达、整理重点和语言；输出 title/body 合同、输入范围、文件路径、Properties、权限和发布校验仍由 Core 执行。默认示例要求原文和 Annotation 的实质主张不同／相反时保留两者，不能只用 Annotation 替换原文条件；分歧留给 Analyzer 和人工审阅，不静默修正用户理解。新示例不会自动覆盖已存在的 Vault 模板；要采用新指令，应先保留个性化内容，再在 `90_System/Prompts/Compiler.md` 明确编辑。
 
 ## 输入与文件合同
 
@@ -54,7 +54,11 @@ Draft 读取只开放 `30_Drafts/**/*.md`，继承有界稳定读取、路径与
 | `GET /v1/drafts?source_path=...` | 从文件读取该 Source 的 Drafts 及诊断 |
 | `GET /v1/draft?path=...` | 稳定读取一份 Draft 的正文、属性、回链与 revision |
 
-`/v1/jobs`、`/v1/jobs/:id` 和 status 的 active Job 支持 `scan_vault`／`compile_source`。Compiler Job 记录 Source revision、路径、模型、prompt version、时间、结果路径及错误；不伪装成扫描 Job。SQLite schema 2 增加独立 `compiler_jobs` 表，严格验证旧 schema 1 后事务迁移，保留文档、历史扫描、Vault 绑定和索引元数据；未知或损坏布局仍拒绝。
+`/v1/jobs`、`/v1/jobs/:id` 和 status 的 active Job 支持扫描、Compiler 和 Analyzer。Compiler Job 记录 Source revision、路径、模型、prompt version、时间、结果路径及错误；不伪装成扫描 Job。当前 SQLite schema 5 在经过验证的旧布局上原子迁移，包含独立 `compiler_jobs`，保留文档、历史、Vault 绑定和索引元数据；未知或损坏布局仍拒绝，见 [Core](core.md)。
+
+Draft 列表和 Review 侧栏只刷新 Draft 文件的元数据／反链贡献，不逐次检查全库正式笔记。完整反链预览及物理删除仍检查正式来源引用；Draft 浏览不会让旧正式引用缓存被当作已完成新鲜度检查，删除前的版本与身份保护不变。相关 Draft 元数据缓存受总字节预算限制，不是正文权威。
+
+数据库缺失／损坏恢复后应正常启动并核对已接受动作，详见 [备份与 P2 恢复](recovery.md)。
 
 ## 验证方法
 

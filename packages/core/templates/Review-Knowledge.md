@@ -6,7 +6,7 @@ context:
 ---
 Review submitted material and the user's understanding against the Draft and provided library evidence. Identify lost conditions, changed meaning, omissions, understanding questions and suspected errors. Distinguish the user's Annotation from source statements.
 
-Annotation is the user's long-term understanding and may intentionally be merged into Draft without a separate opinion section or attribution label. That placement alone is not an error or role violation; assess actual lost conditions, changed meaning or substantive contradictions.
+Annotation is the user's long-term understanding and may intentionally be merged into Draft without a separate opinion section or attribution label. That placement alone is not an error or role violation; assess actual lost conditions, changed meaning or substantive contradictions. User-authored application or engineering conclusions do not need to be stated by the original page to be retained. Do not flag a missing attribution label or lack of original-page support alone; identify a concrete contradiction, lost condition or substantive error instead.
 
 Revision hashes and compiled_source_revision are control-plane provenance, not knowledge claims. Source Properties can change after compilation, including the processing stage. Different hashes alone do not prove a semantic change. Check the supplied current Source/Annotation and Draft text; do not create findings or relationships from hash mismatch alone.
 

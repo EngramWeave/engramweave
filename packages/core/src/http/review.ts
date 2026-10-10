@@ -12,8 +12,8 @@ export function registerReviewRoutes(server: FastifyInstance, config: Config, se
     if (draft.sources.length !== 1) throw new CoreError('INVALID_SOURCE', 'MVP review supports a Draft from one Source', 422);
     const current = services();
     const source = await readDocument(config, current, draft.sources[0]!);
-    const index = sourceRelations(current.db, config.vault_path); await index.refresh(true);
-    const targets = index.targets(source.path);
+    const index = sourceRelations(current.db, config.vault_path); await index.refreshDrafts();
+    const targets = index.targets(source.path, true);
     const analysis = current.analyzer?.latestForDraft(draft.path) ?? null;
     return { draft, source, related_drafts: targets.drafts, diagnostics: targets.diagnostics, analysis,
       analyses: { review: current.analyzer?.latestForDraft(draft.path, 'review') ?? null, relation: current.analyzer?.latestForDraft(draft.path, 'relation') ?? null },

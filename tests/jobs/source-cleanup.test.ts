@@ -136,3 +136,35 @@ it('publishes durable completion before accepting an immediately following batch
     }
   } finally { await batches.close(); await fixture.close(); }
 });
+
+it('refreshes Draft browsing independently while keeping full reference checks fresh for destructive actions', async () => {
+  const fixture = await compilerFixture(async () => ({ title: 'Unused', body: 'No model call' }));
+  try {
+    const root = fixture.config.vault_path;
+    await mkdir(path.join(root, '30_Drafts'));
+    await mkdir(path.join(root, '40_Knowledge'));
+    await writeFile(path.join(root, '30_Drafts/one.md'), draft('one'));
+    const formal = path.join(root, '40_Knowledge/formal.md');
+    await writeFile(formal, '---\nsources: ["[[20_Sources/selected.md]]"]\n---\nFormal text.\n');
+    const scan = new ScanJobs(fixture.db, root); scan.submit('refresh'); await scan.close();
+    const index = sourceRelations(fixture.db, root);
+    await index.refresh(true, true);
+    expect(index.targets(fixture.sourcePath).references).toHaveLength(1);
+    await unlink(formal);
+    await writeFile(path.join(root, '30_Drafts/two.md'), draft('two'));
+    await index.refreshDrafts();
+    expect(index.targets(fixture.sourcePath, true).drafts).toHaveLength(2);
+    expect(index.targets(fixture.sourcePath).references).toHaveLength(1);
+    expect(index.targets(fixture.sourcePath, true).diagnostics).toEqual([]);
+    await Promise.all([index.refreshDrafts(), index.refresh(true, true)]);
+    expect(index.targets(fixture.sourcePath).references).toEqual([]);
+    expect(index.targets(fixture.sourcePath).diagnostics).toContainEqual(expect.objectContaining({ code: 'REFERENCE_UNREADABLE', path: '40_Knowledge/formal.md' }));
+    await index.refreshDrafts();
+    expect(index.targets(fixture.sourcePath, true).diagnostics).toEqual([]);
+    expect(index.targets(fixture.sourcePath).diagnostics).toHaveLength(1);
+    await writeFile(formal, '---\nsources: ["[[20_Sources/selected.md]]"]\n---\nNew formal text.\n');
+    await Promise.all([index.refreshDrafts(), index.refresh(true, true)]);
+    expect(index.targets(fixture.sourcePath).references).toHaveLength(1);
+    expect(index.targets(fixture.sourcePath).diagnostics).toEqual([]);
+  } finally { await fixture.close(); }
+});

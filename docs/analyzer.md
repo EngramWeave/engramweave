@@ -18,7 +18,7 @@ Capture 可以提交可选 `analysis_profile`，Core 仅在 Source Properties �
 
 ## 用户模板与输入
 
-模板位于 `90_System/Prompts/Review/`、`90_System/Prompts/Relation/`。首次显式读取模板或执行时补建 Knowledge／Academic 示例，不覆盖已有用户内容。Desktop 可编辑模板内容；在 Vault 中添加同目录的 ASCII 字母、数字、下划线或连字符文件名后，可重新载入。模板最多 64000 UTF-8 字节，保存必须提供当前 revision，继承原生文件身份、父目录锁定、原子提交和恢复保护。
+模板位于 `90_System/Prompts/Review/`、`90_System/Prompts/Relation/`。首次显式读取模板或执行时补建 Knowledge／Academic 示例，不覆盖已有用户内容。Desktop 可编辑模板内容；在 Vault 中添加同目录的 ASCII 字母、数字、下划线或连字符文件名后，可重新载入。模板最多 64000 UTF-8 字节，保存必须提供当前 revision，继承原生文件身份、父目录锁定、原子提交和恢复保护。默认示例明确：用户的应用／工程理解不必出现在原网页中才能保留；不能仅因缺少归属标签或网页没有同一句表述报错，应指出具体矛盾、条件遗漏或实质错误。更新组件不会自动覆盖已保存模板，采用新版需要明确编辑并保留个性化内容。
 
 模板以有界上下文需求开头，其后是可编辑的分析指令：
 

@@ -58,15 +58,23 @@ export class RecallStorage {
     })();
   }
   prepare(document: StoredDocument, fingerprint: string) {
+    const lookup = this.db.prepare('SELECT vector FROM cache WHERE hash=? AND fingerprint=?');
     return splitChunks(document.path, document.title, document.body, document.body_line).map(chunk => {
-      const found = this.db.prepare('SELECT vector FROM cache WHERE hash=? AND fingerprint=?').get(chunk.input_hash, fingerprint) as { vector: Buffer } | undefined;
+      const found = lookup.get(chunk.input_hash, fingerprint) as { vector: Buffer } | undefined;
       return { ...chunk, vector: found ? [...new Float32Array(found.vector.buffer.slice(found.vector.byteOffset, found.vector.byteOffset + found.vector.byteLength))] : null };
     });
   }
   cache(hash: string, fingerprint: string, vector: number[]) {
+    this.cacheMany([{ hash, vector }], fingerprint);
+  }
+  cacheMany(entries: { hash: string; vector: number[] }[], fingerprint: string) {
     const info = this.properties();
-    if (info.dimensions && info.dimensions !== vector.length) throw new Error('Embedding dimensions changed; rebuild explicitly');
-    this.db.prepare('INSERT OR REPLACE INTO cache VALUES(?,?,?)').run(hash, fingerprint, Buffer.from(new Float32Array(vector).buffer));
+    const dimensions = info.dimensions || entries[0]?.vector.length;
+    if (entries.length > 16 || entries.some(entry => !entry.vector.length || entry.vector.length !== dimensions || entry.vector.some(value => !Number.isFinite(value)))) throw new Error('Embedding dimensions changed; rebuild explicitly');
+    const insert = this.db.prepare('INSERT OR REPLACE INTO cache VALUES(?,?,?)');
+    this.db.transaction(() => {
+      for (const { hash, vector } of entries) insert.run(hash, fingerprint, Buffer.from(new Float32Array(vector).buffer));
+    })();
   }
   remove(paths: string[]) {
     const dimensions = this.properties().dimensions;
@@ -85,12 +93,17 @@ export class RecallStorage {
     this.db.transaction(() => {
       if (!info.dimensions && dimension) { this.db.exec(`CREATE VIRTUAL TABLE vectors USING vec0(embedding float[${dimension}] distance_metric=cosine, kind text);`); this.meta({ dimensions: dimension }); }
       this.remove([document.path]);
+      const insertChunk = this.db.prepare('INSERT INTO chunks(chunk_id,path,kind,data) VALUES(?,?,?,?)');
+      const insertVector = chunks.length ? this.db.prepare('INSERT INTO vectors(rowid,embedding,kind) VALUES(?,?,?)') : null;
+      const insertWords = this.db.prepare('INSERT INTO words(rowid,title,heading,tags,body) VALUES(?,?,?,?,?)');
+      const titleTerms = terms(document.title).join(' ');
+      const tagTerms = terms(document.tags.join(' ')).join(' ');
       for (const chunk of chunks) {
         const hit: RecallHit = { chunk_id: chunk.chunk_id, path: document.path, kind: document.kind, title: document.title, heading: chunk.heading, revision: document.revision,
           text: chunk.text, start_line: chunk.start_line, end_line: chunk.end_line, score: 0, channels: [], rerank_score: null };
-        const id = this.db.prepare('INSERT INTO chunks(chunk_id,path,kind,data) VALUES(?,?,?,?)').run(chunk.chunk_id, document.path, document.kind, JSON.stringify(hit)).lastInsertRowid;
-        this.db.prepare('INSERT INTO vectors(rowid,embedding,kind) VALUES(?,?,?)').run(BigInt(id), Buffer.from(new Float32Array(chunk.vector!).buffer), document.kind);
-        this.db.prepare('INSERT INTO words(rowid,title,heading,tags,body) VALUES(?,?,?,?,?)').run(id, terms(document.title).join(' '), terms(chunk.heading).join(' '), terms(document.tags.join(' ')).join(' '), terms(chunk.text).join(' '));
+        const id = insertChunk.run(chunk.chunk_id, document.path, document.kind, JSON.stringify(hit)).lastInsertRowid;
+        insertVector!.run(BigInt(id), Buffer.from(new Float32Array(chunk.vector!).buffer), document.kind);
+        insertWords.run(id, titleTerms, terms(chunk.heading).join(' '), tagTerms, terms(chunk.text).join(' '));
       }
       this.db.prepare('INSERT INTO docs VALUES(?,?)').run(document.path, document.revision);
     })();

@@ -10,6 +10,7 @@ import { writeDocument, manualSource } from '../helpers/fixtures.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { defaultRecallSettings } from '../../packages/core/src/recall/settings.js';
 import { httpCore } from '../helpers/http.js';
+import { splitChunks } from '../../packages/core/src/recall/chunks.js';
 import { waitSemanticIndex as waitIndex } from '../helpers/recall.js';
 it('keeps first indexing explicit, updates only changed inputs, validates current evidence and isolates model failures from registration', async () => {
   let calls = 0; let inputs = 0; let failed = false; let rankFailed = false;
@@ -87,5 +88,50 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
       await post('/v1/recall/index', { mode: 'rebuild' }); expect((await waitIndex(recoverable.request)).state).toBe('idle');
       expect(inputs).toBeGreaterThan(unchangedInputs);
     } finally { await recoverable.core.close(); }
+  } finally { await runtime.cleanup(); await new Promise<void>(resolve => provider.close(() => resolve())); }
+}, 60000);
+
+it('deduplicates chunks, retains completed cache batches and never publishes a partial failed replacement', async () => {
+  const requests: string[][] = []; let failAt = -1;
+  const provider = createServer(async (req, res) => {
+    const parts: Buffer[] = []; for await (const part of req) parts.push(part);
+    const body = JSON.parse(Buffer.concat(parts).toString()); requests.push(body.input);
+    res.setHeader('content-type', 'application/json');
+    if (requests.length === failAt) { res.statusCode = 503; res.end('{}'); return; }
+    res.end(JSON.stringify({ data: body.input.map((_: string, index: number) => ({ index, embedding: [1, index + 1, 0] })).reverse() }));
+  });
+  await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve));
+  const address = provider.address() as { port: number };
+  const repeated = 'repeat evidence '.repeat(50).slice(0, 800);
+  const original = '# Batch\n' + repeated.repeat(3) + Array.from({ length: 40 }, (_, index) => `${index} distinct evidence `.padEnd(800, '.')).join('');
+  const runtime = await httpRuntime(async vault => { await writeDocument(vault, '40_Knowledge/batch.md', original); });
+  const post = (route: string, body: unknown) => runtime.request(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    await finishedJob(runtime.request, (await submitScan(runtime.request)).job.id);
+    await post('/v1/recall/settings', { settings: { ...defaultRecallSettings, model: 'batch', endpoint: `http://127.0.0.1:${address.port}/v1` } });
+    await post('/v1/recall/index', { mode: 'build' });
+    const built = await waitIndex(runtime.request);
+    expect(built).toMatchObject({ state: 'idle', indexed_documents: 1 });
+    const distinct = new Set(splitChunks('40_Knowledge/batch.md', 'Batch', original, 1).map(chunk => chunk.input_hash)).size;
+    expect(requests).toHaveLength(distinct);
+    expect(requests.every(inputs => inputs.length === 1)).toBe(true);
+    expect(requests.flat()).toHaveLength(distinct);
+    const db = new Database(path.join(runtime.config.data_dir, 'semantic.sqlite'), { readonly: true });
+    const before = db.prepare('SELECT path,revision FROM docs').all(); db.close();
+    await writeDocument(runtime.config.vault_path, '40_Knowledge/batch.md', '# Changed\n' + Array.from({ length: 40 }, (_, index) => `${index} changed replacement `.padEnd(800, '!')).join(''));
+    failAt = requests.length + 18;
+    await finishedJob(runtime.request, (await submitScan(runtime.request)).job.id);
+    expect((await waitIndex(runtime.request, status => status.state === 'failed')).state).toBe('failed');
+    const preserved = new Database(path.join(runtime.config.data_dir, 'semantic.sqlite'), { readonly: true });
+    expect(preserved.prepare('SELECT path,revision FROM docs').all()).toEqual(before); preserved.close();
+    const retryStart = requests.length; failAt = -1;
+    await post('/v1/recall/index', { mode: 'update' });
+    expect((await waitIndex(runtime.request)).state).toBe('idle');
+    const successfulInputs = requests.slice(retryStart - 18, retryStart - 1).flat();
+    expect(requests.slice(retryStart).flat().some(input => successfulInputs.includes(input))).toBe(false);
+    const unchanged = requests.length;
+    const scan = await finishedJob(runtime.request, (await submitScan(runtime.request)).job.id);
+    await waitIndex(runtime.request, status => status.generation === scan.summary!.index_generation);
+    expect(requests).toHaveLength(unchanged);
   } finally { await runtime.cleanup(); await new Promise<void>(resolve => provider.close(() => resolve())); }
 }, 60000);

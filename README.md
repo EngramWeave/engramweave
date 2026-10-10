@@ -160,9 +160,9 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 - web/manual Markdown Capture 和离线数据库投影恢复。
 - Tauri Desktop 的 Core 启停／连接、状态、Sources、扫描 Jobs、Search 与原生打开。
 
-当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。最小 Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian MVP 支持人工直接入库；完整 Review Note、Intent、Planner 和 ChangeSet 尚未实现。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)和 [Processing](docs/processing.md)。
+当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian 的 Review Note 可创建 Idea、提交反馈或确认当前 Draft，分别保留各稿 Intent 和 Source 的当前选择；AI 分析可跳过。MVP 人工直接入库是独立入口，Planner 和 ChangeSet 尚未实现。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)、[Processing](docs/processing.md)和 [Human Review](docs/human-review.md)。
 
-Zotero 插件将明确选中的 PDF 段落／高亮／批注保存为独立 Paper Source，保留 Annotation 和原位置，后续通过 Core 处理。P2 后续接入完整 Review Note／Intent 与编辑差异恢复。P3 完成统一 Planner、ChangeSet 审查执行及 Git，MVP 人工直接入库继续保留。完整审阅整合、维护与科研增强尚未交付。
+Zotero 插件将明确选中的 PDF 段落／高亮／批注保存为独立 Paper Source，保留 Annotation 和原位置，后续通过 Core 处理。P2 主终点为 Reviewed Draft + 该 Draft 自己的 Intent；旧稿和用户修改作为独立文件保留，不建设跨稿 diff 或 rollback 界面。P3 完成统一 Planner、ChangeSet 审查执行及 Git，MVP 人工直接入库继续保留。备份必须包含 Vault 与对应 Core 的接受回执，见 [备份与恢复](docs/recovery.md)。完整审阅整合、维护与科研增强尚未交付。
 
 ---
 
@@ -223,6 +223,7 @@ Desktop 可启动自身 Core，也可连接已运行的 Core。当前构建面�
 
 - [项目上下文](CONTEXT.md)：当前支持边界与计划中的领域语义。
 - [Core 使用与验证](docs/core.md)：配置、API 操作、恢复和验证方法。
+- [备份与 P2 恢复](docs/recovery.md)：Vault 与 Intent／接受回执的配对备份、离线恢复及冲突核对。
 - [Desktop 使用与构建](docs/desktop.md)：原生宿主与桌面操作。
 - [Compiler 与 Draft](docs/compiler.md)：API／Codex 配置、文件保留、发布恢复与验证。
 - [P1 文件与接口合同](docs/p1-contracts.md)：当前受支持的文件、接口与资产边界。

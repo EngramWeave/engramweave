@@ -107,17 +107,33 @@ export class SemanticRecall {
       if (old.get(note.path) !== note.revision) {
         const current = await this.current(note);
         const chunks = await this.storage.call('prepare', current, fingerprint);
-        const produced = new Map<string, number[]>();
+        const missing = new Map<string, string>();
         for (const chunk of chunks) {
-          chunk.vector ??= produced.get(chunk.input_hash) ?? null;
-          if (chunk.vector) { this.progress.reused_chunks++; continue; }
-          key ??= await this.settings.key('embedding', settings.endpoint);
-          const [vector] = await embed(settings, [chunk.input], key, this.abort.signal);
-          chunk.vector = vector!;
-          produced.set(chunk.input_hash, vector!);
-          await this.storage.call('cache', chunk.input_hash, fingerprint, vector!);
-          this.progress.embedded_chunks++;
+          if (chunk.vector || missing.has(chunk.input_hash)) { this.progress.reused_chunks++; continue; }
+          missing.set(chunk.input_hash, chunk.input);
         }
+        const produced = new Map<string, number[]>();
+        const inputs = [...missing];
+        // Batch durable cache writes, retaining individual inference requests for local service throughput.
+        for (let offset = 0; offset < inputs.length; offset += 16) {
+          this.abort.signal.throwIfAborted();
+          key ??= await this.settings.key('embedding', settings.endpoint);
+          const batch = inputs.slice(offset, offset + 16);
+          const entries: { hash: string; vector: number[] }[] = [];
+          try {
+            for (const [hash, input] of batch) {
+              const [vector] = await embed(settings, [input], key, this.abort.signal);
+              entries.push({ hash, vector: vector! });
+              this.progress.embedded_chunks++;
+            }
+          } catch (error) {
+            if (entries.length) await this.storage.call('cacheMany', entries, fingerprint);
+            throw error;
+          }
+          await this.storage.call('cacheMany', entries, fingerprint);
+          entries.forEach(({ hash, vector }) => produced.set(hash, vector));
+        }
+        for (const chunk of chunks) chunk.vector ??= produced.get(chunk.input_hash)!;
         await this.current(note);
         const projected = getDocument(this.db, note.path);
         if (projected?.state !== 'ready' || projected.revision !== note.revision) throw new CoreError('SOURCE_CHANGED', 'Registry changed during semantic indexing; retry after Refresh.', 409);

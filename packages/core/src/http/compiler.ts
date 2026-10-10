@@ -18,7 +18,7 @@ export function registerCompilerRoutes(server: FastifyInstance, config: Config, 
     return compiler().settings.save(input.settings, input.api_key);
   } });
   server.route({ ...API.compile, async handler(request, reply) { if (services().batches?.busy()) throw new CoreError('JOB_BUSY', 'A Source batch is active', 409); return reply.code(202).send(await compiler().submit(request.body as CompileRequest)); } });
-  server.route({ ...API.drafts, async handler(request) { const index = sourceRelations(services().db, config.vault_path); await index.refresh(); const related = index.related((request.query as { source_path: string }).source_path); return { items: related.drafts, diagnostics: related.diagnostics }; } });
+  server.route({ ...API.drafts, async handler(request) { const index = sourceRelations(services().db, config.vault_path); await index.refreshDrafts(); const related = index.related((request.query as { source_path: string }).source_path, true); return { items: related.drafts, diagnostics: related.diagnostics }; } });
   server.route({ ...API.draft, handler(request) { return readDraft(config.vault_path, (request.query as { path: string }).path); } });
   server.route({ ...API.sourceBatch, async handler(request, reply) { return reply.code(202).send(await services().batches!.submit(request.body as SourceBatchRequest)); } });
   server.route({ ...API.sourceBatchStatus, handler(request) { return services().batches!.get((request.query as { id: string }).id); } });
