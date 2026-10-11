@@ -54,7 +54,8 @@ export function parsedRow(row: DocumentRow): ParsedDocument {
     diagnostics: JSON.parse(row.diagnostics_json) };
 }
 
-export function publishScan(db: Database.Database, jobId: string, projections: Projection[], knownRoots: string[], warnings: Source['diagnostics'], options?: { partial: boolean; missingPaths: string[]; reason: string | null; readFiles: number }): NonNullable<Job['summary']> {
+export function publishScan(db: Database.Database, jobId: string, projections: Projection[], knownRoots: string[], warnings: Source['diagnostics'], options?: { partial: boolean; missingPaths: string[]; reason: string | null; readFiles: number; rebuild?: boolean }): NonNullable<Job['summary']> {
+  if (options?.rebuild && options.partial) throw new Error('Rebuild requires complete enumeration');
   return db.transaction(() => {
     const generation = indexMeta(db).index_generation + 1;
     const indexedAt = new Date().toISOString();
@@ -95,12 +96,19 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
       insert.run(row);
     }
     for (const old of options?.partial ? options.missingPaths.flatMap(relative => { const row = getDocument(db, relative); return row ? [row] : []; }) : allDocuments(db)) {
-      if (seen.has(old.path_key) || old.state === 'missing') continue;
+      if (seen.has(old.path_key)) continue;
+      if (options?.rebuild) {
+        db.prepare('DELETE FROM documents WHERE id=?').run(old.id);
+        summary.removed = (summary.removed ?? 0) + 1;
+        continue;
+      }
+      if (old.state === 'missing') continue;
       db.prepare("UPDATE documents SET state='missing',metadata_json=CASE WHEN kind='source' THEN metadata_json ELSE '{}' END,asset_json=NULL,annotation='',body_markdown='',title_norm='',body_norm='',annotation_norm='',metadata_norm='',diagnostics_json=? WHERE id=?")
         .run(JSON.stringify([{ code: 'FILE_MISSING', message: 'Document is absent from the completed scan', path: old.path }]), old.id);
       summary.missing++;
     }
     if (options) {
+      if (options.rebuild) summary.removed ??= 0;
       summary.scan_strategy = options.partial ? 'incremental' : 'full';
       summary.scan_reason = options.reason;
       summary.read_files = options.readFiles;

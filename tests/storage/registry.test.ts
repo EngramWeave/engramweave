@@ -46,7 +46,7 @@ describe('real SQLite projection and transactions', () => {
     const previous = allDocuments(db); const meta = indexMeta(db);
     job(db, 'b');
     db.exec("CREATE TRIGGER fail_publish BEFORE UPDATE OF index_generation ON meta BEGIN SELECT RAISE(ABORT,'injected publication failure'); END;");
-    expect(() => publishScan(db, 'b', [projection('20_Sources/new.md')], ['20_Sources'], [])).toThrow();
+    expect(() => publishScan(db, 'b', [projection('20_Sources/new.md')], ['20_Sources'], [], { partial: false, missingPaths: [], reason: 'explicit_rebuild', readFiles: 1, rebuild: true })).toThrow();
     expect(allDocuments(db)).toEqual(previous); expect(indexMeta(db)).toEqual(meta);
     expect(db.prepare("SELECT status FROM jobs WHERE id='b'").get()).toEqual({ status: 'running' });
   });

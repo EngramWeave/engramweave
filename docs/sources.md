@@ -33,6 +33,10 @@ Discard 在独立弹窗列出确切 Source 和 active Draft 文件，确认后�
 
 Discard Drafts 弹窗支持逐份勾选和全选，只标记明确选择的 active Draft 为 discarded；Source 字节、处理阶段及正式知识均保留。
 
+文件手动删除后，Refresh／完整核对保留 missing 提醒。对 missing Source 执行 Discard selected，只在确认文件确实缺失、Vault 和 Source 根可用且登记版本匹配后清理该条目；不写 lifecycle、不联动 Draft 或正式笔记，也不清除任务及回执。全部选择均为 missing 时直接处理，无需扫描关联文件或展示文件 Discard 确认框。混合批次在确认框区分 missing 登记清理与存在文件的正常 Discard。文件已恢复、登记改变、根不可用或路径不安全时停止该项并报告。
+
+missing Source 仍可执行 Discard Drafts：关联关系来自现存 Draft 的 `sources`，不依赖 Source 文件或登记 ID。弹窗仅列出 active Draft，提交时再检查它们的关联及字节版本，只标记勾选项。即使 Rebuild 已移除 Source 登记，HTTP 按 source_path 查 Draft 或预览关联仍可用；Source Inspector 入口随登记条目消失。Source 根整体不可用时不将其当作单文件删除。登记清理不修复原有来源链接。
+
 Restore 默认只恢复所选 Source 为 active，原阶段保留；不自动恢复旧 Draft 或正式知识。
 
 Delete permanently 是独立的不可撤销操作，只接受已 discarded、可安全读取的 Source。弹窗列出待删 Source Record，仍被 active 正式知识引用的项默认不勾选；查看警示及引用列表后，勾选表示明确确认保留坏链。执行时再检查 revision 和引用，原生句柄在锁定父目录及目标身份后删除文件，拒绝 hardlink、隐藏文件、reparse point 和只读文件。当前 inline Record 连同正文删除，登记投影清除；关联 Draft、正式知识和外部或未证明 Capture 专属的 Asset 保留。当前没有独立 Capture-owned Asset 或 Derived Representation 可清理；对应能力必须有归属证明后再扩展，不能按目录推测。
@@ -48,3 +52,5 @@ Core 保存最近一次批量请求与结果；关闭 Desktop 不会取消独立
 `GET /v1/sources` 增加 view／q／types／tags／stages／issues／time_ranges／sort；多类别使用 JSON 字符串数组，时间类别为带 from／to 的 JSON 字符串数组。返回全局 views 计数、types／tags facets 及过滤后的分页结果。没有 view 的旧请求继续默认查询 ready；Desktop 明确使用 view=all 来浏览所有项。
 
 `POST /v1/source-batches` 接受 UUID id、compile／discard／restore／discard_drafts／delete action，以及明确 path／revision／request_id；discard 的 related 列表来自当前 preview，包含未归档 Source 的必需 active Draft 和用户选定正式引用；discard_drafts 的 related 仅含选定 Draft。delete 不接受 related 文件，allow_referenced=true 与 reference_revisions 表示用户已确认的正式引用清单；出现新增或变更引用时要求重新预览。preview 的 Draft 可带 title，仅用于辨认，related 提交仅含 path／revision。`GET /v1/source-discard-preview?path=...` 返回当前文件目标与 active 关联项；`GET /v1/source-batches?id=...` 返回最近保留的逐项结果，status 同时提供 source_batch 摘要。所有接口沿用 Core 认证、schema、路径及原生文件保护。
+
+缺失预览另返回 `source_missing: true`；`source.revision` 为最后登记的 revision，没有登记版本则为 null。执行缺失清理／孤立 Draft 操作时在 Source item 显式提交 `source_missing: true` 和该 revision；缺失清理的 related 必须为空，不接受正式引用删除授权。此标记防止已恢复且字节相同的 Source 被误当作普通 Discard；省略标记不能执行缺失分支。null 或 source_missing 目标仅允许 discard／discard_drafts，compile／restore／delete 不接受。Draft／正式引用的 revision 始终要求非空 hash，不放宽写入保护。

@@ -405,6 +405,7 @@ export function App() {
               </button>
             </div>
             <p className="muted">完整核对：完整检查文件变化，保留有效缓存；用于刷新结果疑似未更新时。</p>
+            <p className="muted">重建索引：从当前文件重新登记，并清理缺失文件的登记条目；保留文件和任务历史。</p>
             <CompilerSettings connected={connected} />
             <AnalysisSettings connected={connected} />
             <ProcessingSettings connected={connected} onChange={refreshSources} />

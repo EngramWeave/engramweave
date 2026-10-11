@@ -66,6 +66,7 @@ export const ScanSummarySchema = object({
   source_count: count, knowledge_count: count, index_generation: count,
   warnings: DiagnosticsSchema, finished_at: instant,
   scan_strategy: Type.Optional(enumeration(['full','incremental'])), scan_reason: Type.Optional(nullable(text)), read_files: Type.Optional(count),
+  removed: Type.Optional(count),
 });
 export const JobSchema = object({
   id: nonempty, kind: Type.Literal('scan_vault'), mode: ScanModeSchema, status: JobStatusSchema,
@@ -213,16 +214,17 @@ export const SourcesResponseSchema = object({ ...page(SourceSchema), ...indexed,
 });
 export type SourcesQuery = Static<typeof SourcesQuerySchema>;
 const LifecycleTargetSchema = object({ path: ScopedMarkdownPathSchema, revision: RevisionSchema });
+const SourceLifecycleTargetSchema = object({ path: ScopedMarkdownPathSchema, revision: nullable(RevisionSchema) });
 const RelatedTargetSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, DraftPathSchema]), revision: RevisionSchema });
 export const SourceBatchRequestSchema = object({ id: CompileRequestSchema.properties.request_id, action: enumeration(['compile', 'discard', 'restore', 'discard_drafts', 'delete']),
-  items: Type.Array(object({ ...LifecycleTargetSchema.properties, request_id: CompileRequestSchema.properties.request_id, related: Type.Optional(Type.Array(RelatedTargetSchema, { maxItems: 100 })), allow_referenced: Type.Optional(Type.Boolean()), reference_revisions: Type.Optional(Type.Array(LifecycleTargetSchema, { maxItems: 100 })) }), { minItems: 1, maxItems: 100 }),
+  items: Type.Array(object({ ...SourceLifecycleTargetSchema.properties, source_missing: Type.Optional(Type.Boolean()), request_id: CompileRequestSchema.properties.request_id, related: Type.Optional(Type.Array(RelatedTargetSchema, { maxItems: 100 })), allow_referenced: Type.Optional(Type.Boolean()), reference_revisions: Type.Optional(Type.Array(LifecycleTargetSchema, { maxItems: 100 })) }), { minItems: 1, maxItems: 100 }),
 });
 export type SourceBatchRequest = Static<typeof SourceBatchRequestSchema>;
 export const SourceBatchSchema = object({ id: nonempty, action: enumeration(['compile', 'discard', 'restore', 'discard_drafts', 'delete']), status: enumeration(['running', 'completed', 'interrupted']),
   items: Type.Array(object({ path: VaultPathSchema, status: enumeration(['pending', 'running', 'succeeded', 'failed', 'skipped']), job_id: nullable(text), error: nullable(object({ code: text, message: text })) })),
 });
 export type SourceBatch = Static<typeof SourceBatchSchema>;
-export const DiscardPreviewSchema = object({ source: LifecycleTargetSchema, drafts: Type.Array(object({ ...RelatedTargetSchema.properties, title: Type.Optional(text) })), references: Type.Array(LifecycleTargetSchema) });
+export const DiscardPreviewSchema = object({ source: SourceLifecycleTargetSchema, source_missing: Type.Optional(Type.Boolean()), drafts: Type.Array(object({ ...RelatedTargetSchema.properties, title: Type.Optional(text) })), references: Type.Array(LifecycleTargetSchema) });
 export const SearchQuerySchema = object({ ...PaginationQuerySchema.properties,
   scope: Type.Optional(enumeration(['knowledge', 'ideas', 'research', 'sources', 'all'])),
   q: Type.Optional(Type.String({ maxLength: LIMITS.query_characters })),

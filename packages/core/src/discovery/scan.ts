@@ -127,7 +127,7 @@ export async function scanVault(db: Database.Database, vault: string, jobId: str
 
 async function scanWithProperties(db: Database.Database, vault: string, jobId: string, mode: Job['mode'], progress: (processed: number) => void, native: PropertyNative, onBytes: (count: number) => void, selection?: ScanSelection): Promise<NonNullable<Job['summary']>> {
   const previousRoots: string[] = JSON.parse(indexMeta(db).known_scan_roots);
-  const partial = selection?.reason === null;
+  const partial = mode === 'refresh' && selection?.reason === null;
   const enumeration = await enumerateMarkdown(vault, previousRoots, native, onBytes, partial ? selection.paths : undefined);
   const missingPaths: string[] = [];
   if (partial) {
@@ -176,5 +176,6 @@ async function scanWithProperties(db: Database.Database, vault: string, jobId: s
     projections.push({ path: old.path, parsed, revision: old.revision, size: old.size, mtime: old.mtime, contentRead: false });
   }
   const warnings = [...enumeration.warnings, ...projections.flatMap(projection => projection.parsed.diagnostics)];
-  return publishScan(db, jobId, projections, [...new Set([...previousRoots, ...enumeration.roots])], warnings, selection ? { partial, missingPaths, reason: selection.reason, readFiles } : undefined);
+  return publishScan(db, jobId, projections, [...new Set([...previousRoots, ...enumeration.roots])], warnings,
+    { partial, missingPaths, reason: selection?.reason ?? (mode === 'rebuild' ? 'explicit_rebuild' : null), readFiles, rebuild: mode === 'rebuild' });
 }

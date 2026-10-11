@@ -132,6 +132,8 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/documents?path=20_Sources%2FMa
 
 正常rebuild由POST scans的mode=rebuild执行；新代事务发布前仍查询上一代，失败不会暴露部分结果。缺库启动会建立generation=0的空库，不自动扫描；当前文件仍可读，需显式扫描恢复登记。损坏、较新schema或不匹配约束报错，原库保留。
 
+正常 Rebuild 以成功枚举的当前文件为登记集合，清理未出现的旧登记（包含 missing），保留仍存在的问题文件；不删除文件、清空 Job／处理历史或外部回执。Refresh 和完整核对仍保留 missing 供用户检查，单条清理可用 [Sources 的 missing Discard](sources.md)。Jobs 显示 Rebuild 的清理数量。
+
 需要隔离旧库时，先停止Core，再执行离线命令：
 
 ```powershell

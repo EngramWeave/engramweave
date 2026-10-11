@@ -60,13 +60,15 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
     timer = setTimeout(() => { void poll(); }, batch.action === 'compile' ? 500 : 100);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [running, batch?.id, refresh]);
-  const submit = async (operation: Action) => {
+  const submit = async (operation: Action, prepared = previews) => {
     setError(undefined); setLoading(true);
     if (request.current?.action !== operation) request.current = null;
-    request.current ??= { id: crypto.randomUUID(), action: operation, items: selected.filter(source => source.revision && (operation !== 'delete' || deleteTargets.includes(source.path)) && (operation !== 'discard_drafts' || previews?.find(preview => preview.source.path === source.path)?.drafts.some(target => choices.includes(target.path)))).map(source => {
-      const preview = previews?.find(preview => preview.source.path === source.path);
-      return { path: source.path, revision: source.revision!, request_id: crypto.randomUUID(),
-        ...(operation === 'discard' ? { related: [...(source.processing_status === 'archived' ? [] : preview?.drafts ?? []), ...(preview?.references.filter(target => references.includes(target.path)) ?? [])].map(({ path, revision }) => ({ path, revision })) } : {}),
+    request.current ??= { id: crypto.randomUUID(), action: operation, items: selected.filter(source => (source.revision || ['discard', 'discard_drafts'].includes(operation) && source.state === 'missing') && (operation !== 'delete' || deleteTargets.includes(source.path)) && (operation !== 'discard_drafts' || prepared?.find(preview => preview.source.path === source.path)?.drafts.some(target => choices.includes(target.path)))).map(source => {
+      const preview = prepared?.find(preview => preview.source.path === source.path);
+      const missing = source.state === 'missing' || preview?.source_missing === true;
+      return { path: source.path, revision: preview?.source_missing ? preview.source.revision : source.revision, request_id: crypto.randomUUID(),
+        ...(missing && ['discard', 'discard_drafts'].includes(operation) ? { source_missing: true } : {}),
+        ...(operation === 'discard' ? { related: missing ? [] : [...(source.processing_status === 'archived' ? [] : preview?.drafts ?? []), ...(preview?.references.filter(target => references.includes(target.path)) ?? [])].map(({ path, revision }) => ({ path, revision })) } : {}),
         ...(operation === 'discard_drafts' ? { related: preview?.drafts.filter(target => choices.includes(target.path)).map(({ path, revision }) => ({ path, revision })) ?? [] } : {}),
         ...(operation === 'delete' && preview?.references.length ? { allow_referenced: true, reference_revisions: preview.references } : {}),
       };
@@ -80,6 +82,7 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
   const previewAction = async (operation: Action) => {
     setLoading(true); setError(undefined); request.current = null; setReferences([]); setAction(operation);
     try {
+      if (operation === 'discard' && selected.every(source => source.state === 'missing')) { await submit(operation, []); return; }
       const value = await Promise.all(selected.map(source => client.discardPreview(source.path)));
       setPreviews(value); setChoices([...new Set(value.flatMap(preview => preview.drafts.map(target => target.path)))]);
       setDeleteTargets(value.filter(preview => preview.references.length === 0).map(preview => preview.source.path));
@@ -87,7 +90,7 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
     finally { setLoading(false); }
   };
   const toggle = (current: string[], value: string) => current.includes(value) ? current.filter(item => item !== value) : [...current, value];
-  const formal = [...new Map(previews?.flatMap(preview => preview.references).map(target => [target.path, target]) ?? []).values()];
+  const formal = [...new Map(previews?.filter(preview => !preview.source_missing).flatMap(preview => preview.references).map(target => [target.path, target]) ?? []).values()];
   const draftPaths = [...new Set(previews?.flatMap(preview => preview.drafts.map(target => target.path)) ?? [])];
   const title = action === 'discard_drafts' ? 'Discard Drafts' : action === 'delete' ? 'Delete permanently' : 'Confirm Discard';
   const blocked = disabled || loading || running || !selected.length;
@@ -111,7 +114,8 @@ export function SourceBatchActions({ selected, clear, disabled, refresh, current
       <div className="action-targets">{previews.map(preview => <div key={preview.source.path} className="action-source">
         {action === 'delete' ? <label><input type="checkbox" checked={deleteTargets.includes(preview.source.path)} onChange={() => setDeleteTargets(current => toggle(current, preview.source.path))} /><strong>{preview.source.path}</strong></label> : <strong>{preview.source.path}</strong>}
         {action === 'delete' && preview.references.length > 0 && <div className="reference-warning">Active formal references · 默认跳过，勾选此 Source 表示确认保留坏链：<ul>{preview.references.map(target => <li key={target.path}>{target.path}</li>)}</ul></div>}
-        {action !== 'delete' && !(action === 'discard' && selected.find(source => source.path === preview.source.path)?.processing_status === 'archived') && preview.drafts.map(target => action === 'discard_drafts' ? <label key={target.path}><input type="checkbox" aria-label={target.path} checked={choices.includes(target.path)} onChange={() => setChoices(current => toggle(current, target.path))} /><span>{target.title || target.path}<small className="path">{target.path}</small></span></label> : <span className="path" key={target.path}>{target.title ? `${target.title} · ` : ''}{target.path}</span>)}
+        {action === 'discard' && preview.source_missing && <p>文件已缺失；仅清理登记条目，关联 Draft 和正式笔记保留。</p>}
+        {action !== 'delete' && !(action === 'discard' && (preview.source_missing || selected.find(source => source.path === preview.source.path)?.processing_status === 'archived')) && preview.drafts.map(target => action === 'discard_drafts' ? <label key={target.path}><input type="checkbox" aria-label={target.path} checked={choices.includes(target.path)} onChange={() => setChoices(current => toggle(current, target.path))} /><span>{target.title || target.path}<small className="path">{target.path}</small></span></label> : <span className="path" key={target.path}>{target.title ? `${target.title} · ` : ''}{target.path}</span>)}
       </div>)}</div>
       {action === 'discard' && formal.length > 0 && <fieldset><legend>Formal references · 默认保留，按需选择</legend>{formal.map(target => <label key={target.path}><input type="checkbox" checked={references.includes(target.path)} onChange={() => setReferences(current => toggle(current, target.path))} />{target.path}</label>)}</fieldset>}
       {action === 'discard_drafts' && !draftPaths.length && <p>No active Drafts.</p>}

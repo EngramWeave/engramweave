@@ -37,9 +37,9 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
   }, [selectedPath, currentBatch, close]);
   const selectedItems = Object.values(selected);
   const toggle = (source: Source) => setSelected(current => {
-    const next = { ...current }; if (next[source.path]) delete next[source.path]; else if (source.revision && Object.keys(next).length < 100) next[source.path] = source; return next;
+    const next = { ...current }; if (next[source.path]) delete next[source.path]; else if ((source.revision || source.state === 'missing') && Object.keys(next).length < 100) next[source.path] = source; return next;
   });
-  const selectable = page?.items.filter(source => source.revision) ?? [];
+  const selectable = page?.items.filter(source => source.revision || source.state === 'missing') ?? [];
   const allSelected = selectable.length > 0 && selectable.every(source => selected[source.path]);
   return <div className="sources-page">
     <div className="source-stats">{categories.map(category => <button key={category.state} className={`source-stat ${category.tone} ${(query.view ?? 'all') === category.state ? 'selected' : ''}`} disabled={!connected} onClick={() => { setSelected({}); const next = { ...query, view: category.state }; delete next.stages; delete next.issues; if (category.state !== 'pending') delete next.recompile; changeQuery(next); }}>
@@ -53,7 +53,7 @@ export function SourceBrowser({ page, counts, query, changeQuery, document, sele
         <th className="selection-column"><input type="checkbox" aria-label="Select this page" checked={allSelected} disabled={!connected || selectable.length === 0} onChange={() => setSelected(current => { const next = { ...current }; for (const source of selectable) { if (allSelected) delete next[source.path]; else if (Object.keys(next).length < 100) next[source.path] = source; } return next; })} /></th>
         <th>Title</th><th>Type</th><th>Health</th><th>Processing</th><th>Lifecycle</th><th>Captured</th>
       </tr></thead><tbody>{page?.items.map(source => <tr key={source.id} className={selectedPath === source.path ? 'selected' : ''}>
-        <td><input type="checkbox" aria-label={`Select ${source.title || source.path}`} disabled={!connected || !source.revision || !selected[source.path] && selectedItems.length >= 100} checked={Boolean(selected[source.path])} onChange={() => toggle(source)} /></td>
+        <td><input type="checkbox" aria-label={`Select ${source.title || source.path}`} disabled={!connected || !source.revision && source.state !== 'missing' || !selected[source.path] && selectedItems.length >= 100} checked={Boolean(selected[source.path])} onChange={() => toggle(source)} /></td>
         <td><div className="source-title-cell"><span className={`row-symbol ${source.source_type === 'manual' ? 'orange' : 'blue'}`}><Icon name={source.source_type === 'web' ? 'link' : source.source_type === 'manual' ? 'note' : 'file'} /></span><button className="row-copy row-select" onClick={() => select(source.path)}><span className="row-title">{source.title || source.path}</span><span className="row-meta" title={source.original_locator ?? source.path}>{source.original_locator ?? source.path}</span></button></div>
           {source.diagnostics.filter(item => item.code !== 'CAPTURED_AT_UNKNOWN').map((item, index) => <span className="diagnostic" key={index}>{item.code}: {item.message}</span>)}
         </td>
