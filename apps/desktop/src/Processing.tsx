@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ProcessingRequest, ProcessingRound, ProcessingSettings as Settings } from '@engramweave/contracts';
-import { client, failure, type Failure, type JobPage } from './client';
+import { useEffect, useState } from 'react';
+import type { ProcessingRound, ProcessingSettings as Settings } from '@engramweave/contracts';
+import { client, failure, type Failure } from './client';
 import { ErrorNotice } from './Feedback';
 import './processing.css';
 
@@ -20,34 +20,19 @@ export function ProcessingSettings({ connected, onChange }: { connected: boolean
   </section>;
 }
 
-export function ProcessingRounds({ connected, active, onChange, jobs }: { connected: boolean; active: boolean; onChange: () => void; jobs: JobPage | null }) {
+export function ProcessingRounds({ connected, active }: { connected: boolean; active: boolean }) {
   const [page,setPage] = useState<Awaited<ReturnType<typeof client.processingRounds>>>(); const [offset,setOffset] = useState(0);
-  const [error,setError] = useState<Failure>(); const [busy,setBusy] = useState(false); const [selection,setSelection] = useState<string[]>([]);
-  const request = useRef<ProcessingRequest | null>(null);
-  const running = page?.items.some(r => ['queued','running'].includes(r.status)) ?? false;
-  const analyzedDrafts = [...new Map(jobs?.items.filter(j => j.kind === 'analyze_draft').map(j => [j.draft_path,j]) ?? []).values()];
+  const [error,setError] = useState<Failure>();
   useEffect(() => {
     if (!connected) return; let cancelled = false; let timer: ReturnType<typeof setTimeout>;
     const load = async () => { try { const result = await client.processingRounds(offset); if (cancelled) return; setPage(result); if (result.items.some(r => ['queued','running'].includes(r.status))) timer = setTimeout(() => { void load(); },1000); } catch(e) {if (!cancelled) setError(failure(e));} };
     void load(); return () => {cancelled = true;clearTimeout(timer);};
   },[connected,active,offset]);
-  const submit = async (task?: 'review' | 'relation') => {
-    setBusy(true); setError(undefined);
-    try {
-      if (!request.current) {
-        const drafts = [...new Set(selection)];
-        const items = task ? await Promise.all(drafts.map(async path => { const r = await client.draftReview(path); return {source_path:r.source.path,source_revision:r.source.revision,draft_path:r.draft.path,draft_revision:r.draft.revision,task}; })) : undefined;
-        request.current = {request_id:crypto.randomUUID(),mode:task ? 'analyze' : 'pending',...(items ? {items} : {})};
-      }
-      await client.process(request.current); request.current = null; setSelection([]); setPage(await client.processingRounds(offset)); onChange();
-    } catch(e) {setError(failure(e));} finally {setBusy(false);}
-  };
   const renderRound = (round: ProcessingRound) => <details key={round.id} open={['queued','running','failed','interrupted'].includes(round.status)} className="processing-round"><summary>{round.status} · {round.trigger} · {round.mode} · {new Date(round.created_at).toLocaleString()} · {round.items.filter(i => i.status === 'succeeded').length}/{round.items.length}</summary>
     <p className="path">Round · {round.id} · Extra retries {round.max_retries}</p>{round.error && <ErrorNotice error={round.error} />}
-    {['queued','running'].includes(round.status) && <button disabled={busy} onClick={() => { setBusy(true); void client.cancelProcessing(round.id).then(async () => {setPage(await client.processingRounds(offset));onChange();}).catch(e => setError(failure(e))).finally(() => setBusy(false)); }}>Cancel round</button>}
-    {round.items.map((item,index) => <div className="processing-item" key={index}><strong>{item.source_path}</strong><span>{item.phase} · {item.status}</span>{item.draft_path && <label><input type="checkbox" checked={selection.includes(item.draft_path)} disabled={active || running || busy} onChange={() => { request.current = null; setSelection(current => current.includes(item.draft_path!) ? current.filter(p => p !== item.draft_path) : [...current,item.draft_path!].slice(0,100)); }} />{item.draft_path}<button onClick={() => { void client.open(item.draft_path!,'obsidian').catch(e => setError(failure(e))); }}>Open Draft</button></label>}<small className="path">Compiler · {item.compiler_job_id ?? '—'} · Analyzer · {item.analyzer_job_id ?? '—'}</small>{item.error && <ErrorNotice error={item.error} />}</div>)}
+    {round.items.map((item,index) => <div className="processing-item" key={index}><strong>{item.source_path}</strong><span>{item.phase} · {item.status}</span>{item.draft_path && <div className="processing-draft"><span>{item.draft_path}</span><button onClick={() => { void client.open(item.draft_path!,'obsidian').catch(e => setError(failure(e))); }}>Open Draft</button></div>}<small className="path">Compiler · {item.compiler_job_id ?? '—'} · Analyzer · {item.analyzer_job_id ?? '—'}</small>{item.error && <ErrorNotice error={item.error} />}</div>)}
   </details>;
-  return <section className="processing-rounds"><h2>Processing rounds</h2><p className="hint">完整轮次由 Core 执行：本地登记 → Compiler → Review → Relation。人工批准后才入库。</p><div className="connection-actions"><button className="primary" disabled={!connected || active || running || busy} onClick={() => { void submit(); }}>Process Pending</button><button disabled={!connected || busy} onClick={() => { void client.processingRounds(offset).then(setPage).catch(e => setError(failure(e))); }}>Refresh rounds</button><button disabled={!selection.length || active || running || busy} onClick={() => {void submit('review');}}>Retry Review ({selection.length})</button><button disabled={!selection.length || active || running || busy} onClick={() => {void submit('relation');}}>Retry Relation ({selection.length})</button></div>
-    {error && <ErrorNotice error={error} />}{analyzedDrafts.length > 0 && <details className="processing-round"><summary>Select analyzed Drafts ({analyzedDrafts.length})</summary>{analyzedDrafts.map(job => <label className="processing-item" key={job.draft_path}><span><input type="checkbox" checked={selection.includes(job.draft_path)} disabled={active || running || busy} onChange={() => {request.current = null;setSelection(current => current.includes(job.draft_path) ? current.filter(p => p !== job.draft_path) : [...current,job.draft_path].slice(0,100));}} />{job.draft_path}</span><small>{job.source_path} · Review {job.review.status} / Relation {job.relation.status}</small></label>)}</details>}{page?.items.map(renderRound)}{page && <div className="pagination"><button disabled={!offset} onClick={() => setOffset(Math.max(0,offset-20))}>Previous</button><span>{page.total} rounds</span><button disabled={offset+20>=page.total} onClick={() => setOffset(offset+20)}>Next</button></div>}
+  return <section className="processing-rounds"><h2>Processing rounds</h2><p className="hint">查看处理轮次的步骤、结果和错误记录。</p>
+    {error && <ErrorNotice error={error} />}{page?.items.map(renderRound)}{page && <div className="pagination"><button disabled={!offset} onClick={() => setOffset(Math.max(0,offset-20))}>Previous</button><span>{page.total} rounds</span><button disabled={offset+20>=page.total} onClick={() => setOffset(offset+20)}>Next</button></div>}
   </section>;
 }

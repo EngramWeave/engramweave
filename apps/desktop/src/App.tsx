@@ -230,10 +230,8 @@ export function App() {
     }, 'connection');
   const scan = (mode: 'refresh' | 'rebuild', forceFull = false) =>
     action(async () => {
-      const currentPage = pageEpoch.current;
       await client.scan(mode, forceFull);
       await refresh();
-      if ((mode === 'rebuild' || forceFull) && currentPage === pageEpoch.current) navigate('jobs');
     }, view === 'settings' ? 'operations' : 'toast');
   const navigate = (next: View) => {
     if (next !== view) {
@@ -487,7 +485,7 @@ export function App() {
                 ? '任务活动中，正在轮询进度。'
                 : '没有活动任务，轮询已停止。'}
             </p>
-            <ProcessingRounds connected={connected} active={Boolean(active)} onChange={refreshSources} jobs={jobs} />
+            <ProcessingRounds connected={connected} active={Boolean(active)} />
             <Jobs page={jobs} />
           </section>
         )}

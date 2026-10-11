@@ -4,9 +4,9 @@ Core 独立完成本地登记 → Compiler → Review Analyzer → Relation Anal
 
 ## 执行与资格
 
-Desktop 的 System Status → Jobs 提供 **Process Pending**、轮次历史和指定 Draft 的 **Retry Review／Retry Relation** 多选。Sources 的 **Compile selected／Run Compiler** 仅编译正文，**Process selected／Run complete round** 执行完整轮次。Obsidian 的 **Run Knowledge Compiler** 提交同一个 Core 入口。
+Desktop 的 System Status → Jobs 只查看操作及轮次记录，支持展开步骤／错误、分页和打开相关 Draft，不提供启动、重试、取消或 Draft 多选执行入口。Sources 的 **Compile selected／Run Compiler** 仅编译正文，**Process selected／Run complete round** 执行完整轮次；指定 Draft 的独立 Review／Relation 重试位于其 Analyzer 操作区。Obsidian 的 **Run Knowledge Compiler** 提交同一个 Core 入口。
 
-Pending 轮次先登记新 Capture，无需事先 Refresh。内部登记不更新 Embedding、不建立首次语义索引；公开 Refresh 和 Analyzer 查询维持已有语义召回合同。自动／Process Pending 只编译 active、有效、支持 inline 正文的 pending Source。明确选定的 Source 允许 pending／compiled，成功时追加 Draft。reviewed 的规划以及 planned／archived 的正式推进不在此执行。
+Pending 轮次先登记新 Capture，无需事先 Refresh。内部登记不更新 Embedding、不建立首次语义索引；公开 Refresh 和 Analyzer 查询维持已有语义召回合同。Pending 轮次只编译 active、有效、支持 inline 正文的 pending Source。明确选定的 Source 允许 pending／compiled，成功时追加 Draft。reviewed 的规划以及 planned／archived 的正式推进不在此执行。
 
 候选固定，逐项开始前重读版本、阶段和生命周期。排队期间的修改、删除或 Discard 逐项报告并继续其他材料。用户文件不会被锁住等待模型。Core 沿用一个模型槽，Source 串行执行，并拒绝竞争的变更操作。相同 UUID request_id 和相同请求返回同一轮；不同输入复用 ID 拒绝。正文成功后 Source 为 compiled，分析失败不修改该阶段或 Health。
 

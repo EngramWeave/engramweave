@@ -30,7 +30,7 @@ Refresh workspace 是明确的登记动作。Core 启动原生监听器收集变
 | `scan_reason` | 增量时为 null；全量时描述兜底原因 |
 | `read_files` | 本轮成功读取的 Markdown 文件数，不含引用状态检查和同一文件的补属性复读 |
 
-全量原因包括 `core_started`、`manual_reconciliation`、`explicit_rebuild`、`periodic_reconciliation`、`vault_identity_changed`、`watcher_overflow`、`watcher_error`、`watcher_unavailable`、`watcher_unknown_event` 和 `property_recovery`。Desktop 完整核对跳转 Jobs，完成后显示“手动完整核对”和实际读取数；扫描活动时每 250 ms 查询进度，模型任务仍使用原有 1 s 间隔，无活动任务时停止轮询。同一活动模式和核对范围才复用 Job；全量请求与正在进行的普通 Refresh 互斥，返回 JOB_BUSY，避免把用户明确要求的全量检查降为增量。
+全量原因包括 `core_started`、`manual_reconciliation`、`explicit_rebuild`、`periodic_reconciliation`、`vault_identity_changed`、`watcher_overflow`、`watcher_error`、`watcher_unavailable`、`watcher_unknown_event` 和 `property_recovery`。Desktop 扫描、完整核对及重建索引均留在当前页面；用户主动打开 Jobs 时可查看“手动完整核对”和实际读取数。扫描活动时每 250 ms 查询进度，模型任务仍使用原有 1 s 间隔，无活动任务时停止轮询。同一活动模式和核对范围才复用 Job；全量请求与正在进行的普通 Refresh 互斥，返回 JOB_BUSY，避免把用户明确要求的全量检查降为增量。
 
 `source_count/knowledge_count` 表示发布后相应 ready 数量。增量的 `unchanged` 包含继续复用的 ready 投影，不代表本轮都做了字节校验；`added/updated/invalid/unsupported/missing` 描述本轮受影响对象，引用状态变化可能不改变 Record revision。`processed_files` 包括本轮处理的文件投影、引用重查和选中消失路径；进度每 64 项或至少间隔 100 ms 写入，最终值随发布事务保存。
 
