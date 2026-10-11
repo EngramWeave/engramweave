@@ -71,7 +71,7 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
                 "offset",
             ],
         ),
-        Operation::Scan => (true, "/v1/scans", &["mode"]),
+        Operation::Scan => (true, "/v1/scans", &["mode", "force_full"]),
         Operation::CompilerSettings => (false, "/v1/compiler/settings", &[]),
         Operation::CompilerSettingsWrite => (true, "/v1/compiler/settings", &["settings", "api_key"]),
         Operation::Compile => (true, "/v1/compilations", &["path", "revision", "request_id"]),
@@ -113,6 +113,13 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
             "VALIDATION_ERROR",
             "Bridge field is not permitted",
         ));
+    }
+    if route == "/v1/scans" && post {
+        let mode = object.get("mode").and_then(Value::as_str);
+        if !matches!(mode, Some("refresh" | "rebuild"))
+            || object.get("force_full").map(|value| !value.is_boolean() || mode != Some("refresh")).unwrap_or(false)
+        { return Err(Failure::new("VALIDATION_ERROR", "Invalid scan input")); }
+        return Ok((true, route.to_string(), vec![]));
     }
     if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses" || route.starts_with("/v1/processing") || route == "/v1/recompile") {
         if serde_json::to_vec(input).map(|bytes| bytes.len() > 450000).unwrap_or(true) {

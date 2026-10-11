@@ -36,6 +36,7 @@ export function Jobs({ page }: { page: JobPage | null }) {
               {job.summary.index_generation}
             </p>
           )}
+          {job.kind === 'scan_vault' && job.summary?.scan_strategy && <p className="path">{job.summary.scan_strategy === 'incremental' ? 'Incremental refresh' : 'Full reconciliation'} · Read {job.summary.read_files} files{job.summary.scan_reason ? ` · ${job.summary.scan_reason === 'manual_reconciliation' ? '手动完整核对' : job.summary.scan_reason}` : ''}</p>}
           {job.error && (
             <p className="notice warning">
               {job.error.code} · {job.error.message}

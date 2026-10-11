@@ -61,6 +61,7 @@ export function App() {
     status?.active_job?.id ??
     jobs?.items.find((job) => ['queued', 'running'].includes(job.status))?.id ??
     null;
+  const scanPolling = status?.active_job?.kind === 'scan_vault';
 
   const clearError = useCallback((placement: ErrorPlacement) => {
     setErrors((current) => {
@@ -164,19 +165,19 @@ export function App() {
         if (!cancelled && (pending || status?.processing_schedule?.next_due))
           timer = setTimeout(() => {
             void poll();
-          }, pending ? 1000 : 15000);
+          }, pending ? (scanPolling ? 250 : 1000) : 15000);
       } catch (error) {
         if (!cancelled) report(error, 'toast', epoch);
       }
     };
     timer = setTimeout(() => {
       void poll();
-    }, active ? 1000 : 15000);
+    }, active ? (scanPolling ? 250 : 1000) : 15000);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [connected, active, status?.semantic_index?.state, status?.processing_schedule?.next_due, refresh, report]);
+  }, [connected, active, scanPolling, status?.semantic_index?.state, status?.processing_schedule?.next_due, refresh, report]);
   useEffect(() => {
     if (!connected || (view !== 'sources' && view !== 'dashboard')) return;
     const epoch = connectionEpoch.current;
@@ -227,12 +228,12 @@ export function App() {
       setStatus(value.status);
       await refresh();
     }, 'connection');
-  const scan = (mode: 'refresh' | 'rebuild') =>
+  const scan = (mode: 'refresh' | 'rebuild', forceFull = false) =>
     action(async () => {
       const currentPage = pageEpoch.current;
-      await client.scan(mode);
+      await client.scan(mode, forceFull);
       await refresh();
-      if (mode === 'rebuild' && currentPage === pageEpoch.current) navigate('jobs');
+      if ((mode === 'rebuild' || forceFull) && currentPage === pageEpoch.current) navigate('jobs');
     }, view === 'settings' ? 'operations' : 'toast');
   const navigate = (next: View) => {
     if (next !== view) {
@@ -382,6 +383,12 @@ export function App() {
               </button>
               <button
                 disabled={busy || !connected || Boolean(active)}
+                onClick={() => { void scan('refresh', true); }}
+              >
+                完整核对
+              </button>
+              <button
+                disabled={busy || !connected || Boolean(active)}
                 onClick={() => {
                   void scan('rebuild');
                 }}
@@ -399,6 +406,7 @@ export function App() {
                 刷新状态
               </button>
             </div>
+            <p className="muted">完整核对：完整检查文件变化，保留有效缓存；用于刷新结果疑似未更新时。</p>
             <CompilerSettings connected={connected} />
             <AnalysisSettings connected={connected} />
             <ProcessingSettings connected={connected} onChange={refreshSources} />

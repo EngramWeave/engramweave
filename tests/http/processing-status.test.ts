@@ -40,7 +40,8 @@ it('returns current archival separately from the published Registry and checks a
   expect(repeatedJob).toMatchObject({ summary: { unchanged: 3, index_generation: 2 } });
   const repeatedDocument = await (await request(route)).json();
   expect(repeatedDocument).toMatchObject({ processing_status: 'archived', revision: sha256(r3), index_stale: false });
-  expect(Date.parse(repeatedDocument.indexed_at)).toBeGreaterThan(Date.parse(indexed.indexed_at));
+  // Incremental Refresh did not reread this untouched archived Record.
+  expect(repeatedDocument.indexed_at).toBe(indexed.indexed_at);
   const repeatedSources = await (await request('/v1/sources')).json();
   expect(repeatedSources.items).toEqual(sources.items);
   indexed = repeatedDocument; sources = repeatedSources;

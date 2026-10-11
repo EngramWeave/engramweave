@@ -34,12 +34,21 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
     expect(calls).toBe(0);
     const settings = { ...defaultRecallSettings, model: 'embedding', endpoint: `http://127.0.0.1:${address.port}/v1`, reranker_endpoint: `http://127.0.0.1:${address.port}/v1` };
     expect((await post('/v1/recall/settings', { settings })).status).toBe(200); expect(calls).toBe(0);
+    const manualBeforeBuild = await (await post('/v1/scans', { mode: 'refresh', force_full: true })).json();
+    expect(await finishedJob(runtime.request, manualBeforeBuild.job.id)).toMatchObject({ status: 'succeeded', summary: { scan_reason: 'manual_reconciliation' } });
+    expect(calls).toBe(0);
     expect((await post('/v1/recall/index', { mode: 'update' })).status).toBe(409);
     const competing = await Promise.all([post('/v1/recall/index', { mode: 'build' }), post('/v1/recall/index', { mode: 'build' })]);
     expect(competing.map(response => response.status).sort()).toEqual([202, 409]);
-    expect(await waitIndex(runtime.request)).toMatchObject({ state: 'idle', initialized: true, indexed_documents: 3 });
+    const built = await waitIndex(runtime.request);
+    expect(built).toMatchObject({ state: 'idle', initialized: true, indexed_documents: 3 });
     const initialInputs = inputs;
-    const second = await submitScan(runtime.request); const secondDone=await finishedJob(runtime.request, second.job.id); await waitIndex(runtime.request,s=>s.generation===secondDone.summary!.index_generation); expect(inputs).toBe(initialInputs);
+    const second = await submitScan(runtime.request); await finishedJob(runtime.request, second.job.id);
+    const secondIndex = await waitIndex(runtime.request,s=>s.generation>built.generation); expect(inputs).toBe(initialInputs);
+    const manualAfterBuild = await (await post('/v1/scans', { mode: 'refresh', force_full: true })).json();
+    expect((await finishedJob(runtime.request, manualAfterBuild.job.id)).status).toBe('succeeded');
+    // Semantic generations are independent of Registry generations (including pre-build scans).
+    const manualIndex = await waitIndex(runtime.request,s=>s.generation>secondIndex.generation); expect(inputs).toBe(initialInputs);
     const result = await (await post('/v1/recall', { q: '知识', rerank: true })).json() as RecallResponse;
     expect([...Value.Errors(API.recall.schema.response[200], result)]).toEqual([]);
     expect(result.reranker).toBe('applied'); expect(result.items.map(hit => hit.kind)).toEqual(expect.arrayContaining(['idea', 'knowledge', 'research']));
@@ -48,7 +57,7 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
     const knowledge = path.join(runtime.config.vault_path, '40_Knowledge/knowledge.md');
     await writeFile(knowledge, '---\ncaptured_at: 2026-10-09\n---\n# Knowledge\n知识编译系统');
     expect(inputs).toBe(metadataBefore);
-    const changed = await submitScan(runtime.request); const changedDone=await finishedJob(runtime.request, changed.job.id); await waitIndex(runtime.request,s=>s.generation===changedDone.summary!.index_generation); expect(inputs).toBe(metadataBefore);
+    const changed = await submitScan(runtime.request); await finishedJob(runtime.request, changed.job.id); await waitIndex(runtime.request,s=>s.generation>manualIndex.generation); expect(inputs).toBe(metadataBefore);
     const evidence = result.items.find(hit => hit.kind === 'knowledge')!;
     const context = await (await post('/v1/recall/context', { items: [evidence].map(({ path, revision, chunk_id }) => ({ path, revision, chunk_id })) })).json();
     expect(context.items).toEqual([]);
@@ -60,7 +69,7 @@ it('keeps first indexing explicit, updates only changed inputs, validates curren
     expect((await (await post('/v1/recall', { q: '知识', rerank: true })).json()).reranker).toBe('failed');
     rankFailed = false; failed = true;
     await writeDocument(runtime.config.vault_path, '10_Ideas/idea.md', '# 新点子\n新正文');
-    const failing = await submitScan(runtime.request); expect((await finishedJob(runtime.request, failing.job.id)).status).toBe('succeeded');
+    const failing = await (await post('/v1/scans', { mode: 'refresh', force_full: true })).json(); expect((await finishedJob(runtime.request, failing.job.id)).status).toBe('succeeded');
     expect(await waitIndex(runtime.request,s=>s.state==='failed')).toMatchObject({ state: 'failed', initialized: true });
     expect((await runtime.request('/v1/search?scope=ideas&q=新正文')).status).toBe(200);
     failed = false;

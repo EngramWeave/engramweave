@@ -56,7 +56,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:43127/v1/sources -Headers $coreHeaders
 Invoke-RestMethod -Uri 'http://127.0.0.1:43127/v1/search?scope=sources&q=counter%2B%2B&fields=body' -Headers $coreHeaders
 ```
 
-扫描提交返回202与Job，不等待完成；相同活动mode返回同一Job，reused=true，不同mode返回409 JOB_BUSY。refresh/rebuild 都完整枚举和按原始字节计算SHA-256；refresh允许复用未变化的有效解析，rebuild重新解析。一次完整扫描将文件投影、索引代次与成功Job在同一SQLite事务中发布。
+扫描提交返回202与Job，不等待完成；相同活动 mode 和核对范围返回同一 Job，reused=true，不同模式／范围返回409 JOB_BUSY。Core 启动后第一次 refresh 全量核对；之后根据 Core 原生监听收集的变化路径增量登记，只读取受影响的文件或目录子树。监听不可靠、Vault 身份变化或距上次全量核对超过一小时，在下一次显式 refresh 时全量核对。Settings 的“完整核对”发送 `{"mode":"refresh","force_full":true}`，全量检查但复用有效解析；rebuild 始终全量枚举、计算原始字节 SHA-256 并重新解析，不接受 force_full。文件投影、索引代次与成功 Job 在同一 SQLite 事务中发布，详见 [增量 Refresh](incremental-refresh.md)。
 
 文件级错误排除该文件，其他文件继续；整体枚举、Vault可用性和总量限制失败时，上一代投影保留。缺少从未存在的扫描根是正常空范围；曾存在的根整体消失会使扫描失败。相同路径更新保留ID，移动/改名按旧路径missing和新路径新ID处理；不同路径相同URL或内容不会合并。
 
@@ -68,7 +68,7 @@ Source列表与Source详情分别返回已发布投影和当前文件的processi
 
 Source 和 Knowledge 独立返回 lifecycle_status，active/discarded 保留原值。Source 缺失／null／空字符串在登记时补 active；普通 Knowledge／Ideas／Research 缺失时读取为 active，不补写。非法值使文件 invalid；异常文件可保留最近可读阶段／生命周期投影，不能据此视为当前文件有效。API 中 Source.state 表示 registration_status，Job.status 表示 job_status，沿用字段名。扫描、Compiler 和 Analyzer Job 分别保存，语义索引状态独立展示；错误、运行历史和重试／Recompile 计数属于 Core，不回写文件。
 
-文件的indexed_at只在扫描实际稳定读取并计算revision后刷新，补属性后重新读取最终字节，refresh复用解析也须重新读取字节；读取失败或missing保留先前校验时间，首次读取失败为null。列表indexed_at和status.last_scan_at表示一代投影发布完成，不能代表每条异常文件都读取成功。unchanged表示本轮读取后Record字节未变；Asset状态另行判断。详情读取不更新索引、时间或阶段投影。
+文件的 indexed_at 只在扫描实际稳定读取并计算 revision 后刷新，补属性后重新读取最终字节；增量 refresh 未触及的文件及只重查引用的 Record 保留原校验时间，读取失败或 missing 也保留先前时间，首次读取失败为 null。status.last_scan_at 表示一代投影发布完成，不代表每条文件都在本次读取成功。全量扫描的 unchanged 表示读取后 Record 字节未变；增量扫描还包含继续复用的 ready 投影，实际成功读取数由 read_files 表示。Asset 状态另行判断。详情读取不更新索引、时间或阶段投影。
 
 Keyword Search 默认 scope=knowledge，可选 ideas/research/sources/all；独立混合召回见 [语义召回](semantic-recall.md)。q按空白拆成最多8词，AND字面子串匹配，统一NFC和Unicode小写。字段为title/body/annotation/metadata；metadata只索引URL、source_type、tags，description等扩展字段不进入检索。支持source_type、单tag和按目录段匹配的path_prefix过滤；空q至少需一个过滤。
 

@@ -20,6 +20,9 @@ fn fixed_bridge_rejects_arbitrary_paths_headers_and_job_route_injection() {
     }
     assert!(route(Operation::Job, &json!({"id":"../status"})).is_err());
     assert!(route(Operation::Search, &json!({"scope":{}})).is_err());
+    assert!(route(Operation::Scan, &json!({"mode":"refresh","force_full":true})).is_ok());
+    assert!(route(Operation::Scan, &json!({"mode":"refresh","force_full":"true"})).is_err());
+    assert!(route(Operation::Scan, &json!({"mode":"rebuild","force_full":true})).is_err());
     assert_eq!(
         route(Operation::Document, &json!({"path":"20_Sources/r1.md"}))
             .unwrap()

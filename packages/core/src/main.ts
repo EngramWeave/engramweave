@@ -34,6 +34,7 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
   const runtime: HttpRuntime = { token: null, status: 'starting' };
   let services: CoreServices | undefined;
   let database: CoreServices['db'] | undefined;
+  let scanJobs: ScanJobs | undefined;
   const server = createHttp(config, runtime, () => {
     if (!services) throw new CoreError('CORE_UNAVAILABLE', 'Core database is not initialized', 503);
     return services;
@@ -60,7 +61,9 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     let recall: SemanticRecall | undefined;
     const processingSettings = new ProcessingSettingsStore(config.data_dir);
     await processingSettings.initialize();
-    const jobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy()), async () => { await recall?.afterRefresh(); });
+    const jobs = scanJobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy()), async () => { await recall?.afterRefresh(); });
+    // Watch only records hints; startup neither registers files nor invokes models.
+    await jobs.startWatcher();
     compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy()), undefined, () => processingSettings.read().max_retries);
     await compiler.initialize();
     batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null || Boolean(publications?.busy() || recompile?.busy() || humanReview?.busy()), input => analyzer?.guardBatch(input), async target => {
@@ -94,7 +97,7 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     } };
   } catch (error) {
     try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.recompile?.close(); await services?.humanReview?.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
-    finally { try { database?.close(); } finally { await instance?.close(); } }
+    finally { try { if (!services) await scanJobs?.close(); } finally { try { database?.close(); } finally { await instance?.close(); } } }
     throw error;
   }
 }

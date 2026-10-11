@@ -125,6 +125,43 @@ public static class SourcePropertyCommit {
   }
 }
 public static class Program {
+  // Notifications are bounded hints. Core verifies paths and bytes before publishing anything.
+  static void Watch(System.Web.Script.Serialization.JavaScriptSerializer json) {
+    var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var gate = new object(); string lost = null;
+    string first = Console.ReadLine();
+    try {
+      var input = json.Deserialize<Dictionary<string, object>>(first);
+      string root = Path.GetFullPath(Text(input,"vault"));
+      if(!Directory.Exists(root) || (File.GetAttributes(root) & (FileAttributes.ReparsePoint | FileAttributes.Hidden)) != 0) throw new IOException();
+      using(var watcher = new FileSystemWatcher(root)) {
+        watcher.IncludeSubdirectories = true; watcher.InternalBufferSize = 32768;
+        watcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.Attributes | NotifyFilters.CreationTime | NotifyFilters.Security;
+        Action<string> changed = delegate(string name) {
+          if(String.IsNullOrEmpty(name)) { lock(gate) lost="watcher_unknown_event"; return; }
+          if(name.StartsWith(".") || name.StartsWith("~")) return;
+          lock(gate) {
+            if(pending.Count >= 10000 || name.Length > 32768) { pending.Clear(); lost="watcher_overflow"; }
+            else pending.Add(name.Replace('\\','/'));
+          }
+        };
+        watcher.Changed += delegate(object sender, FileSystemEventArgs e) { changed(e.Name); };
+        watcher.Created += delegate(object sender, FileSystemEventArgs e) { changed(e.Name); };
+        watcher.Deleted += delegate(object sender, FileSystemEventArgs e) { changed(e.Name); };
+        watcher.Renamed += delegate(object sender, RenamedEventArgs e) { changed(e.OldName); changed(e.Name); };
+        watcher.Error += delegate(object sender, ErrorEventArgs e) { lock(gate) { pending.Clear(); lost=e.GetException() is InternalBufferOverflowException ? "watcher_overflow" : "watcher_error"; } };
+        watcher.EnableRaisingEvents = true;
+        Console.WriteLine("{\"ready\":true}");
+        string command;
+        while((command=Console.ReadLine()) != null) {
+          if(command != "drain") throw new IOException();
+          // Let already queued notification callbacks settle after an immediate save -> Refresh.
+          System.Threading.Thread.Sleep(30);
+          lock(gate) { Console.WriteLine(json.Serialize(new { paths=new List<string>(pending), lost=lost })); pending.Clear(); lost=null; }
+        }
+      }
+    } catch { Console.WriteLine("{\"ready\":false}"); }
+  }
   static string Text(Dictionary<string, object> request, string key) {
     object value;
     return request.TryGetValue(key, out value) && value is string ? (string)value : null;
@@ -137,6 +174,7 @@ public static class Program {
     Console.InputEncoding = new System.Text.UTF8Encoding(false);
     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
     var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = 16000000, RecursionLimit = 32 };
+    if(args.Length == 1 && args[0] == "watch") { Watch(json); return; }
     if(args.Length != 1 || (args[0] != "attributes" && args[0] != "commit")) return;
     string line;
     while((line = Console.ReadLine()) != null) {

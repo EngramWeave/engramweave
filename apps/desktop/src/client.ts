@@ -89,8 +89,8 @@ export const client = {
     request('document', API.documents.schema.response[200], { path }),
   search: (input: SearchQuery) =>
     request('search', API.search.schema.response[200], input),
-  scan: (mode: 'refresh' | 'rebuild') =>
-    request('scan', API.scans.schema.response[202], { mode }),
+  scan: (mode: 'refresh' | 'rebuild', force_full = false) =>
+    request('scan', API.scans.schema.response[202], { mode, ...(force_full ? { force_full } : {}) }),
   open: (path: string, target: 'obsidian' | 'original') =>
     native<void>('open_document', { path, target }),
   compilerSettings: () => request('compiler_settings', API.compilerSettings.schema.response[200]),

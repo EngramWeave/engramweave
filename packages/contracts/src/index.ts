@@ -65,6 +65,7 @@ export const ScanSummarySchema = object({
   added: count, updated: count, unchanged: count, missing: count, invalid: count, unsupported: count,
   source_count: count, knowledge_count: count, index_generation: count,
   warnings: DiagnosticsSchema, finished_at: instant,
+  scan_strategy: Type.Optional(enumeration(['full','incremental'])), scan_reason: Type.Optional(nullable(text)), read_files: Type.Optional(count),
 });
 export const JobSchema = object({
   id: nonempty, kind: Type.Literal('scan_vault'), mode: ScanModeSchema, status: JobStatusSchema,
@@ -230,7 +231,10 @@ export const SearchQuerySchema = object({ ...PaginationQuerySchema.properties,
 });
 export type SearchQuery = Static<typeof SearchQuerySchema>;
 export const SearchResponseSchema = object({ ...page(SearchResultSchema), ...indexed });
-export const ScanRequestSchema = object({ mode: ScanModeSchema });
+export const ScanRequestSchema = Type.Union([
+  object({ mode: Type.Literal('refresh'), force_full: Type.Optional(Type.Boolean()) }),
+  object({ mode: Type.Literal('rebuild') }),
+]);
 export type ScanRequest = Static<typeof ScanRequestSchema>;
 export const ScanResponseSchema = object({ job: JobSchema, reused: Type.Boolean() });
 export const CaptureRequestSchema = object({ path: CapturePathSchema, markdown: Type.String({ minLength: 1 }), analysis_profile: Type.Optional(AnalysisProfileIdSchema) });

@@ -13,7 +13,7 @@ Core 对 `10_Ideas`、`40_Knowledge`、`50_Research` 中的普通 Markdown 提�
 1. 点击 Refresh workspace 完成本地登记。
 2. 首次点击 Build Semantic Index；保存配置本身不调用模型。
 3. Search → Semantic，选择三类范围，输入自然语言查询。Keyword 保留原有字面检索，并可选择 Ideas／Research。
-4. 后续 Refresh workspace 先发布成功登记，再更新新增或变化的编码输入。普通编辑和程序启动不调用 Embedding，也不补跑中断任务。
+4. 后续 Refresh workspace 先发布成功登记，再更新新增或变化的编码输入。登记采用 [Core 增量 Refresh](incremental-refresh.md)，首次／重启后及监听不可靠时全量核对；语义更新继续按编码输入复用向量。普通编辑和程序启动不调用 Embedding，也不补跑中断任务。
 5. 语义失败、过期和未覆盖独立显示在 Settings／Search／System Status；登记、Sources 和关键词搜索仍可用。恢复服务后显式 Update / Retry。
 
 Reranker 默认关闭，可以在 Settings 设置默认值，也可以在某次查询中单独勾选。兼容 `/v1/rerank` 的服务接收 `query/documents/top_n/model`，返回完整、唯一的 `index/relevance_score`。每次查询只重排当前候选，Refresh 不调用它。重排失败明确提示，保留混合排名；Embedding 查询失败不会伪装成成功的语义检索。

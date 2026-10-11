@@ -1,6 +1,7 @@
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { Value } from '@sinclair/typebox/value';
 import { API, API_VERSION, CORE_VERSION, LIMITS, SCAN_ROOTS, type Config, type PaginationQuery, type ScanRequest, type SourcesQuery, type Status } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { documentPathKey, normalizeVaultPath } from '../files/paths.js';
@@ -17,7 +18,12 @@ export function inPathPrefix(relative: string, prefix: string): boolean {
 }
 
 export function registerRegistryRoutes(server: FastifyInstance, config: Config, services: () => CoreServices) {
-  server.route({ ...API.scans, handler(request, reply) { return reply.code(202).send(services().jobs.submit((request.body as ScanRequest).mode)); } });
+  server.route({ ...API.scans, async preValidation(request) {
+    if (!Value.Check(API.scans.schema.body, request.body)) throw new CoreError('VALIDATION_ERROR', 'Invalid scan request', 400);
+  }, handler(request, reply) {
+    const input = request.body as ScanRequest;
+    return reply.code(202).send(services().jobs.submit(input.mode, true, input.mode === 'refresh' && input.force_full === true));
+  } });
   server.route({ ...API.jobs, handler(request) {
     const { limit, offset } = pagination(request.query as PaginationQuery);
     const { jobs, compiler, analyzer } = services();

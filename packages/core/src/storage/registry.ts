@@ -14,7 +14,7 @@ export interface DocumentRow {
   diagnostics_json: string; annotation: string; body_markdown: string; title_norm: string; body_norm: string;
   annotation_norm: string; metadata_norm: string; indexed_at: string | null;
 }
-export interface Projection { path: string; parsed: ParsedDocument; revision: string | null; size: number | null; mtime: number | null }
+export interface Projection { path: string; parsed: ParsedDocument; revision: string | null; size: number | null; mtime: number | null; contentRead?: boolean }
 export const getDocument = (db: Database.Database, relative: string) => db.prepare('SELECT * FROM documents WHERE path_key=?').get(documentPathKey(relative)) as DocumentRow | undefined;
 export const allDocuments = (db: Database.Database) => db.prepare('SELECT * FROM documents ORDER BY path_key').all() as DocumentRow[];
 /** A newly approved note is visible immediately; this does not invoke Embedding. */
@@ -54,7 +54,7 @@ export function parsedRow(row: DocumentRow): ParsedDocument {
     diagnostics: JSON.parse(row.diagnostics_json) };
 }
 
-export function publishScan(db: Database.Database, jobId: string, projections: Projection[], knownRoots: string[], warnings: Source['diagnostics']): NonNullable<Job['summary']> {
+export function publishScan(db: Database.Database, jobId: string, projections: Projection[], knownRoots: string[], warnings: Source['diagnostics'], options?: { partial: boolean; missingPaths: string[]; reason: string | null; readFiles: number }): NonNullable<Job['summary']> {
   return db.transaction(() => {
     const generation = indexMeta(db).index_generation + 1;
     const indexedAt = new Date().toISOString();
@@ -90,18 +90,29 @@ export function publishScan(db: Database.Database, jobId: string, projections: P
         title_norm: searchable ? normalizeText(parsed.title) : '', body_norm: normalizeText(body), annotation_norm: normalizeText(annotation),
         metadata_norm: normalizeText([parsed.original_locator ?? '', parsed.source_type ?? '', ...stringList(metadata.tags)].join('\n')),
         // Publication alone is not a successful content read or hash validation.
-        indexed_at: projection.revision !== null ? indexedAt : old?.indexed_at ?? null };
+        indexed_at: projection.revision !== null && projection.contentRead !== false ? indexedAt : old?.indexed_at ?? null };
       if (!searchable) row.metadata_norm = '';
       insert.run(row);
     }
-    for (const old of allDocuments(db)) {
+    for (const old of options?.partial ? options.missingPaths.flatMap(relative => { const row = getDocument(db, relative); return row ? [row] : []; }) : allDocuments(db)) {
       if (seen.has(old.path_key) || old.state === 'missing') continue;
       db.prepare("UPDATE documents SET state='missing',metadata_json=CASE WHEN kind='source' THEN metadata_json ELSE '{}' END,asset_json=NULL,annotation='',body_markdown='',title_norm='',body_norm='',annotation_norm='',metadata_norm='',diagnostics_json=? WHERE id=?")
         .run(JSON.stringify([{ code: 'FILE_MISSING', message: 'Document is absent from the completed scan', path: old.path }]), old.id);
       summary.missing++;
     }
+    if (options) {
+      summary.scan_strategy = options.partial ? 'incremental' : 'full';
+      summary.scan_reason = options.reason;
+      summary.read_files = options.readFiles;
+      if (options.partial) {
+        const counts = db.prepare("SELECT kind,count(*) AS n FROM documents WHERE state='ready' GROUP BY kind").all() as { kind: string; n: number }[];
+        summary.source_count = counts.find(row => row.kind === 'source')?.n ?? 0;
+        summary.knowledge_count = counts.find(row => row.kind === 'knowledge')?.n ?? 0;
+        summary.unchanged = counts.reduce((sum, row) => sum + row.n, 0) - summary.added - summary.updated;
+      }
+    }
     db.prepare('UPDATE meta SET index_generation=?,last_scan_at=?,known_scan_roots=? WHERE id=1').run(generation, indexedAt, JSON.stringify(knownRoots));
-    const changed = db.prepare("UPDATE jobs SET status='succeeded',finished_at=?,summary_json=?,error_json=NULL WHERE id=? AND status='running'").run(indexedAt, JSON.stringify(summary), jobId);
+    const changed = db.prepare("UPDATE jobs SET status='succeeded',finished_at=?,summary_json=?,processed_files=?,error_json=NULL WHERE id=? AND status='running'").run(indexedAt, JSON.stringify(summary), projections.length + (options?.missingPaths.length ?? 0), jobId);
     if (changed.changes !== 1) throw new Error('Publishing scan has no running Job');
     retainFinishedJobs(db);
     return summary;

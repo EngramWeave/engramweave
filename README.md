@@ -202,7 +202,7 @@ npm run build
 npm run core -- --config D:/path/to/config.json
 ```
 
-启动后需显式扫描才会有检索结果。配置、认证、扫描、Capture 与恢复操作见 [Core 使用说明](docs/core.md)。
+启动后需显式扫描才会有检索结果。首次 Refresh 全量核对，后续按变化路径增量登记；Rebuild 始终全量。配置、认证、扫描、Capture 与恢复操作见 [Core 使用说明](docs/core.md)与[增量 Refresh](docs/incremental-refresh.md)。
 
 ### 启动 Desktop
 

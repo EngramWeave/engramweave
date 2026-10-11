@@ -40,7 +40,7 @@ health 外均需认证，Host 固定为配置的 `127.0.0.1:port`，浏览器 Or
 
 `revision` 是原文件字节 SHA-256，换行变化也会改变它。`indexed_revision` 是最后成功扫描的字节版本；未登记时为 null，generation=0，`index_stale=true`。详情读取比较当前 revision 与投影，但不更新数据库。逐文件 `indexed_at` 只在扫描稳定读取并计算 hash 后更新；列表时间表示整代发布，不能当成异常文件的成功读取时间。
 
-refresh 仍读取全部候选并计算 hash，只复用未变化文件的解析；rebuild 强制解析。文件投影、代次和成功 Job 在同一事务发布；枚举失败或总量超限保留上一代，不能发布部分 missing。`index_stale` 比较 Record 字节，不代表附件状态或网站存活。
+refresh 在 Core 本次启动后首先全量核对，之后按监听变化增量读取；不可靠的监听与周期核对回到全量，rebuild 始终全量读取并强制解析。未触及文件不重新计算 hash，也不推进其 `indexed_at`。详细边界见 [增量 Refresh](incremental-refresh.md)。文件投影、代次和成功 Job 在同一事务发布；枚举失败或总量超限保留上一代，不能发布部分 missing。`index_stale` 比较 Record 字节，不代表附件状态或网站存活。
 
 同路径更新保留内部 ID；移动/改名产生 missing + 新路径新 ID，不猜测重命名。同 URL/hash 的不同路径不合并。来源链为 Knowledge → Source Record → inline 内容、本地 Asset 或外部 locator；受限 Wiki Link 支持 alias/anchor，不做 basename 模糊搜索。外部 URI 只标 unverified，不联网或执行 scheme。
 
