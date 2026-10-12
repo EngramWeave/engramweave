@@ -47,7 +47,7 @@ Obsidian 打开 **Open ChangeSet candidates**，或从 Draft／Desktop 结果打
 
 Discard Source 撤销其审阅选择并清理未批准方案。**Restore Source** 只恢复该 Source 为 `active/pending`，不恢复旧 Draft、正式内容、审阅选择或 ChangeSet；各 Draft 的 Intent 仍保留。下一轮手动或已启用的定时处理可重新编译，恢复本身不启动模型。见 [Source 操作](sources.md)。
 
-当前仅提供候选生成、编辑、取消与恢复。完整结构影响审查、条目拒绝、最终批准属于 P3-B；正式 Executor 和 scoped Git 属于 P3-C/D。现有 MVP 人工新建入口保留其既有行为。
+当前仅提供候选生成、编辑、取消与恢复。完整结构影响审查、条目拒绝、最终批准、正式 Executor 和执行恢复合并为 P3-BC 一次交付，见 [BC 计划](../../engramweave-docs/.local/P3/P3_BC_IMPLEMENTATION_PLAN.md)。scoped Git 仍属 D。现有 MVP 人工新建入口保留其既有行为。
 
 ## 本地接口
 
