@@ -119,7 +119,7 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 
 **🔬 科研工作区与项目工作区** — 以研究问题为中心，把假设、论文、实验与证据组织进 `50_Research`；以项目为中心，把项目相关的知识与材料组织进 `60_Projects`，**知识不再只是给未来的自己存档，而是围绕一个真实问题持续积累。**
 
-**🔌 模型与 Agent 接入** — 每个 AI 任务都能分别选择 API 或 Agent 路径与模型，哪个环节交给谁由你决定；知识库也能开放给外部 AI 助手，让它们基于你的知识回答。**模型是租来的，知识是自己的——换一家 AI，知识库不用重建。**
+**🔌 模型与 Agent 接入** — 各 AI 任务分别配置模型，已有编译与分析支持 API／Agent；当前开发优先 Agent 接入和知识工具，模型 API 扩展暂缓；知识库也能开放给外部 AI 助手，让它们基于你的知识回答。**模型是租来的，知识是自己的——换一家 AI，知识库不用重建。**
 
 ---
 
@@ -162,7 +162,11 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 
 当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian 的 Review Note 可创建 Idea、提交反馈或确认当前 Draft，分别保留各稿 Intent 和 Source 的当前选择；AI 分析可跳过。MVP 人工直接入库是独立入口，Planner 和 ChangeSet 尚未实现。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)、[Processing](docs/processing.md)和 [Human Review](docs/human-review.md)。
 
-Zotero 插件将明确选中的 PDF 段落／高亮／批注保存为独立 Paper Source，保留 Annotation 和原位置，后续通过 Core 处理。P2 主终点为 Reviewed Draft + 该 Draft 自己的 Intent；旧稿和用户修改作为独立文件保留，不建设跨稿 diff 或 rollback 界面。P3 完成统一 Planner、ChangeSet 审查执行及 Git，MVP 人工直接入库继续保留。备份必须包含 Vault 与对应 Core 的接受回执，见 [备份与恢复](docs/recovery.md)。完整审阅整合、维护与科研增强尚未交付。
+Zotero 插件将明确选中的 PDF 段落／高亮／批注保存为独立 Paper Source，保留 Annotation 和原位置，后续通过 Core 处理。P2 主终点为 Reviewed Draft + 该 Draft 自己的 Intent；旧稿和用户修改作为独立文件保留，不建设跨稿 diff 或 rollback 界面。P3 将完成统一 Planner、ChangeSet 审查执行及 Git；人工快捷新建入口继续保留，不强制调用 Planner，但会共用 P3 Executor、归档恢复与自动 Git 提交，当前尚未实现这项统一。
+
+P3 将优先复用 Agent 运行器和 Core Tools／MCP，候选保存在 `70_ChangeSets`，在 Obsidian 内以左侧只读 Current、右侧可编辑 Candidate 审查；API 新增能力暂缓，P2 已有实现保留。这些仍为待实现范围，见 [P3 计划](../engramweave-docs/P3_IMPLEMENTATION_PLAN.md)。
+
+备份必须包含 Vault 与对应 Core 的接受回执，见 [备份与恢复](docs/recovery.md)。完整审阅整合、维护与科研增强尚未交付。
 
 ---
 

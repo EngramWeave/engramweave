@@ -70,6 +70,12 @@ An unarchived Source Record may have multiple Drafts, with one selected for fina
 
 Restoration defaults to Source only and offers related-object selection. Old Drafts discarded after successful integration are not automatically reactivated. ChangeSets do not participate in generic restoration.
 
+## Intended P3 Agent tools and candidate review
+
+P3 prioritizes the existing Codex runner and task-scoped Core Tools/MCP, with an Agent Planner and independently configured task models; new model API paths and quality optimization are deferred, while implemented P2 API behavior, client HTTP APIs and independent recall services remain supported. Reuse concrete P2 tools and the runner loop rather than building a new orchestration platform. Compiler stays submission-bound, Analyzers remain read-only, and Planner tools may write only their assigned candidates, never formal files or approval/application operations.
+
+Core will manage temporary Vault-root `70_ChangeSets/<id>/manifest.json` and `candidates/` mirroring formal target paths, excluding them from ordinary registration, Source/Draft discovery, full-text/semantic recall and Git. There is no persistent Base directory or automatic three-way merge; retain necessary execution preconditions and recovery receipts outside the Vault. Obsidian owns read-only Current/editable Candidate review, saving only candidates and preserving them when refreshing Current; Desktop does not add a second editable review surface. These are planned capabilities, not implemented contracts. See [the Agent-first decision](../engramweave-docs/docs/adr/0019-agent-first-delivery-and-core-tools.md) and [the Vault-local review decision](../engramweave-docs/docs/adr/0020-vault-local-changeset-review.md).
+
 ## Intended temporary plan retention
 
 Persist ChangeSets for review, approval, version/precondition-checked execution, and unresolved-operation recovery. Clean successfully consumed or explicitly canceled plans, retaining necessary Job results and errors. Do not clean unfinished work until its outcome is clear, especially archival-marker recovery. Formal content history belongs to Git rather than permanent copies of every ChangeSet.
@@ -86,7 +92,9 @@ Planner is one unified knowledge-reorganization capability. Creation, modificati
 
 ## Intended Vault Git behavior
 
-Track Ideas, Knowledge, Research, Projects, selected user System configuration, and Source Record Markdown files. Exclude independent Source Assets, Derived Representations, Drafts, and Inbox. After successful approved application, Core commits only the tracked files involved in that integration, including their earlier uncommitted user edits. It does not commit unrelated changes or require pre-planning commits. Users may manually commit edits or configure periodic commits. P1 does not implement Vault Git management; scoped commit and failure recovery belong to the integration extension.
+Track Ideas, Knowledge, Research, Projects, selected user System configuration, and Source Record Markdown files. Exclude independent Source Assets, Derived Representations, Drafts, ChangeSets, and Inbox. After successful approved application, Core commits only the tracked files involved in that integration, including their earlier uncommitted user edits. It does not commit unrelated changes or require pre-planning commits. Users may manually commit edits or configure periodic commits. P1 does not implement Vault Git management; scoped commit and failure recovery belong to the integration extension.
+
+After P3, the direct Publish to Knowledge shortcut remains a human-approved new-note path without a mandatory Planner call or another approval step. It shares P3 deterministic execution, archival/recovery and scoped Git commits with approved ChangeSets. The current P2 shortcut still uses its existing publication service and has no automatic Git; this extension is not yet implemented. Preserve recovery of accepted P2 publication receipts while integrating the shared executor. See [the shared publication decision](../engramweave-docs/docs/adr/0018-shared-execution-for-direct-publication.md).
 
 ## Sources presentation and explicit batch actions
 
