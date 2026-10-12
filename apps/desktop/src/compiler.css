@@ -13,6 +13,12 @@
 .draft-analysis select { width: 100%; min-height: 36px; border: 1px solid #dce6ff; border-radius: 8px; }
 .draft-analysis p { overflow-wrap: anywhere; font-size: 12px; }
 .compiler-form input[type="checkbox"] { width: auto; min-height: 0; margin-right: 8px; }
+.planner-enable { display: flex; align-items: center; gap: 8px; margin: 16px 0; font-size: 13px; }
+.planner-wide { grid-column: 1 / -1; }
+.planner-template-location { max-width: 800px; margin: 20px 0 12px; padding: 14px; border: 1px solid var(--border, #dce6ff); border-radius: 8px; }
+.planner-template-location strong { display: block; font-size: 13px; }
+.planner-template-location code { display: block; margin-top: 8px; overflow-wrap: anywhere; font-size: 13px; }
+.planner-template-location .hint { margin-bottom: 0; }
 .semantic-status { border: 1px solid #dce6ff; border-radius: 10px; padding: 12px; margin: 16px 0; }
 .source-compiler { border-top: 1px solid #dce6ff; padding: 16px; }
 .source-compiler .section-heading { flex-wrap: wrap; gap: 8px; }

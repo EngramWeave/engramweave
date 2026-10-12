@@ -4,9 +4,23 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { isolatedRuntime } from '../helpers/runtime.js';
 import { defaultSettings } from '../../packages/core/src/execution/settings.js';
-import { executeCodex } from '../../packages/core/src/execution/codex.js';
+import { executeCodex,executeCodexText } from '../../packages/core/src/execution/codex.js';
 
 describe('Codex subprocess result boundary', () => {
+  it('uses the exact task MCP whitelist and rejects foreign namespace or Analyzer write events',async()=>{
+    const runtime=await isolatedRuntime();
+    try{
+      await mkdir(runtime.config.data_dir);vi.stubEnv('NODE_OPTIONS',`--import=${pathToFileURL(path.resolve('tests/helpers/codex-child.mjs')).href}`);
+      vi.stubEnv('ENGRAMWEAVE_TEST_CODEX_MODE','mcp');vi.stubEnv('ENGRAMWEAVE_TEST_MCP_SERVER','planning');vi.stubEnv('ENGRAMWEAVE_TEST_MCP_TOOL','write_file');
+      const settings={...defaultSettings,codex_path:process.execPath};const capability={command:process.execPath,script:'assigned-mcp.js',env:{ENGRAMWEAVE_ANALYSIS_TOKEN:'private-task-capability'},namespace:'planning' as const,tools:['read_input','write_file']};
+      await executeCodexText(settings,runtime.config.data_dir,'{}',AbortSignal.timeout(10000),'Task',{},capability);
+      const directory=(await readdir(runtime.config.data_dir)).find(name=>name.startsWith('analyzer-codex-'))!;
+      const observed=JSON.parse(await readFile(path.join(runtime.config.data_dir,directory,'answer.json.observed.json'),'utf8'));
+      expect(observed.args).toContain('mcp_servers.planning.enabled_tools=["read_input","write_file"]');expect(observed.args).toContain('read-only');
+      vi.stubEnv('ENGRAMWEAVE_TEST_MCP_SERVER','analysis');await expect(executeCodexText(settings,runtime.config.data_dir,'{}',AbortSignal.timeout(10000),'Task',{},capability)).rejects.toMatchObject({code:'EXECUTION_FAILED'});
+      await expect(executeCodexText(settings,runtime.config.data_dir,'{}',AbortSignal.timeout(10000),'Task',{}, {...capability,namespace:'analysis',tools:['read_input','recall','read_evidence']})).rejects.toMatchObject({code:'EXECUTION_FAILED'});
+    }finally{vi.unstubAllEnvs();await runtime.cleanup();}
+  });
   it('accepts diagnostics followed by a completed structured result, strips API credentials, and refuses tool events', async () => {
     const runtime = await isolatedRuntime();
     try {

@@ -90,6 +90,11 @@ async fn open_document(
     .await
 }
 
+#[tauri::command]
+async fn open_changeset(state: State<'_,HostState>, id:String)->Result<()> {
+    with_host(&state,move|host|open::launch(&open::changeset_uri(host,id)?)).await
+}
+
 pub fn run() {
     let profile = std::env::var_os("ENGRAMWEAVE_CONFIG")
         .map(PathBuf::from)
@@ -106,7 +111,8 @@ pub fn run() {
             core_start,
             core_stop,
             core_request,
-            open_document
+            open_document,
+            open_changeset
         ])
         .setup(|app| {
             let window =

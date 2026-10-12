@@ -1,6 +1,6 @@
 # Obsidian Human Review
 
-在原生编辑器审阅 Draft 后，用一个 Review Note 输入明确选择 Create Idea、Recompile 或 Review Complete。三者不立即调用模型；Cancel Review Complete 是独立操作，不消费输入。MVP Publish to Knowledge 继续作为单独的人工入库入口，Planner／ChangeSet 留在 P3。
+在原生编辑器审阅 Draft 后，用一个 Review Note 输入明确选择 Create Idea、Recompile 或 Review Complete。三者不立即调用模型；Cancel Review Complete 是独立操作，不消费输入。MVP Publish to Knowledge 继续作为单独的人工入库入口；Agent Planner 与候选编辑见 [Planner 合同](planning.md)，完整批准／执行仍属后续 P3。
 
 ## 接口与资格
 
@@ -11,7 +11,7 @@
 
 这些接口沿用 loopback、Bearer、Host 和无 Origin 的边界。新动作支持一个 active Draft 对应一个 active Source。Idea 可来自未归档的 Source，拒绝全空输入；文件固定新建为 `10_Ideas/<request_id>.md`，原输入作为正文，Properties 保留 Source 和 Draft Wiki Links。它不改 Source 阶段，也不调用 Compiler／Analyzer／Embedding。
 
-Review Complete 要求 Source 为 compiled／reviewed，不要求任何 Analyzer 尝试或分析结果。用户可跳过 AI 分析直接人工确认；已有分析及其失败、过期情况仍作为参考展示。Core 将 Source 改为 reviewed，保存所选身份和该 Draft 本次 Intent。规划前明确确认同 Source 的 B 可以直接切换选择，A 与其 Intent 保留。普通编辑不撤销许可。Cancel 仅针对当前选择，提交空 `note`，reviewed→compiled，不改 Draft。运行中的模型、轮次或文件操作遵守 Core 的互斥保护。
+Review Complete 要求 Source 为 compiled／reviewed，不要求任何 Analyzer 尝试或分析结果。用户可跳过 AI 分析直接人工确认；已有分析及其失败、过期情况仍作为参考展示。Core 将 Source 改为 reviewed，保存所选身份和该 Draft 本次 Intent。规划前明确确认同 Source 的 B 可以直接切换选择，A 与其 Intent 保留。普通编辑不撤销许可。Cancel 仅针对当前选择，提交空 `note`，reviewed／planned→compiled，清理未批准方案，不改 Draft／Intent。planned 的选择也在正常启动与数据库重建后保留。运行中的模型、轮次或文件操作遵守 Core 的互斥保护。
 
 ## 持久化、重放和恢复
 

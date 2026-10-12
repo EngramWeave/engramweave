@@ -26,6 +26,7 @@ import {
 import { Jobs, Results } from './Lists';
 import { CompilerSettings } from './CompilerSettings';
 import { AnalysisSettings } from './AnalysisSettings';
+import { PlannerSettings } from './PlannerSettings';
 import { ProcessingSettings, ProcessingRounds } from './Processing';
 import { SemanticSettings, SemanticSearch } from './SemanticRecall';
 import { SourceCompiler } from './SourceCompiler';
@@ -406,9 +407,10 @@ export function App() {
             </div>
             <p className="muted">完整核对：完整检查文件变化，保留有效缓存；用于刷新结果疑似未更新时。</p>
             <p className="muted">重建索引：从当前文件重新登记，并清理缺失文件的登记条目；保留文件和任务历史。</p>
+            <ProcessingSettings connected={connected} onChange={refreshSources} />
             <CompilerSettings connected={connected} />
             <AnalysisSettings connected={connected} />
-            <ProcessingSettings connected={connected} onChange={refreshSources} />
+            <PlannerSettings connected={connected} />
             <SemanticSettings connected={connected} generation={status?.index_generation} onIndexChange={() => { void refresh().catch(error => report(error, 'operations')); }} />
             {errors.operations && <ErrorNotice error={errors.operations} />}
             <p className="hint">

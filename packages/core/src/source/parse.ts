@@ -52,6 +52,11 @@ export function jsonCompatible(value: unknown, seen = new Set<object>(), depth =
 
 export function parseMarkdown(relative: string, bytes: Buffer): ParsedDocument {
   markdownPath(relative);
+  return parseMarkdownContent(relative,bytes);
+}
+
+/** Parse bytes only; callers outside Registry must first validate their own path capability. */
+export function parseMarkdownContent(relative: string, bytes: Buffer): ParsedDocument {
   const kind = documentKind(relative);
   const diagnostics: Diagnostic[] = [];
   const report = (code: string, message: string) => diagnostics.push({ code, message, path: relative });

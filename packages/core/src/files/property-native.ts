@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { FileProblem } from './read.js';
 import { windowsFilesExecutable } from './native-path.js';
+import { normalizeVaultPath } from './paths.js';
 
 /** One lazily started native process per scan, not one compiler invocation per Source. */
 export class PropertyNative {
@@ -33,17 +34,27 @@ export class PropertyNative {
     const pending = this.pending; this.pending = undefined; clearTimeout(pending.timer);
     pending.reject(new FileProblem('PROPERTY_WRITE_INTERRUPTED', 'invalid', 'Native property commit was interrupted; inspect preserved artifacts'));
   }
-  async run(vault: string, relative: string, stem: string, before: string, after: string, manifest: string, recover = false, payload?: { manifest_bytes: string; replacement_bytes: string }, remove = false) {
+  async run(vault: string, relative: string, stem: string, before: string, after: string, manifest: string, recover = false, payload?: { manifest_bytes: string; replacement_bytes: string }, remove = false, mkdir = false) {
     if (this.pending) throw new Error('Property commits must be sequential');
     if (!this.child) this.start();
     return new Promise<{ mtime: number }>((resolve, reject) => {
       const timer = setTimeout(() => { this.child?.kill(); this.fail(); }, 30_000);
       this.pending = { resolve, reject, timer };
-      this.child!.stdin.write(JSON.stringify({ vault, relative, stem, before, after, manifest, recover, delete: remove, ...payload }) + '\n');
+      this.child!.stdin.write(JSON.stringify({ vault, relative, stem, before, after, manifest, recover, delete: remove, mkdir, ...payload }) + '\n');
     });
   }
   async remove(vault: string, relative: string, revision: string) {
     if (!/^20_Sources\/.+\.md$/i.test(relative) || relative.split('/').some(segment => !segment || segment === '.' || segment === '..' || /[\\:\x00-\x1f]/.test(segment))) throw new Error('Deletion requires an explicit Source Record path');
+    await this.run(vault, relative, '', revision, '', '', false, undefined, true);
+  }
+  async ensureTaskDirectory(vault: string, relative: string) {
+    normalizeVaultPath(relative);
+    if (!(relative === '70_ChangeSets' || /^70_ChangeSets\/[0-9a-f-]+(?:\/candidates(?:\/.+)?)?$/.test(relative) || relative === '90_System/Prompts')) throw new Error('Only task directories may be created');
+    await this.run(vault, relative, '', '', '', '', false, undefined, false, true);
+  }
+  async removeCandidate(vault: string, relative: string, revision: string) {
+    normalizeVaultPath(relative);
+    if (!/^70_ChangeSets\/[0-9a-f-]+\/(?:manifest\.json|candidates\/.+\.md)$/i.test(relative)) throw new Error('Only explicit candidate files may be removed');
     await this.run(vault, relative, '', revision, '', '', false, undefined, true);
   }
   async close() {

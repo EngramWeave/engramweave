@@ -16,7 +16,7 @@ AI 编译，你定稿。面向长期学习与研究的个人知识编译系统�
 
 </div>
 
-> 项目处于早期开发阶段，P1 本地基础已完成。下文描述产品设计与目标使用方式；完整的编译、分析、人工审阅和整合流程尚待实现，当前可用范围见[开发状态](#开发状态)。
+> 项目处于早期开发阶段，P1、P2 与 P3-A 开发已完成。下文描述产品设计与目标使用方式；完整的编译、分析、人工审阅和整合流程尚待实现，当前可用范围见[开发状态](#开发状态)。
 
 ---
 
@@ -153,18 +153,18 @@ AI 整合规划：决定如何融入已有体系    ← 优先复用已有结构
 
 ## 开发状态
 
-**P1 已完成，后续实施从 P2 开始。** 当前仓库包含：
+**P1、P2 已完成，P3-A 已提供 Agent Planner 与候选编辑。** Core 和 Desktop 的基础能力包括：
 
 - 独立运行的本地单 Vault Core、Source 登记与显式扫描。
 - 当前文件读取、来源引用和本地 Asset 定位、关键词与元数据检索。
 - web/manual Markdown Capture 和离线数据库投影恢复。
 - Tauri Desktop 的 Core 启停／连接、状态、Sources、扫描 Jobs、Search 与原生打开。
 
-当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian 的 Review Note 可创建 Idea、提交反馈或确认当前 Draft，分别保留各稿 Intent 和 Source 的当前选择；AI 分析可跳过。MVP 人工直接入库是独立入口，Planner 和 ChangeSet 尚未实现。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)、[Processing](docs/processing.md)和 [Human Review](docs/human-review.md)。
+当前登记覆盖 `10_Ideas`、`20_Sources`、`40_Knowledge` 和 `50_Research`，支持五阶段和独立生命周期，补全缺失属性并保护正文／Annotation。Compiler 成功追加 Draft，保留旧稿和编辑；三类笔记支持 BM25＋Embedding、可选 Reranker、首次明确建索引及 Refresh 增量更新。Analysis Profile 独立配置 Review／Relation；Core 完整轮次先登记再执行三项任务，并支持时间／间隔调度、有限重试、具体 Draft 单项／批量重分析。Recompile 只追加反馈并返回 pending，不立即调用模型。Obsidian 的 Review Note 可创建 Idea、提交反馈或确认当前 Draft，分别保留各稿 Intent 和 Source 的当前选择；AI 分析可跳过。MVP 人工直接入库是独立入口，Agent Planner 和候选编辑现已可用，完整批准／执行／Git 仍待后续阶段。参见 [Core](docs/core.md)、[Compiler](docs/compiler.md)、[语义召回](docs/semantic-recall.md)、[Analyzer](docs/analyzer.md)、[Processing](docs/processing.md)和 [Human Review](docs/human-review.md)。
 
 Zotero 插件将明确选中的 PDF 段落／高亮／批注保存为独立 Paper Source，保留 Annotation 和原位置，后续通过 Core 处理。P2 主终点为 Reviewed Draft + 该 Draft 自己的 Intent；旧稿和用户修改作为独立文件保留，不建设跨稿 diff 或 rollback 界面。P3 将完成统一 Planner、ChangeSet 审查执行及 Git；人工快捷新建入口继续保留，不强制调用 Planner，但会共用 P3 Executor、归档恢复与自动 Git 提交，当前尚未实现这项统一。
 
-P3 将优先复用 Agent 运行器和 Core Tools／MCP，候选保存在 `70_ChangeSets`，在 Obsidian 内以左侧只读 Current、右侧可编辑 Candidate 审查；API 新增能力暂缓，P2 已有实现保留。这些仍为待实现范围，见 [P3 计划](../engramweave-docs/P3_IMPLEMENTATION_PLAN.md)。
+P3 将优先复用 Agent 运行器和 Core Tools／MCP，候选保存在 `70_ChangeSets`，在 Obsidian 内以左侧只读 Current、右侧可编辑 Candidate 审查；API 新增能力暂缓，P2 已有实现保留。候选生成、编辑及恢复见 [Planner 合同](docs/planning.md)，后续批准、Executor 与 Git 范围见 [P3 计划](../engramweave-docs/P3_IMPLEMENTATION_PLAN.md)。
 
 备份必须包含 Vault 与对应 Core 的接受回执，见 [备份与恢复](docs/recovery.md)。完整审阅整合、维护与科研增强尚未交付。
 

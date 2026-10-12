@@ -1,9 +1,11 @@
 import { Type, type Static, type TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
+import { PlannerJobSchema } from './planning.js';
+export * from './planning.js';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 export const LIMITS = Object.freeze({
   markdown_bytes: 5 * 1024 * 1024,
   capture_json_bytes: 8 * 1024 * 1024,
@@ -136,7 +138,7 @@ export const AnalyzerJobSchema = object({ id: nonempty, kind: Type.Literal('anal
   source_path: CapturePathSchema, source_revision: RevisionSchema, draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: AnalysisProfileIdSchema,
   review: AnalyzerTaskStateSchema, relation: AnalyzerTaskStateSchema, error: nullable(ErrorSchema.properties.error) });
 export type AnalyzerJob = Static<typeof AnalyzerJobSchema>;
-export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema, AnalyzerJobSchema]);
+export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema, AnalyzerJobSchema, PlannerJobSchema]);
 export const AssetSchema = object({
   kind: enumeration(['inline_markdown', 'vault_file', 'external_ref']), locator: nonempty,
   availability: enumeration(['available', 'missing', 'unverified', 'unsupported']),
@@ -258,7 +260,8 @@ export const ProcessingRoundSchema = object({ id: nonempty, mode: enumeration(['
   registration_job_id: nullable(text), error: nullable(ErrorSchema.properties.error), items: Type.Array(object({
     source_path: CapturePathSchema, source_revision: nullable(RevisionSchema), draft_path: nullable(DraftPathSchema), draft_revision: nullable(RevisionSchema),
     status: enumeration(['pending','running','succeeded','failed','skipped','interrupted']),
-    phase: enumeration(['waiting','compiler','analyzer','finished']), task: Type.Optional(enumeration(['review','relation'])),
+    phase: enumeration(['waiting','compiler','analyzer','planner','finished']), task: Type.Optional(enumeration(['review','relation'])),
+    planner_job_id: Type.Optional(nullable(text)), changeset_id: Type.Optional(nullable(text)),
     compiler_job_id: nullable(text), analyzer_job_id: nullable(text), error: nullable(ErrorSchema.properties.error),
   }), { maxItems: 10000 }) });
 export type ProcessingRound = Static<typeof ProcessingRoundSchema>;

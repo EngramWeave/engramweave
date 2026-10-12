@@ -47,7 +47,10 @@ CREATE UNIQUE INDEX one_active_round ON processing_rounds((1)) WHERE json_extrac
 CREATE TABLE execution_attempts (job_id TEXT NOT NULL, task TEXT NOT NULL, number INTEGER NOT NULL, attempt_json TEXT NOT NULL CHECK(json_valid(attempt_json)), PRIMARY KEY(job_id,task,number));
 CREATE TABLE recompile_actions (id TEXT PRIMARY KEY, path_key TEXT NOT NULL, path TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE INDEX recompile_source ON recompile_actions(path_key);`;
-const schema = version4Schema.replace('PRAGMA user_version=4;', '') + processingSchema + '\nPRAGMA user_version=5;';
+const version5Schema = version4Schema.replace('PRAGMA user_version=4;', '') + processingSchema + '\nPRAGMA user_version=5;';
+const plannerSchema = `CREATE TABLE planner_jobs (id TEXT PRIMARY KEY, job_json TEXT NOT NULL CHECK(json_valid(job_json)), request_json TEXT NOT NULL CHECK(json_valid(request_json)));
+CREATE UNIQUE INDEX one_active_planner ON planner_jobs((1)) WHERE json_extract(job_json,'$.status') IN ('queued','running');`;
+const schema = version5Schema.replace('PRAGMA user_version=5;', '') + plannerSchema + '\nPRAGMA user_version=6;';
 const columns = {
   documents: 'id path_key path kind state revision size mtime title source_type captured_at original_locator metadata_json asset_json diagnostics_json annotation body_markdown title_norm body_norm annotation_norm metadata_norm indexed_at'.split(' '),
   jobs: 'id kind mode status created_at started_at finished_at processed_files summary_json error_json'.split(' '),
@@ -78,12 +81,12 @@ export async function openDatabase(config: Config): Promise<Database.Database> {
       initialize();
     } else {
       const legacy = version === 1;
-      if (![1, 2, 3, 4, SCHEMA_VERSION].includes(version as number) || tables.map(table => table.name).join(',') !== (legacy ? 'documents,jobs,meta' : version === 5 ? 'analyzer_jobs,compiler_jobs,documents,execution_attempts,jobs,meta,processing_rounds,recompile_actions' : version === 4 ? 'analyzer_jobs,compiler_jobs,documents,jobs,meta' : 'compiler_jobs,documents,jobs,meta')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Unsupported database schema');
-      for (const [table, required] of Object.entries(legacy ? columns : { ...columns, compiler_jobs: compilerColumns, ...(Number(version) >= 4 ? { analyzer_jobs: ['id','job_json','request_json'] } : {}), ...(version === 5 ? { processing_rounds: ['id','request_json','round_json'], execution_attempts: ['job_id','task','number','attempt_json'], recompile_actions: ['id','path_key','path','created_at'] } : {}) })) {
+      if (![1, 2, 3, 4, 5, SCHEMA_VERSION].includes(version as number) || tables.map(table => table.name).join(',') !== (legacy ? 'documents,jobs,meta' : version === 6 ? 'analyzer_jobs,compiler_jobs,documents,execution_attempts,jobs,meta,planner_jobs,processing_rounds,recompile_actions' : version === 5 ? 'analyzer_jobs,compiler_jobs,documents,execution_attempts,jobs,meta,processing_rounds,recompile_actions' : version === 4 ? 'analyzer_jobs,compiler_jobs,documents,jobs,meta' : 'compiler_jobs,documents,jobs,meta')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Unsupported database schema');
+      for (const [table, required] of Object.entries(legacy ? columns : { ...columns, compiler_jobs: compilerColumns, ...(Number(version) >= 4 ? { analyzer_jobs: ['id','job_json','request_json'] } : {}), ...(Number(version) >= 5 ? { processing_rounds: ['id','request_json','round_json'], execution_attempts: ['job_id','task','number','attempt_json'], recompile_actions: ['id','path_key','path','created_at'] } : {}), ...(version === 6 ? { planner_jobs: ['id','job_json','request_json'] } : {}) })) {
         const actual = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
         if (actual.map(column => column.name).join(',') !== required.join(',')) throw new CoreError('SCHEMA_UNSUPPORTED', 'Database layout does not match its version');
       }
-      for (const statement of (legacy ? legacySchema : version === 2 ? version2Schema : version === 3 ? version3Schema : version === 4 ? version4Schema : schema).split(';').map(item => item.trim()).filter(item => item.startsWith('CREATE'))) {
+      for (const statement of (legacy ? legacySchema : version === 2 ? version2Schema : version === 3 ? version3Schema : version === 4 ? version4Schema : version === 5 ? version5Schema : schema).split(';').map(item => item.trim()).filter(item => item.startsWith('CREATE'))) {
         const name = /^CREATE (?:TABLE|(?:UNIQUE )?INDEX) (\w+)/.exec(statement)?.[1];
         const actual = db.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(name) as { sql: string } | undefined;
         if (!actual || normalizeDdl(actual.sql) !== normalizeDdl(statement)) throw new CoreError('SCHEMA_UNSUPPORTED', 'Database constraints do not match their version');
@@ -101,7 +104,8 @@ export async function openDatabase(config: Config): Promise<Database.Database> {
           db!.exec('INSERT INTO documents SELECT * FROM documents_old; DROP TABLE documents_old;');
           db!.exec(analyzerSchema);
         }
-        db!.exec(processingSchema);
+        if (Number(version) < 5) db!.exec(processingSchema);
+        db!.exec(plannerSchema);
         db!.prepare('UPDATE meta SET schema_version=? WHERE id=1').run(SCHEMA_VERSION);
         db!.pragma(`user_version=${SCHEMA_VERSION}`);
       })();

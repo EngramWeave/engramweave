@@ -117,7 +117,8 @@ export class SourceBatches {
     if (target.path.startsWith('30_Drafts/')) parseDraft(target.path, file);
     else if (parseMarkdown(target.path, file.bytes).state !== 'ready') throw new CoreError('INVALID_SOURCE', 'Lifecycle target is not readable', 422);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
-    const updated = /^---\r?\n/.test(text) ? editScalarProperty(file.bytes, 'lifecycle_status', status) : Buffer.from(`---\nlifecycle_status: ${status}\n---\n${text}`);
+    let updated = /^---\r?\n/.test(text) ? editScalarProperty(file.bytes, 'lifecycle_status', status) : Buffer.from(`---\nlifecycle_status: ${status}\n---\n${text}`);
+    if (status === 'active' && target.path.startsWith('20_Sources/')) updated = editScalarProperty(updated, 'processing_status', 'pending');
     const committed = file.bytes.equals(updated) ? file : await writeLifecycleProperties(this.config.vault_path, target.path, file, updated, native);
     if (!target.path.startsWith('30_Drafts/')) {
       updateCompiledSource(this.db, target.path, committed, parseMarkdown(target.path, committed.bytes));
@@ -192,6 +193,7 @@ export class SourceBatches {
             })();
             relations.invalidate();
           } else {
+            if (input.action === 'restore' && parsed.lifecycle_status !== 'discarded') throw new CoreError('PATH_CONFLICT', 'Restore requires a discarded Source', 409);
             if (input.action === 'discard' || input.action === 'discard_drafts') {
               if (parsed.lifecycle_status !== 'active') throw new CoreError('PATH_CONFLICT', 'Select active Sources for Discard actions', 409);
               const preview = await this.preview(item.path, true, current);

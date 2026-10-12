@@ -26,14 +26,14 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
   } });
   server.route({ ...API.jobs, handler(request) {
     const { limit, offset } = pagination(request.query as PaginationQuery);
-    const { jobs, compiler, analyzer } = services();
+    const { jobs, compiler, analyzer, planner } = services();
     const scans = jobs.list(Number.MAX_SAFE_INTEGER, 0);
-    const items = [...scans.items, ...(compiler?.all() ?? []), ...(analyzer?.all() ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+    const items = [...scans.items, ...(compiler?.all() ?? []), ...(analyzer?.all() ?? []), ...(planner?.all() ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
     return { items: items.slice(offset, offset + limit), total: items.length, limit, offset };
   } });
   server.route({ ...API.job, handler(request) {
     const id = (request.params as { id: string }).id;
-    const job = services().jobs.get(id) ?? services().compiler?.get(id) ?? services().analyzer?.get(id);
+    const job = services().jobs.get(id) ?? services().compiler?.get(id) ?? services().analyzer?.get(id) ?? services().planner?.get(id);
     if (!job) throw new CoreError('JOB_NOT_FOUND', 'Job does not exist', 404);
     return job;
   } });
@@ -75,7 +75,7 @@ export function registerRegistryRoutes(server: FastifyInstance, config: Config, 
       catch { semantic = { state: 'failed', stale_documents: 0, error: 'Semantic index is unavailable; inspect Recall settings and rebuild explicitly.' }; }
     }
     const status: Status = { status: 'ready', core_version: CORE_VERSION, api_version: API_VERSION, instance_id,
-      vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? services().analyzer?.active() ?? null,
+      vault_path: config.vault_path, data_dir: config.data_dir, database_initialized: true, active_job: jobs.active() ?? services().compiler?.active() ?? services().analyzer?.active() ?? services().planner?.active() ?? null,
       index_generation: meta.index_generation, last_scan_at: meta.last_scan_at, counts, scan_roots: roots, limits: LIMITS, source_batch: services().batches?.latest() ?? null,
       processing_round: services().processing?.active() ?? null,
       ...(services().scheduler ? {processing_schedule:services().scheduler!.read()} : {}),

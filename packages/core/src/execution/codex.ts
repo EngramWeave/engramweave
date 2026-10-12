@@ -10,7 +10,7 @@ export async function executeCodex(settings: CompilerSettings, dataDirectory: st
   return compilerResult(await executeCodexText(settings, dataDirectory, prompt, signal, instructions, resultJsonSchema));
 }
 export async function executeCodexText(settings: CompilerSettings, dataDirectory: string, prompt: string, signal: AbortSignal, instructions: string, outputSchema: object,
-  mcp?: { command: string; script: string; env: NodeJS.ProcessEnv }) {
+  mcp?: { command: string; script: string; env: NodeJS.ProcessEnv; namespace?: 'analysis' | 'planning'; tools?: readonly string[] }) {
   if (!settings.codex_path || !path.isAbsolute(settings.codex_path)) throw new CoreError('CONFIG_ERROR', 'Configure an absolute Codex executable path', 400);
   const executable = await lstat(settings.codex_path).catch(() => null);
   if (!executable?.isFile() || executable.isSymbolicLink()) throw new CoreError('CONFIG_ERROR', 'Configured Codex executable is unavailable or linked', 400);
@@ -24,11 +24,12 @@ export async function executeCodexText(settings: CompilerSettings, dataDirectory
   const env = { ...process.env };
   for (const name of Object.keys(env)) if (/^(OPENAI_API_KEY|CODEX_API_KEY|OPENAI_BASE_URL|CODEX_ACCESS_TOKEN|ENGRAMWEAVE_HOST_STDIN)$/i.test(name)) delete env[name];
   if (mcp) {
+    const namespace = mcp.namespace ?? 'analysis'; const names = mcp.tools ?? ['read_input','recall','read_evidence'];
     Object.assign(env, mcp.env);
-    args.splice(args.length - 1, 0, '-c', `mcp_servers.analysis.command=${JSON.stringify(mcp.command)}`, '-c', `mcp_servers.analysis.args=${JSON.stringify([mcp.script])}`,
-      '-c', 'mcp_servers.analysis.env_vars=["ENGRAMWEAVE_ANALYSIS_URL","ENGRAMWEAVE_ANALYSIS_TOKEN"]', '-c', 'mcp_servers.analysis.enabled_tools=["read_input","recall","read_evidence"]',
-      '-c', 'mcp_servers.analysis.required=true', '-c', 'mcp_servers.analysis.default_tools_approval_mode="auto"',
-      '-c', 'features.code_mode.direct_only_tool_namespaces=["mcp__analysis"]');
+    args.splice(args.length - 1, 0, '-c', `mcp_servers.${namespace}.command=${JSON.stringify(mcp.command)}`, '-c', `mcp_servers.${namespace}.args=${JSON.stringify([mcp.script])}`,
+      '-c', `mcp_servers.${namespace}.env_vars=["ENGRAMWEAVE_ANALYSIS_URL","ENGRAMWEAVE_ANALYSIS_TOKEN"]`, '-c', `mcp_servers.${namespace}.enabled_tools=${JSON.stringify(names)}`,
+      '-c', `mcp_servers.${namespace}.required=true`, '-c', `mcp_servers.${namespace}.default_tools_approval_mode="auto"`,
+      '-c', `features.code_mode.direct_only_tool_namespaces=${JSON.stringify([`mcp__${namespace}`])}`);
   }
   const secrets = [mcp?.env.ENGRAMWEAVE_ANALYSIS_TOKEN, process.env.OPENAI_API_KEY, process.env.CODEX_API_KEY, process.env.CODEX_ACCESS_TOKEN].filter((v): v is string => Boolean(v));
   const redact = (text: string) => secrets.reduce((result, secret) => result.split(secret).join('[redacted]'), text);
@@ -43,7 +44,7 @@ export async function executeCodexText(settings: CompilerSettings, dataDirectory
     if (event.type === 'turn.failed' || event.type === 'error') throw new CoreError('EXECUTION_FAILED', 'Codex could not complete the Compiler task');
     if (event.type === 'turn.completed') completed = true;
     if (event.item && !['agent_message', 'reasoning', 'error'].includes(event.item.type)) {
-      if (!mcp || event.item.type !== 'mcp_tool_call' || event.item.server !== 'analysis' || !['read_input','recall','read_evidence'].includes(event.item.tool)) throw new CoreError('EXECUTION_FAILED', 'Runner attempted a tool outside its task contract');
+      if (!mcp || event.item.type !== 'mcp_tool_call' || event.item.server !== (mcp.namespace ?? 'analysis') || !(mcp.tools ?? ['read_input','recall','read_evidence']).includes(event.item.tool)) throw new CoreError('EXECUTION_FAILED', 'Runner attempted a tool outside its task contract');
     }
   }
   if (!completed) throw new CoreError('EXECUTION_FAILED', 'Codex did not complete its task');

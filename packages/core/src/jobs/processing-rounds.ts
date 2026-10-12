@@ -12,6 +12,7 @@ import type { ProcessingSettingsStore } from '../processing/settings.js';
 import type { ScanJobs } from './scans.js';
 import type { CompilerJobs } from './compiler.js';
 import type { AnalyzerJobs } from './analyzer.js';
+import type { PlannerJobs } from './planner.js';
 
 export class ProcessingRounds {
   private accepting = false;
@@ -20,7 +21,7 @@ export class ProcessingRounds {
   private controller: AbortController | null = null;
   constructor(private readonly db: Database.Database, private readonly config: Config, private readonly scans: ScanJobs,
     private readonly compiler: CompilerJobs, private readonly analyzer: AnalyzerJobs, private readonly settings: ProcessingSettingsStore,
-    private readonly otherBusy: () => boolean) {}
+    private readonly otherBusy: () => boolean, private readonly planner: () => PlannerJobs | undefined = () => undefined) {}
   private save(round: ProcessingRound, request: ProcessingRequest) {
     this.db.prepare('INSERT INTO processing_rounds VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET round_json=excluded.round_json').run(round.id, JSON.stringify(request), JSON.stringify(round));
   }
@@ -88,11 +89,21 @@ export class ProcessingRounds {
         try {
           const source = await readMarkdown(this.config.vault_path, item.source_path); const parsed = parseMarkdown(item.source_path, source.bytes);
           if (item.source_revision && source.revision !== item.source_revision) throw new CoreError('SOURCE_CHANGED', 'Selected Source changed before processing', 409);
-          if (parsed.state !== 'ready' || parsed.lifecycle_status !== 'active' || parsed.asset?.kind !== 'inline_markdown'
-            || (request.mode === 'analyze' ? parsed.processing_status === 'archived' : !(request.mode === 'pending' ? ['pending'] : ['pending','compiled']).includes(parsed.processing_status ?? ''))) {
+          if (parsed.state !== 'ready' || parsed.lifecycle_status !== 'active' || parsed.processing_status !== 'reviewed' && parsed.asset?.kind !== 'inline_markdown'
+            || (request.mode === 'analyze' ? parsed.processing_status === 'archived' : !(request.mode === 'pending' ? ['pending','reviewed'] : ['pending','compiled','reviewed']).includes(parsed.processing_status ?? ''))) {
             item.status = 'skipped'; item.error = attemptError(new CoreError('INVALID_SOURCE', parsed.processing_status === 'reviewed' ? 'Reviewed Source is awaiting Planner; this phase does not execute planning' : 'Source is no longer eligible for this round', 422)); continue;
           }
           item.source_revision = source.revision;
+          if (request.mode !== 'analyze' && parsed.processing_status === 'reviewed') {
+            const planner = this.planner();
+            if (!planner) { item.status = 'skipped'; item.error = attemptError(new CoreError('CONFIG_ERROR', 'Planner is not configured', 400)); continue; }
+            item.phase = 'planner';
+            const planned = await planner.submit({ request_id: randomUUID(), source_path: item.source_path, source_revision: source.revision }, { maxRetries: round.max_retries });
+            item.planner_job_id = planned.job.id; item.draft_path = planned.job.draft_path; item.draft_revision = planned.job.draft_revision; this.save(round, request);
+            await planner.wait(); const job = planner.get(planned.job.id)!;
+            item.changeset_id = job.changeset_id; item.status = job.status === 'succeeded' ? 'succeeded' : signal.aborted ? 'interrupted' : 'failed'; item.error = job.error as typeof item.error;
+            continue;
+          }
           if (request.mode !== 'analyze') {
             signal.throwIfAborted(); item.phase = 'compiler';
             const compiled = await this.compiler.submit({ request_id: randomUUID(), path: item.source_path, revision: source.revision }, { maxRetries: round.max_retries });
@@ -116,7 +127,7 @@ export class ProcessingRounds {
     finally { round.finished_at = new Date().toISOString(); this.save(round, request); this.controller = null; }
   }
   async cancel(id: string) {
-    if (this.active()?.id === id) { this.controller?.abort(); const compiler = this.compiler.active(); if (compiler) await this.compiler.cancel(compiler.id); const analyzer = this.analyzer.active(); if (analyzer) await this.analyzer.cancel(analyzer.id); await this.running; }
+    if (this.active()?.id === id) { this.controller?.abort(); const compiler = this.compiler.active(); if (compiler) await this.compiler.cancel(compiler.id); const analyzer = this.analyzer.active(); if (analyzer) await this.analyzer.cancel(analyzer.id); const planner = this.planner(); const planning = planner?.active(); if (planning) await planner!.cancel(planning.id); await this.running; }
     const round = this.get(id); if (!round) throw new CoreError('JOB_NOT_FOUND', 'Processing round not found', 404); return round;
   }
   async wait() { await this.running; }

@@ -37,7 +37,7 @@ Discard Drafts 弹窗支持逐份勾选和全选，只标记明确选择的 acti
 
 missing Source 仍可执行 Discard Drafts：关联关系来自现存 Draft 的 `sources`，不依赖 Source 文件或登记 ID。弹窗仅列出 active Draft，提交时再检查它们的关联及字节版本，只标记勾选项。即使 Rebuild 已移除 Source 登记，HTTP 按 source_path 查 Draft 或预览关联仍可用；Source Inspector 入口随登记条目消失。Source 根整体不可用时不将其当作单文件删除。登记清理不修复原有来源链接。
 
-Restore 默认只恢复所选 Source 为 active，原阶段保留；不自动恢复旧 Draft 或正式知识。
+Restore 只恢复所选 discarded Source 为 `active`，并统一将 `processing_status` 重置为 `pending`；旧 Draft、正式知识和各 Draft 的 Intent 保留，不重新激活，也不恢复已取消的 ChangeSet 或审阅选择。恢复不立即调用模型，下一轮手动或已启用的定时处理按 pending 资格重新编译。对已经 active 的 Source 提交新的 Restore 请求会跳过，避免重置进行中的流程。
 
 Delete permanently 是独立的不可撤销操作，只接受已 discarded、可安全读取的 Source。弹窗列出待删 Source Record，仍被 active 正式知识引用的项默认不勾选；查看警示及引用列表后，勾选表示明确确认保留坏链。执行时再检查 revision 和引用，原生句柄在锁定父目录及目标身份后删除文件，拒绝 hardlink、隐藏文件、reparse point 和只读文件。当前 inline Record 连同正文删除，登记投影清除；关联 Draft、正式知识和外部或未证明 Capture 专属的 Asset 保留。当前没有独立 Capture-owned Asset 或 Derived Representation 可清理；对应能力必须有归属证明后再扩展，不能按目录推测。
 

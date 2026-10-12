@@ -11,6 +11,9 @@ import { ProcessingSettingsStore } from '../../packages/core/src/processing/sett
 import { defaultSettings } from '../../packages/core/src/execution/settings.js';
 import { CoreError } from '../../packages/core/src/errors.js';
 import { readMarkdown } from '../../packages/core/src/files/read.js';
+import {HumanReviewActions} from '../../packages/core/src/review/human.js';
+import {PlannerJobs} from '../../packages/core/src/jobs/planner.js';
+import {defaultPlannerSettings} from '../../packages/core/src/planning/settings.js';
 
 async function fixture(failReview = false, beforeCompiler?: (vault: string, signal: AbortSignal) => Promise<void>) {
   const calls: string[] = [];
@@ -20,9 +23,27 @@ async function fixture(failReview = false, beforeCompiler?: (vault: string, sign
   let semantic = 0; const scans = new ScanJobs(f.db,f.config.vault_path,() => false, async () => { semantic++; });
   const settings = new ProcessingSettingsStore(f.config.data_dir); await settings.initialize();
   const rounds = new ProcessingRounds(f.db,f.config,scans,compiler,f.analyzer,settings,() => false); rounds.initialize();
-  return { ...f, calls, compiler, scans, rounds, semantic: () => semantic, async close() { await rounds.close(); await compiler.close(); await scans.close(); await f.close(); } };
+  return { ...f, calls, compiler, scans, rounds, settings, semantic: () => semantic, async close() { await rounds.close(); await compiler.close(); await scans.close(); await f.close(); } };
 }
 describe('Core-owned complete processing rounds', () => {
+  it('routes manual and scheduled reviewed rounds only to Planner and does not replan planned Sources',async()=>{
+    const f=await fixture();const human=new HumanReviewActions(f.config,f.db,()=>false);await human.initialize();
+    const planner=new PlannerJobs(f.db,f.config,f.recall,human,()=>false,undefined,async(snapshot,tools)=>{
+      f.calls.push('planner');await tools.call('write_file',{target:'40_Knowledge/planned.md',content:`---\nsources: ["[[${snapshot.source.path}]]"]\n---\nSelected knowledge.`,reason:'Integration'});return{changeset_id:tools.changesetId,summary:'Complete'};
+    });await planner.initialize();await planner.settings.save({...defaultPlannerSettings,enabled:true,codex_path:process.execPath});
+    const rounds=new ProcessingRounds(f.db,f.config,f.scans,f.compiler,f.analyzer,f.settings,()=>false,()=>planner);rounds.initialize();
+    try{
+      for(const trigger of ['manual','schedule'] as const){
+        const source=await readMarkdown(f.config.vault_path,f.sourcePath),draft=await readMarkdown(f.config.vault_path,f.draftPath);
+        await human.submit({request_id:randomUUID(),action:'complete',note:'Use selected Draft',source_path:f.sourcePath,source_revision:source.revision,draft_path:f.draftPath,draft_revision:draft.revision});
+        const id=randomUUID();await rounds.submit({request_id:id,mode:'pending'},trigger);await rounds.wait();
+        expect(rounds.get(id)).toMatchObject({status:'succeeded',trigger,items:[{status:'succeeded',compiler_job_id:null,analyzer_job_id:null,planner_job_id:expect.any(String),changeset_id:expect.any(String)}]});
+        const again=randomUUID();await rounds.submit({request_id:again,mode:'pending'},trigger);await rounds.wait();expect(rounds.get(again)?.items).toEqual([]);
+        const ready=(await planner.changesets.list())[0]!;await planner.cancelChangeSet(ready.id);
+      }
+      expect(f.calls).toEqual(['planner','planner']);
+    }finally{await rounds.close();await planner.close();await human.close();await f.close();}
+  });
   it('registers new Capture without Refresh, processes only eligible pending Sources, and replays one round', async () => {
     const f = await fixture();
     try {

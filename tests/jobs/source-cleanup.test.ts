@@ -127,7 +127,7 @@ it('publishes durable completion before accepting an immediately following batch
   const batches = new SourceBatches(fixture.config, fixture.db, fixture.compiler, () => false);
   try {
     for (let index = 0; index < 5; index++) {
-      const input = { id: randomUUID(), action: 'restore' as const, items: [{ path: fixture.sourcePath, revision: fixture.revision, request_id: randomUUID() }] };
+      const input = { id: randomUUID(), action: index % 2 === 0 ? 'discard' as const : 'restore' as const, items: [{ path: fixture.sourcePath, revision: (await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).revision, request_id: randomUUID() }] };
       await batches.submit(input);
       while (batches.get(input.id).status === 'running') await new Promise<void>(resolve => setImmediate(resolve));
       const saved = JSON.parse(await readFile(path.join(fixture.config.data_dir, 'source-batch.json'), 'utf8'));

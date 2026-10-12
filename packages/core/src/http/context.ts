@@ -10,6 +10,7 @@ import type { ProcessingSettingsStore } from '../processing/settings.js';
 import type { ProcessingScheduler } from '../processing/scheduler.js';
 import type { RecompileActions } from '../review/recompile.js';
 import type { HumanReviewActions } from '../review/human.js';
+import type { PlannerJobs } from '../jobs/planner.js';
 
 export interface CoreServices { db: Database.Database; jobs: ScanJobs; compiler?: CompilerJobs; batches?: SourceBatches; recall?: SemanticRecall; analyzer?: AnalyzerJobs; publications?: DraftPublications;
-  processing?: ProcessingRounds; processingSettings?: ProcessingSettingsStore; scheduler?: ProcessingScheduler; recompile?: RecompileActions; humanReview?: HumanReviewActions; instance_id: string }
+  processing?: ProcessingRounds; processingSettings?: ProcessingSettingsStore; scheduler?: ProcessingScheduler; recompile?: RecompileActions; humanReview?: HumanReviewActions; planner?: PlannerJobs; instance_id: string }

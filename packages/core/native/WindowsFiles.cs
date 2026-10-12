@@ -8,6 +8,25 @@ using Microsoft.Win32.SafeHandles;
 public static class SourcePropertyCommit {
   public static long BytesRead;
   public static double PublishedMtime;
+  public static void EnsureDirectory(string vault, string relative) {
+    BytesRead=0; PublishedMtime=0;
+    if(relative==null || relative.StartsWith("/") || relative.IndexOf('\\')>=0 || relative.IndexOf(':')>=0) throw new IOException("Invalid task directory");
+    var handles=new List<SafeFileHandle>();
+    try {
+      string full=Path.GetFullPath(vault), current=Path.GetPathRoot(full);
+      if(current.Length!=3 || current[1]!=':') throw new IOException("Local volume required");
+      handles.Add(Open(current,true,false,true));
+      foreach(string segment in full.Substring(current.Length).Split(new char[]{Path.DirectorySeparatorChar},StringSplitOptions.RemoveEmptyEntries)) {
+        current=Path.Combine(current,segment); handles.Add(Open(current,true,false,!String.Equals(current,full,StringComparison.OrdinalIgnoreCase)));
+      }
+      foreach(string segment in relative.Split('/')) {
+        if(segment.Length==0 || segment=="." || segment==".." || segment.EndsWith(".") || segment.EndsWith(" ")) throw new IOException("Invalid task segment");
+        current=Path.Combine(current,segment);
+        if(!Directory.Exists(current)) Directory.CreateDirectory(current);
+        handles.Add(Open(current,true));
+      }
+    } finally { for(int i=handles.Count-1;i>=0;i--) handles[i].Dispose(); }
+  }
   [StructLayout(LayoutKind.Sequential)] struct Info {
     public uint Attributes; public System.Runtime.InteropServices.ComTypes.FILETIME Creation, Access, Write;
     public uint Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
@@ -192,7 +211,8 @@ public static class Program {
           Console.WriteLine(json.Serialize(values));
         } else {
           var r = json.Deserialize<Dictionary<string, object>>(line);
-          SourcePropertyCommit.Run(Text(r,"vault"),Text(r,"relative"),Text(r,"stem"),Text(r,"before"),Text(r,"after"),Text(r,"manifest"),Flag(r,"recover"),Text(r,"manifest_bytes"),Text(r,"replacement_bytes"),Flag(r,"delete"));
+          if(Flag(r,"mkdir")) SourcePropertyCommit.EnsureDirectory(Text(r,"vault"),Text(r,"relative"));
+          else SourcePropertyCommit.Run(Text(r,"vault"),Text(r,"relative"),Text(r,"stem"),Text(r,"before"),Text(r,"after"),Text(r,"manifest"),Flag(r,"recover"),Text(r,"manifest_bytes"),Text(r,"replacement_bytes"),Flag(r,"delete"));
           Console.WriteLine(json.Serialize(new { ok=true, read_bytes=SourcePropertyCommit.BytesRead, mtime=SourcePropertyCommit.PublishedMtime }));
         }
       } catch {

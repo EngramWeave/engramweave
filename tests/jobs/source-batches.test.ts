@@ -43,10 +43,32 @@ it('runs selected Sources sequentially and applies the single-item Discard and S
     expect(await readFile(path.join(fixture.config.vault_path, '40_Knowledge/formal.md'), 'utf8')).toBe(formal);
     const restore = { id: randomUUID(), action: 'restore' as const, items: [{ path: fixture.sourcePath, revision: (await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).revision, request_id: randomUUID() }] };
     await batches.submit(restore); expect((await completed(batches, restore.id)).items[0]?.status).toBe('succeeded');
+    const restored = await readFile(path.join(fixture.config.vault_path, fixture.sourcePath), 'utf8');
+    expect(restored).toContain('processing_status: pending'); expect(restored).toContain('lifecycle_status: active');
+    expect(restored.split('---')[2]).toBe(sourceText.split('---')[2]);
+    expect(restored).toContain('annotation: "I understand that memory is reconstructed."');
+    expect(await readFile(path.join(fixture.config.vault_path, '40_Knowledge/formal.md'), 'utf8')).toBe(formal);
+    expect((await batches.submit(restore)).id).toBe(restore.id);
+    const redundantRestore = { ...restore, id: randomUUID(), items: [{ ...restore.items[0]!, revision: (await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).revision, request_id: randomUUID() }] };
+    await batches.submit(redundantRestore); expect((await completed(batches, redundantRestore.id)).items[0]).toMatchObject({ status: 'skipped', error: { code: 'PATH_CONFLICT' } });
+    expect(await readFile(path.join(fixture.config.vault_path, fixture.sourcePath), 'utf8')).toBe(restored);
     expect((await readDraft(fixture.config.vault_path, preview.drafts[0]!.path)).lifecycle_status).toBe('discarded');
     const changed = { id: randomUUID(), action: 'compile' as const, items: [items[1]!] };
     await batches.submit(changed); expect((await completed(batches, changed.id)).items[0]?.status).toBe('skipped');
     expect(calls).toBe(2);
+  } finally { await batches.close(); await fixture.close(); }
+});
+it.each(['pending', 'reviewed', 'archived'])('restores a discarded %s Source to pending without executing the Compiler', async stage => {
+  let calls = 0;
+  const fixture = await compilerFixture(async () => { calls++; return { title: 'Unexpected', body: 'No automatic compilation.' }; }, sourceText.replace('processing_status: pending', `processing_status: ${stage}`).replace('lifecycle_status: active', 'lifecycle_status: discarded'));
+  const batches = new SourceBatches(fixture.config, fixture.db, fixture.compiler, () => false);
+  try {
+    const input = { id: randomUUID(), action: 'restore' as const, items: [{ path: fixture.sourcePath, revision: fixture.revision, request_id: randomUUID() }] };
+    await batches.submit(input); expect((await completed(batches, input.id)).items[0]?.status).toBe('succeeded');
+    const restored = (await readMarkdown(fixture.config.vault_path, fixture.sourcePath)).bytes.toString();
+    expect(restored).toContain('processing_status: pending'); expect(restored).toContain('lifecycle_status: active');
+    expect(calls).toBe(0);
+    await batches.initialize(); expect(calls).toBe(0);
   } finally { await batches.close(); await fixture.close(); }
 });
 it('permits a new explicit Compiler request after the old Draft was removed, without replaying the old request', async () => {

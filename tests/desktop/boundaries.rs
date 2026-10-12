@@ -184,6 +184,16 @@ fn analysis_bridge_exposes_only_fixed_bounded_actions() {
 }
 
 #[test]
+fn planner_bridge_exposes_only_fixed_bounded_actions() {
+    assert_eq!(route(Operation::PlannerSettings, &json!({})).unwrap().1, "/v1/planner/settings");
+    assert_eq!(route(Operation::Plan, &json!({"source_path":"20_Sources/selected.md","request_id":"request"})).unwrap().1, "/v1/plans");
+    assert_eq!(route(Operation::ChangeSet, &json!({"id":"candidate"})).unwrap().1, "/v1/changeset");
+    assert!(route(Operation::Plan, &json!({"source_path":"20_Sources/selected.md","approve":true})).is_err());
+    assert!(route(Operation::PlannerTemplateWrite, &json!({"content":"x".repeat(450001)})).is_err());
+    assert!(route(Operation::ChangeSet, &json!({"id":"candidate","url":"https://outside"})).is_err());
+}
+
+#[test]
 fn recall_routes_retain_fixed_boundary_and_connection_snapshot_cannot_stop_core() {
     assert_eq!(route(Operation::Recall, &json!({"q":"meaning", "rerank":true})).unwrap().1, "/v1/recall");
     assert!(route(Operation::Recall, &json!({"q":"meaning", "url":"http://outside"})).is_err());

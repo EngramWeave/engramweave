@@ -8,6 +8,7 @@ await fs.writeFile(answer + '.observed.json', JSON.stringify({ args, apiKeyPrese
 console.log(JSON.stringify({ type: 'thread.started' }));
 console.log(JSON.stringify({ type: 'item.completed', item: { type: 'error', message: 'Read-only diagnostic with no tool action' } }));
 if (mode === 'tool') console.log(JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'simulated tool attempt' } }));
+else if(mode==='mcp')console.log(JSON.stringify({type:'item.completed',item:{type:'mcp_tool_call',server:process.env.ENGRAMWEAVE_TEST_MCP_SERVER,tool:process.env.ENGRAMWEAVE_TEST_MCP_TOOL}}));
 else console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'structured result' } }));
 console.log(JSON.stringify({ type: 'turn.completed' }));
 process.exit(0);

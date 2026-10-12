@@ -44,6 +44,14 @@ pub enum Operation {
     Recompile,
     DraftReview,
     AnalysisResult,
+    PlannerSettings,
+    PlannerSettingsWrite,
+    PlannerTemplate,
+    PlannerTemplateWrite,
+    Plan,
+    PlanCancel,
+    ChangeSets,
+    ChangeSet,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -104,6 +112,14 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::Recompile => (true, "/v1/recompile", &["request_id", "source_path", "source_revision", "draft_path", "draft_revision", "feedback"]),
         Operation::DraftReview => (false, "/v1/draft-review", &["path"]),
         Operation::AnalysisResult => (false, "/v1/analysis/result", &["id"]),
+        Operation::PlannerSettings => (false, "/v1/planner/settings", &[]),
+        Operation::PlannerSettingsWrite => (true, "/v1/planner/settings", &["settings"]),
+        Operation::PlannerTemplate => (false, "/v1/planner/template", &[]),
+        Operation::PlannerTemplateWrite => (true, "/v1/planner/template", &["content", "revision"]),
+        Operation::Plan => (true, "/v1/plans", &["request_id", "source_path", "source_revision"]),
+        Operation::PlanCancel => (true, "/v1/plans/cancel", &["id"]),
+        Operation::ChangeSets => (false, "/v1/changesets", &["source_path"]),
+        Operation::ChangeSet => (false, "/v1/changeset", &["id"]),
     };
     let object = input
         .as_object()
@@ -121,7 +137,7 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         { return Err(Failure::new("VALIDATION_ERROR", "Invalid scan input")); }
         return Ok((true, route.to_string(), vec![]));
     }
-    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses" || route.starts_with("/v1/processing") || route == "/v1/recompile") {
+    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses" || route.starts_with("/v1/processing") || route.starts_with("/v1/planner/") || route.starts_with("/v1/plans") || route == "/v1/recompile") {
         if serde_json::to_vec(input).map(|bytes| bytes.len() > 450000).unwrap_or(true) {
             return Err(Failure::new("VALIDATION_ERROR", "Analysis request exceeds its bound"));
         }

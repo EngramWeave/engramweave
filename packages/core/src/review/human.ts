@@ -37,7 +37,8 @@ export class HumanReviewActions {
   private readonly sourcePaths = new Map<string, string>();
   private readonly directory: string;
   constructor(private readonly config: Config, private readonly db: Database.Database, private readonly otherBusy: () => boolean,
-    private readonly otherAccepted: (id: string) => Promise<boolean> = async () => false) { this.directory = path.join(config.data_dir, 'human-review'); }
+    private readonly otherAccepted: (id: string) => Promise<boolean> = async () => false,
+    private readonly cancelSourcePlan: (source: string) => Promise<void> = async () => {}) { this.directory = path.join(config.data_dir, 'human-review'); }
   busy() { return this.active || this.unfinished.size > 0; }
   async close() { this.stopping = true; await this.completion; }
   private file(id: string, revoke = false) {
@@ -112,13 +113,17 @@ export class HumanReviewActions {
     try {
       const parsed = parseMarkdown(source, (await readMarkdown(this.config.vault_path, source)).bytes);
       const selected = await readDraft(this.config.vault_path, draft);
-      return parsed.state === 'ready' && parsed.lifecycle_status === 'active' && parsed.processing_status === 'reviewed'
+      return parsed.state === 'ready' && parsed.lifecycle_status === 'active' && ['reviewed','planned'].includes(parsed.processing_status ?? '')
         && selected.lifecycle_status === 'active' && selected.sources.length === 1 && key(selected.sources[0]!) === key(source);
     } catch { return false; }
   }
   async context(source: string, draft: string): Promise<HumanReviewContext> {
     const selected = this.selected.get(key(source));
     return { selected_draft: selected && await this.permissionValid(source, selected) ? selected : null, intent: this.intents.get(key(draft)) ?? null };
+  }
+  async selection(source: string) {
+    const selected = this.selected.get(key(source));
+    return selected && await this.permissionValid(source, selected) ? selected : null;
   }
   private response(record: Receipt, reused: boolean): HumanReviewResponse { return { request_id: record.request.request_id, action: record.request.action, status: 'completed', idea_path: record.idea?.path ?? null, reused }; }
   async receipt(id: string): Promise<ReviewActionReceipt> {
@@ -145,9 +150,9 @@ export class HumanReviewActions {
     const source = await readMarkdown(this.config.vault_path, request.source_path); const parsed = parseMarkdown(request.source_path, source.bytes);
     const draft = await readDraft(this.config.vault_path, request.draft_path);
     if (source.revision !== request.source_revision || draft.revision !== request.draft_revision) throw new CoreError('SOURCE_CHANGED', 'Source or Draft changed; inspect current files before submitting', 409);
-    if (parsed.state !== 'ready' || parsed.lifecycle_status !== 'active' || !(request.action === 'idea' ? ['pending','compiled','reviewed','planned'] : ['compiled','reviewed']).includes(parsed.processing_status ?? '')
+    if (parsed.state !== 'ready' || parsed.lifecycle_status !== 'active' || !(request.action === 'idea' ? ['pending','compiled','reviewed','planned'] : request.action === 'cancel' ? ['reviewed','planned'] : ['compiled','reviewed']).includes(parsed.processing_status ?? '')
       || draft.lifecycle_status !== 'active' || draft.sources.length !== 1 || key(draft.sources[0]!) !== key(request.source_path)) throw new CoreError('INVALID_SOURCE', 'Human Review requires an active Draft of its compiled or reviewed Source', 422);
-    if (request.action === 'cancel' && (request.note !== '' || parsed.processing_status !== 'reviewed' || key(this.selected.get(key(request.source_path)) ?? '') !== key(draft.path))) throw new CoreError('PATH_CONFLICT', 'Cancel applies only to the current Reviewed Draft and consumes no input', 409);
+    if (request.action === 'cancel' && (request.note !== '' || !['reviewed','planned'].includes(parsed.processing_status ?? '') || key(this.selected.get(key(request.source_path)) ?? '') !== key(draft.path))) throw new CoreError('PATH_CONFLICT', 'Cancel applies only to the current Reviewed Draft and consumes no input', 409);
     const record: Receipt = { version: 1, sequence: ++this.sequence, request, source_bytes: null, after: null, idea: null, completed: false };
     if (request.action === 'idea') {
       if (!request.note.trim()) throw new CoreError('VALIDATION_ERROR', 'Create Idea requires nonempty input', 400);
@@ -187,6 +192,7 @@ export class HumanReviewActions {
         updateCompiledSource(this.db, request.source_path, source, parseMarkdown(request.source_path, source.bytes));
       } finally { await native.close(); }
     }
+    if (request.action === 'cancel') await this.cancelSourcePlan(request.source_path);
     record.completed = true; await this.save(record); this.unfinished.delete(request.request_id);
   }
 }

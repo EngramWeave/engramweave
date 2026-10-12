@@ -60,6 +60,17 @@ pub fn document_uri(host: &mut Host, path: String, target: OpenTarget) -> Result
     }
 }
 
+pub fn changeset_uri(host: &mut Host, id: String) -> Result<String> {
+    let result=host.request(Operation::ChangeSet,json!({"id":id}))?;
+    if result["manifest"]["state"]!="ready" { return Err(Failure::new("VALIDATION_ERROR","ChangeSet is not ready for review")); }
+    let status=host.request(Operation::Status,json!({}))?;
+    let vault=status["vault_path"].as_str().ok_or_else(||Failure::new("INSTANCE_UNCERTAIN","Vault is unavailable"))?;
+    let name=std::path::Path::new(vault.trim_start_matches(r"\\?\").trim_end_matches(['/', '\\'])).file_name().and_then(|value|value.to_str()).ok_or_else(||Failure::new("INSTANCE_UNCERTAIN","Vault name is unavailable"))?;
+    let mut uri=Url::parse("obsidian://engramweave-changeset").unwrap();
+    uri.query_pairs_mut().append_pair("vault",name).append_pair("vault_path",vault).append_pair("changeset_id",&id);
+    Ok(uri.to_string().replace('+',"%20"))
+}
+
 fn valid_zotero_item(uri: &Url) -> bool {
     if uri.scheme() != "zotero" || uri.host_str() != Some("select") || uri.port().is_some()
         || !uri.username().is_empty() || uri.password().is_some() || uri.query().is_some() || uri.fragment().is_some()

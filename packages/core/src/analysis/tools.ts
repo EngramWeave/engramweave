@@ -48,14 +48,14 @@ export class AnalysisTools {
   }
 }
 /** A per-task private capability endpoint. It has no Core token or write services. */
-export async function analysisToolBridge(tools: AnalysisTools, signal: AbortSignal) {
+export async function analysisToolBridge(tools: { call(name: string, args: unknown): Promise<unknown> }, signal: AbortSignal, maxRequestBytes = 8192) {
   const token = randomBytes(32).toString('hex');
   const server = createServer(async (request, response) => {
     const expected = `Bearer ${token}`; const supplied = request.headers.authorization;
     if (request.method !== 'POST' || request.url !== '/' || request.headers.origin || typeof supplied !== 'string' || Buffer.byteLength(supplied) !== Buffer.byteLength(expected) || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) { response.writeHead(403).end(); return; }
     try {
       let size = 0; const chunks = [];
-      for await (const chunk of request) { size += chunk.length; if (size > 8192) throw new Error(); chunks.push(chunk); }
+      for await (const chunk of request) { size += chunk.length; if (size > maxRequestBytes) throw new Error(); chunks.push(chunk); }
       const input = JSON.parse(Buffer.concat(chunks).toString());
       const result = await tools.call(input.name, input.arguments);
       response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(result));

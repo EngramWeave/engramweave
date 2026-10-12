@@ -2,7 +2,7 @@ import { open, lstat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { LIMITS } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
-import { resolveMarkdown } from './paths.js';
+import { resolveMarkdown, resolveVaultFile } from './paths.js';
 
 export class FileProblem extends Error {
   constructor(public readonly code: string, public readonly state: 'invalid' | 'unsupported', message: string) { super(message); }
@@ -12,11 +12,21 @@ const sameObservation = (a: { size: number; mtimeMs: number; ctimeMs: number; in
   a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs && a.ino === b.ino;
 
 export async function readMarkdown(vault: string, relative: string, attributesChecked = false, onBytes?: (count: number) => void): Promise<FileRead> {
+  return readStableFile(vault, relative, () => resolveMarkdown(vault, relative, attributesChecked), onBytes);
+}
+
+/** Internal callers must validate their specific capability scope before this read. */
+export async function readVaultFile(vault: string, relative: string): Promise<FileRead> {
+  return readStableFile(vault, relative, () => resolveVaultFile(vault, relative), undefined, true);
+}
+
+async function readStableFile(vault: string, relative: string, resolve: () => Promise<string>, onBytes?: (count: number) => void, singleLink = false): Promise<FileRead> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const filename = await resolveMarkdown(vault, relative, attributesChecked);
+    const filename = await resolve();
     const handle = await open(filename, 'r');
     try {
       const before = await handle.stat();
+      if (singleLink && before.nlink !== 1) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Linked task file is not permitted', 403);
       if (!before.isFile()) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Only regular files can be read', 403);
       if (before.size > LIMITS.markdown_bytes) throw new FileProblem('FILE_TOO_LARGE', 'unsupported', 'Markdown exceeds the file size limit');
       // Read at most the limit plus one byte, including when a file grows during reading.
@@ -30,6 +40,7 @@ export async function readMarkdown(vault: string, relative: string, attributesCh
       }
       const after = await handle.stat();
       const pathInfo = await lstat(filename);
+      if (singleLink && (after.nlink !== 1 || pathInfo.nlink !== 1)) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Task file became hard-linked', 403);
       if (pathInfo.isSymbolicLink()) throw new CoreError('PATH_OUTSIDE_SCOPE', 'Document became a linked path', 403);
       if (length > LIMITS.markdown_bytes) throw new FileProblem('FILE_TOO_LARGE', 'unsupported', 'Markdown exceeds the file size limit');
       if (!sameObservation(before, after) || !sameObservation(after, pathInfo) || length !== after.size) continue;

@@ -11,7 +11,7 @@ export function processingDependencies(db: Database.Database): Set<string> {
   const ids = new Set<string>();
   for (const row of db.prepare('SELECT round_json FROM processing_rounds').all() as { round_json: string }[]) {
     const round=JSON.parse(row.round_json);if(round.registration_job_id) ids.add(round.registration_job_id);
-    for (const item of round.items) for (const id of [item.compiler_job_id, item.analyzer_job_id]) if (id) ids.add(id);
+    for (const item of round.items) for (const id of [item.compiler_job_id, item.analyzer_job_id, item.planner_job_id]) if (id) ids.add(id);
   }
   return ids;
 }

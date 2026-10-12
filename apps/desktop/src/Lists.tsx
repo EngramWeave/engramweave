@@ -1,4 +1,6 @@
 import type { JobPage, SearchPage } from './client';
+import { client } from './client';
+import { useState } from 'react';
 
 const contexts: Record<string, string> = {
   source_content: '原文内容',
@@ -11,23 +13,26 @@ const contexts: Record<string, string> = {
   title: '标题',
 };
 export function Jobs({ page }: { page: JobPage | null }) {
+  const [openError,setOpenError]=useState<string|null>(null);
   if (!page?.items.length)
     return <p className="empty">没有任务。扫描和 Compiler 由用户显式触发。</p>;
   return (
     <div className="jobs">
+      {openError&&<p role="alert">{openError}</p>}
       {page.items.map((job) => (
         <article key={job.id}>
           <div className="section-heading">
             <strong>
-              {job.kind === 'compile_source' ? 'Compiler' : job.kind === 'analyze_draft' ? 'Draft Analyzer' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
+              {job.kind === 'compile_source' ? 'Compiler' : job.kind === 'analyze_draft' ? 'Draft Analyzer' : job.kind === 'plan_integration' ? 'Integration Planner' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
             </strong>
             <span>
-              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : job.kind === 'analyze_draft' ? `Review ${job.review.status} / Relation ${job.relation.status}` : `已处理 ${job.processed_files} 个文件`}
+              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : job.kind === 'analyze_draft' ? `Review ${job.review.status} / Relation ${job.relation.status}` : job.kind === 'plan_integration' ? `${job.model || 'Codex default'} · ${job.source_path}` : `已处理 ${job.processed_files} 个文件`}
             </span>
           </div>
           <p className="path">
             {job.id} · {job.created_at}
           </p>
+          {job.kind === 'plan_integration' && job.changeset_id && !['queued','running'].includes(job.status) && <button onClick={()=>{setOpenError(null);void client.openChangeSet(job.changeset_id!).catch(error=>setOpenError(typeof error==='object'&&error&&'message'in error?String(error.message):String(error)));}}>Open ChangeSet in Obsidian</button>}
           {job.kind === 'scan_vault' && job.summary && (
             <p>
               新增 {job.summary.added} · 更新 {job.summary.updated} · 未变{' '}
