@@ -66,6 +66,7 @@ export const client = {
   cancelPlan: (id:string) => request('plan_cancel', PLANNING_API.planCancel.schema.response[200], {id}),
   changesets: (source_path?:string) => request('change_sets', PLANNING_API.changesets.schema.response[200], source_path ? {source_path} : {}),
   openChangeSet: (id:string) => native<void>('open_changeset',{id}),
+  openIntegration: (id:string,path:string) => native<void>('open_integration_document',{id,path}),
   processingSettings: () => request('processing_settings', API.processingSettings.schema.response[200]),
   saveProcessingSettings: (input: import('@engramweave/contracts').ProcessingSettings) => request('processing_settings_write', API.processingSettingsWrite.schema.response[200], input),
   processingState: () => request('processing_state', API.processingState.schema.response[200]),

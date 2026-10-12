@@ -42,6 +42,9 @@ export class PlannerJobs {
     private readonly retryLimit: () => number = () => 0) {
     this.settings = new PlannerSettingsStore(config); this.changesets = new ChangeSets(config); this.directory = path.join(config.data_dir, 'planner-jobs');
   }
+  private executionOwns: (id: string) => boolean = () => false;
+  protectExecutions(owns: (id: string) => boolean) { this.executionOwns = owns; }
+  private guardExecution(id: string) { if (this.executionOwns(id)) throw new CoreError('PATH_CONFLICT', 'Accepted ChangeSet cannot be canceled or replanned; inspect its execution', 409); }
   busy() { return this.accepting || this.running !== null || this.unresolved.size > 0; }
   get(id: string): PlannerJob | null { const row = this.db.prepare('SELECT job_json FROM planner_jobs WHERE id=?').get(id) as { job_json: string } | undefined; return row ? JSON.parse(row.job_json) : null; }
   all(): PlannerJob[] { return (this.db.prepare('SELECT job_json FROM planner_jobs').all() as { job_json: string }[]).map(row => JSON.parse(row.job_json)); }
@@ -82,7 +85,7 @@ export class PlannerJobs {
         await this.returnReviewed(record);
         try{await this.changesets.cancel(record.job.changeset_id);}catch(error){if(!(error instanceof CoreError&&error.code==='DOCUMENT_NOT_FOUND'))throw error;}
       }
-      if (record.phase === 'completed' && record.job.changeset_id) {
+      if (record.phase === 'completed' && record.job.changeset_id && !this.executionOwns(record.job.changeset_id)) {
         try { await this.changesets.verifyCandidates(record.job.changeset_id); }
         catch (error) {
           if (error instanceof CoreError && error.code === 'DOCUMENT_NOT_FOUND') {
@@ -177,6 +180,7 @@ export class PlannerJobs {
   }
   async cancelChangeSet(id: string, toCompiled = false) {
     if (this.running||this.accepting) throw new CoreError('JOB_BUSY', 'Wait for or cancel the running Planner', 409);
+    this.guardExecution(id);
     const manifest = (await this.changesets.read(id)).manifest;
     const job = this.all().find(job => job.changeset_id === id); const record = job ? await this.read(job.id) : null;
     if (!record) throw new CoreError('PATH_CONFLICT', 'ChangeSet has no planning receipt', 409);
@@ -190,6 +194,7 @@ export class PlannerJobs {
   async cancelForSource(source: string) {
     if (this.running) throw new CoreError('JOB_BUSY', 'Wait for the active Planner before canceling review', 409);
     for (const manifest of await this.changesets.list(source)) {
+      this.guardExecution(manifest.id);
       const job = this.all().find(job => job.changeset_id === manifest.id); const record = job ? await this.read(job.id) : null;
       if (record && ['prepared','ready'].includes(record.phase)) throw new CoreError('PATH_CONFLICT', 'Resolve interrupted planning publication first', 409);
       await this.changesets.cancel(manifest.id);

@@ -4,11 +4,13 @@ import type Database from 'better-sqlite3';
 import { LIMITS, type Draft } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { listAllDrafts, readDraft } from '../drafts/files.js';
-import { readMarkdown } from '../files/read.js';
-import { resolveMarkdown } from '../files/paths.js';
-import { parseMarkdown, type ParsedDocument } from '../source/parse.js';
+import { readMarkdown, readVaultFile } from '../files/read.js';
+import { resolveMarkdown, resolveVaultFile } from '../files/paths.js';
+import { parseMarkdownContent, type ParsedDocument } from '../source/parse.js';
 import { resolveDocumentReferences } from '../source/references.js';
 import { indexMeta } from './database.js';
+import { enumerateMarkdown } from '../discovery/scan.js';
+import { formalRoots } from '../changesets/paths.js';
 
 type Contribution = { path: string; revision: string; kind: 'draft' | 'knowledge'; title: string; sources: string[] };
 type Target = { path: string; revision: string; title: string; kind: 'draft' | 'knowledge' };
@@ -60,17 +62,23 @@ export class SourceRelations {
     for (const key of this.drafts.keys()) if (!draftPaths.has(key)) this.drafts.delete(key);
     this.draftDiagnostics = [...drafts.diagnostics];
     const records: Contribution[] = drafts.items.filter(draft => draft.lifecycle_status === 'active').map(draft => ({ path: draft.path, revision: draft.revision, kind: 'draft', title: draft.title, sources: [...new Set(draft.sources.map(value => value.toLowerCase()))] }));
-    const rows = draftsOnly ? [] : this.db.prepare("SELECT path FROM documents WHERE kind IN ('knowledge','research') AND state='ready'").all() as { path: string }[];
+    // Provenance safety covers all formal files, including unregistered local edits and Projects.
+    // This metadata-only enumeration does not expand Registry or semantic indexing scope.
+    const registered = draftsOnly ? [] : this.db.prepare("SELECT path FROM documents WHERE kind IN ('knowledge','idea','research') AND state='ready'").all() as { path: string }[];
+    const discovered = draftsOnly ? [] : (await enumerateMarkdown(this.vault, [], undefined, undefined, undefined, formalRoots)).paths;
+    // A registered file disappearing before reconciliation is uncertainty, not proof of no references.
+    const rows = [...new Set([...discovered, ...registered.map(row => row.path)])].map(path => ({ path }));
     const knowledgePaths = new Set<string>();
     for (const row of rows) {
       const key = row.path.toLowerCase(); knowledgePaths.add(key);
       try {
-        const filename = await resolveMarkdown(this.vault, row.path);
+        const project = row.path.startsWith('60_Projects/');
+        const filename = project ? await resolveVaultFile(this.vault, row.path) : await resolveMarkdown(this.vault, row.path);
         const observation = stamp(await lstat(filename));
         let cached = this.knowledge.get(key);
         if (!cached || cached.stamp !== observation || freshReferences) {
-          const current = await readMarkdown(this.vault, row.path);
-          const parsed = parseMarkdown(row.path, current.bytes);
+          const current = project ? await readVaultFile(this.vault, row.path) : await readMarkdown(this.vault, row.path);
+          const parsed = parseMarkdownContent(row.path, current.bytes);
           // Backlinks need metadata only; do not retain a second copy of all formal bodies.
           parsed.body_markdown = ''; parsed.annotation = '';
           cached = { stamp: observation, revision: current.revision, parsed }; this.knowledge.set(key, cached);

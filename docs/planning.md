@@ -47,7 +47,19 @@ Obsidian 打开 **Open ChangeSet candidates**，或从 Draft／Desktop 结果打
 
 Discard Source 撤销其审阅选择并清理未批准方案。**Restore Source** 只恢复该 Source 为 `active/pending`，不恢复旧 Draft、正式内容、审阅选择或 ChangeSet；各 Draft 的 Intent 仍保留。下一轮手动或已启用的定时处理可重新编译，恢复本身不启动模型。见 [Source 操作](sources.md)。
 
-当前仅提供候选生成、编辑、取消与恢复。完整结构影响审查、条目拒绝、最终批准、正式 Executor 和执行恢复合并为 P3-BC 一次交付，见 [BC 计划](../../engramweave-docs/.local/P3/P3_BC_IMPLEMENTATION_PLAN.md)。scoped Git 仍属 D。现有 MVP 人工新建入口保留其既有行为。
+## 人工取舍与执行
+
+右侧列出全部正文、目录和 discarded 提案、AI 理由及证据、Source 归档与关联 Draft 清理清单。非正文条目只读查看；AI 理由在人工编辑后仅供参考。逐项选择纳入或拒绝，也可全部纳入／拒绝，取舍按 manifest 版本单独持久保存。新领域目录另需明确授权。没有正文写入的有效集合不能归档 Source；全部拒绝请取消方案。
+
+Core 只校验纳入的内容，拒绝的坏正文不阻断其他内容。纳入文件缺少必要的目录提案、或明确链接到被拒绝且尚不存在的新提议文件时阻止批准；既有未解析链接不会因此被统一禁止。四个固定正式根目录属于 Vault 基础目录，可按实际需要创建，不算新领域。
+
+点击 **审查批准清单** 会先保存本方案全部脏候选，包括切换文件后留在缓存中的编辑。保存期间新增编辑会被保留并要求重新检查。确认 **Approve & Apply** 后立即执行，不调用模型，也不再加一次审批。固定的是此次人工批准的候选字节和最后显示的 Current 版本；规划时读到的旧版本仅作证据。例如规划读取 v1，用户把本地 v2 的新增内容合入候选 v3，可以批准 v2→v3；目标之后变为 v4 则报冲突，不能静默覆盖。
+
+Executor 在正式写入前持久保存接受回执，整体预检后使用 Windows 文件身份、版本和父目录保护逐项应用。新建先写入接受回执持有的临时文件再原子发布，中断暂存按其精确身份恢复，不暴露半份正式正文。新建不覆盖同名文件，更新检查批准的 Current 版本，目录及 discarded 标记也属于同一批准集合。多文件没有跨文件事务承诺；已应用项记录进度，恢复不会重新覆盖其后的人类编辑。未完成时保留方案、批准内容和错误；原请求 ID 可查询／明确重试。已接受操作不能用取消、重规划或 Restore 绕过。无关的新 Capture 仍可保存。
+
+只有正式写入、相关 Draft 标记及 Source 归档都成功后才消费方案：Source 仅改为 archived，正文和 Annotation 保留；相关 Draft 仅标记 discarded，保留正文及 Intent，撤销当前选择。清理 `70_ChangeSets/<id>` 和不再需要的完整执行负载，保留有界结果与错误摘要。必要的恢复事实保存在 Core 应用数据，数据库丢失不会把消费误判为候选损坏。完成请求重放只返回原结果，不重复写入，也不把后来恢复为 pending 的 Source 再次归档。
+
+**打回重新规划** 明确取消未批准方案，再读取当前 Draft、Intent 和知识库启动新一轮 Planner；新方案重新审查和批准。普通 Draft 编辑不触发这些操作。快捷 Publish 保留人工新建体验，共用 Executor 和归档恢复，同时保留其原有的分析尝试前置条件。Vault 自动 Git 提交仍属 D，当前正式版本由用户现有 Git 工具管理。
 
 ## 本地接口
 
@@ -62,13 +74,23 @@ Discard Source 撤销其审阅选择并清理未批准方案。**Restore Source*
 | `GET /v1/changeset/candidate?id=...&item_id=...` | Current、Candidate 及各自版本 |
 | `POST /v1/changeset/candidate` | 受保护候选保存 |
 | `POST /v1/changeset/cancel` | 人工明确取消工作区 |
+| `GET /v1/changeset/review?id=...` | 人工取舍、当前目标版本、Source／关联 Draft 清单 |
+| `POST /v1/changeset/review` | 按 manifest 与取舍版本保存决定 |
+| `POST /v1/changeset/approve` | 以 request_id 接受固定内容并立即确定性执行 |
+| `GET /v1/integration?id=...` | 原批准 ID 的结果；未接受返回 job=null |
+| `GET /v1/integration/file?id=...&path=...` | 核实该批准涉及的当前正式文件；供 Desktop 原生打开 |
 
 沿用本机 bearer、Host 和无浏览器 Origin 规则；Desktop 走固定原生白名单，打开方案前核实 ready 状态及 Vault 身份。Job 结果表示一次任务的执行历史，不保证方案后来未被取消。
 
 ## 备份、排除与验证
 
-备份 Vault 中未消费的 `70_ChangeSets`，并一起保存 Core `data_dir/planner-jobs/`、`planner-settings.json` 和 Human Review 回执。schema 6 的 Job 投影可由外部回执重建，SQLite 不独占候选或选择。未完成发布不能通过删除回执绕过；正式知识仍由后续受控执行及 Git 负责。
+备份 Vault 中未消费的 `70_ChangeSets`，并一起保存 Core `data_dir/planner-jobs/`、`changeset-reviews/`、`integration-executions/`、`draft-publications/`、`planner-settings.json` 和 Human Review 回执。schema 7 的 Planner／Executor Job 投影可由外部回执重建，SQLite 不独占候选、选择或消费事实。未完成写入不能通过删除回执绕过。
+
+批准送达不明的原请求另保存在 Vault 外 `EngramWeave/obsidian-candidates/`，重开可查询与重试，不能自动换 ID。明确拒绝且查明未被接受后，可以回到审查重新确认。备份不能只保留候选或只保留数据库。
 
 建议 Vault `.gitignore` 排除 `/70_ChangeSets/`；Core 不替用户修改已有 Git 配置。Obsidian 的搜索 Excluded files 和 Sync 的排除需另行设置 `70_ChangeSets`；Git 排除不会自动隐藏 Obsidian 搜索或阻止 Sync。
 
 运行 `npm run typecheck`、`npm test` 和原生 Desktop host tests，插件运行 `npm run build`、`npm test`。重点验证候选冲突／链接保护、任务白名单、输入选择、发布中断、数据库投影恢复及 reviewed 轮次分流。原生 Obsidian 另检查中文输入、Ctrl+S、长文滚动、刷新后的撤销、未保存关闭重开和断线；真实 Agent 验证应在隔离 Vault 使用网页与 Zotero 选段，核对实际工具记录、内容范围和正式文件字节。临时证据放 `.local/p3/a/`。
+
+
+来源保护的元数据检查覆盖 Ideas、Knowledge、Research、Projects，包括尚未登记的本地正式文件；不因此扩大 Projects 的普通登记或语义召回范围。Source 操作可列出这些回链，默认跳过仍被 active 正式内容引用的 Source；明确勾选关联文件仅标记 discarded，确认覆盖删除也不删除正式文件。独立正式文件回收站、受管理 Asset／Derived 清理及 Git 仍属于 D。

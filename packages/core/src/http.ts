@@ -60,12 +60,13 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
   } });
   if (services) {
     server.addHook('preHandler', async request => {
+      if (request.method === 'POST' && services().integration?.busy() && !['/v1/changeset/approve', API.publishDraft.url, API.captures.url].includes(request.url)) throw new CoreError('JOB_BUSY', 'Resolve the accepted integration before another mutation', 409);
       const scheduleSettings = request.url === API.processingSettingsWrite.url;
       if (request.method === 'POST' && services().planner?.busy() && !['/v1/plans','/v1/plans/cancel','/v1/changeset/cancel',API.processingCancel.url,API.captures.url].includes(request.url)) throw new CoreError('JOB_BUSY', 'Finish or recover the Planner before another mutation', 409);
       if (request.method === 'POST' && !scheduleSettings && services().humanReview?.busy() && request.url !== API.humanReview.url) throw new CoreError('JOB_BUSY', 'Finish or recover Human Review before another mutation', 409);
       if (request.method === 'POST' && !scheduleSettings && services().processing?.busy() && request.url !== API.processingCancel.url && request.url !== API.processing.url && request.url !== API.captures.url) throw new CoreError('JOB_BUSY', 'A processing round owns the model workflow; wait or cancel that round', 409);
       if (request.method === 'POST' && !scheduleSettings && services().recompile?.busy() && request.url !== API.recompile.url) throw new CoreError('JOB_BUSY', 'Finish or recover the Recompile action before another mutation', 409);
-      if (request.method === 'POST' && !scheduleSettings && request.url !== API.publishDraft.url && services().publications?.busy()) {
+      if (request.method === 'POST' && !scheduleSettings && request.url !== API.publishDraft.url && request.url !== API.captures.url && services().publications?.busy()) {
         throw new CoreError('JOB_BUSY', 'Finish or recover the approved Draft publication before another mutation', 409);
       }
     });

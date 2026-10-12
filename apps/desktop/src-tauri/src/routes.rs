@@ -52,6 +52,8 @@ pub enum Operation {
     PlanCancel,
     ChangeSets,
     ChangeSet,
+    Integration,
+    IntegrationFile,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -120,6 +122,8 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::PlanCancel => (true, "/v1/plans/cancel", &["id"]),
         Operation::ChangeSets => (false, "/v1/changesets", &["source_path"]),
         Operation::ChangeSet => (false, "/v1/changeset", &["id"]),
+        Operation::Integration => (false, "/v1/integration", &["id"]),
+        Operation::IntegrationFile => (false, "/v1/integration/file", &["id", "path"]),
     };
     let object = input
         .as_object()

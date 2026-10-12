@@ -47,7 +47,7 @@ Settings 的 Compiler 区域配置 API／Codex、模型、reasoning effort、超
 
 Sources 详情的 Run Compiler 对 active、pending／compiled、已登记 Source 执行一次正文编译。当前扫描与 Compiler 串行；任务结束后刷新阶段与相关 Draft 列表。每次编译新增 Draft，已有用户编辑保留；可预览各 Draft 或通过原生宿主在 Obsidian 打开，Desktop 不编辑正文。Compiler 失败显示在对应 Source／Job，设置错误留在设置区域，不跨页保留。
 
-正文生成成功不表示分析已经结束。Desktop 可选具体 Draft 启动 Analyze Draft 或独立 Retry Review／Retry Relation；分析正文位于 Obsidian 侧边栏。Sources 多选提供正文 Compile 和完整 Process，Jobs 只展示操作、轮次及尝试历史，支持展开详情、分页和打开相关 Draft。扫描 Vault、完整核对和重建索引均留在当前页面，不自动进入 Jobs；需要查看记录时从 System Status 或 Recent Activity 主动打开。Settings 配置时间／间隔、时区和有限重试；最小反馈 Recompile 保留旧稿、返回 pending，Sources 显示计数并支持 Pending 筛选。具体合同见 [Processing](processing.md)。人工直接入库由 [Obsidian MVP](obsidian-mvp.md) 实现，完整 Planner／ChangeSet 整合仍待后续阶段。
+正文生成成功不表示分析已经结束。Desktop 可选具体 Draft 启动 Analyze Draft 或独立 Retry Review／Retry Relation；分析正文位于 Obsidian 侧边栏。Sources 多选提供正文 Compile 和完整 Process，Jobs 只展示操作、轮次及尝试历史，支持展开详情、分页和打开相关 Draft。扫描 Vault、完整核对和重建索引均留在当前页面，不自动进入 Jobs；需要查看记录时从 System Status 或 Recent Activity 主动打开。Settings 配置时间／间隔、时区和有限重试；最小反馈 Recompile 保留旧稿、返回 pending，Sources 显示计数并支持 Pending 筛选。具体合同见 [Processing](processing.md)。人工直接入库由 [Obsidian MVP](obsidian-mvp.md) 实现，完整 Planner／ChangeSet 生成、批准执行和恢复见 [Planner](planning.md)。Desktop Jobs 显示 Integration Executor 的涉及路径、进度、归档 Draft 清单和错误，并经固定原生入口打开经 Core 核实的正式笔记；批准与重试在 Obsidian，Git 仍待 D。
 
 ## 验证
 

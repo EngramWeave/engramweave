@@ -286,7 +286,20 @@ fn source_filters_preview_and_batch_use_the_fixed_native_bridge() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert_eq!(result["status"], "completed");
-    assert_eq!(result["items"][0]["status"], "succeeded");
+    assert_eq!(result["items"][0]["status"], "skipped");
     assert!(desktop.request(Operation::SourceBatch, json!({"id":id,"action":"restore","items":[],"headers":{}})).is_err());
     desktop.stop().unwrap();
+}
+
+#[test]
+fn integration_results_bridge_is_read_only_and_bounded() {
+    let id = "00000000-0000-0000-0000-000000000001";
+    let result = route(Operation::Integration, &json!({"id": id})).unwrap();
+    assert!(!result.0);
+    assert_eq!(result.1, "/v1/integration");
+    assert!(route(Operation::Integration, &json!({"id": id, "apply": true})).is_err());
+    let file = route(Operation::IntegrationFile, &json!({"id": id, "path": "60_Projects/note.md"})).unwrap();
+    assert!(!file.0);
+    assert_eq!(file.1, "/v1/integration/file");
+    assert!(route(Operation::IntegrationFile, &json!({"id": id, "path": "60_Projects/note.md", "url": "file:///private"})).is_err());
 }

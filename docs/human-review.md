@@ -1,6 +1,6 @@
 # Obsidian Human Review
 
-在原生编辑器审阅 Draft 后，用一个 Review Note 输入明确选择 Create Idea、Recompile 或 Review Complete。三者不立即调用模型；Cancel Review Complete 是独立操作，不消费输入。MVP Publish to Knowledge 继续作为单独的人工入库入口；Agent Planner 与候选编辑见 [Planner 合同](planning.md)，完整批准／执行仍属后续 P3。
+在原生编辑器审阅 Draft 后，用一个 Review Note 输入明确选择 Create Idea、Recompile 或 Review Complete。三者不立即调用模型；Cancel Review Complete 是独立操作，不消费输入。MVP Publish to Knowledge 继续作为单独的人工入库入口；Agent Planner 与候选编辑见 [Planner 合同](planning.md)，完整人工取舍、批准和确定性执行也已实现；Git 仍属后续 D。
 
 ## 接口与资格
 

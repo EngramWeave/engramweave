@@ -26,6 +26,22 @@ async function fixture(failAnalysis = false) {
   return { ...f, create, publication, request, analysis };
 }
 describe('explicit MVP Knowledge publication', () => {
+  it('recovers the shipped legacy created receipt and replays its completed result without rearchiving a restored Source', async () => {
+    const f = await fixture(); const original = PropertyNative.prototype.run;
+    const mock = vi.spyOn(PropertyNative.prototype, 'run').mockImplementation(function(this:PropertyNative,...args) {
+      if(args[1]===f.sourcePath&&!args[6]&&!args[10]) throw new CoreError('IO_ERROR','Prepare legacy interrupted acceptance'); return original.apply(this,args);
+    });
+    try {
+      const request=await f.request();await expect(f.publication.submit(request)).rejects.toMatchObject({code:'IO_ERROR'});mock.mockRestore();
+      const filename=path.join(f.config.data_dir,'draft-publications',`${request.request_id}.json`);
+      const legacy=JSON.parse(await readFile(filename,'utf8'));delete legacy.shared_executor;legacy.phase='created';await writeFile(filename,JSON.stringify(legacy));
+      await unlink(path.join(f.config.data_dir,'integration-executions',`${request.request_id}.json`));f.db.prepare('DELETE FROM integration_jobs').run();
+      const target=path.join(f.config.vault_path,request.target_path);const later=(await readFile(target,'utf8'))+'\nLegacy published-note user edit.';await writeFile(target,later);
+      const recovery=f.create();await recovery.initialize();expect((await recovery.forDraft(f.draftPath))?.status).toBe('completed');expect(await readFile(target,'utf8')).toBe(later);
+      const source=path.join(f.config.vault_path,f.sourcePath);await writeFile(source,(await readFile(source,'utf8')).replace('processing_status: archived','processing_status: pending'));
+      const restart=f.create();await restart.initialize();expect((await restart.submit(request)).reused).toBe(true);expect(await readFile(source,'utf8')).toContain('processing_status: pending');expect(await readFile(target,'utf8')).toBe(later);
+    } finally {mock.mockRestore();await f.close();}
+  });
   it('publishes current human-edited bytes, retains properties and body, archives Source last, and replays once', async () => {
     const f = await fixture();
     try {
@@ -89,7 +105,7 @@ describe('explicit MVP Knowledge publication', () => {
     const f = await fixture();
     const original = PropertyNative.prototype.run;
     const mock = vi.spyOn(PropertyNative.prototype, 'run').mockImplementation(function (this: PropertyNative, ...args) {
-      if (args[1] === f.sourcePath && !args[6]) throw new CoreError('IO_ERROR', 'Simulated interruption before archival');
+      if (args[1] === f.sourcePath && !args[6] && !args[10]) throw new CoreError('IO_ERROR', 'Simulated interruption before archival');
       return original.apply(this, args);
     });
     try {
@@ -107,7 +123,7 @@ describe('explicit MVP Knowledge publication', () => {
   it('does not recreate a removed committed target during recovery', async () => {
     const f = await fixture(); const original = PropertyNative.prototype.run;
     const mock = vi.spyOn(PropertyNative.prototype, 'run').mockImplementation(function (this: PropertyNative, ...args) {
-      if (args[1] === f.sourcePath && !args[6]) throw new CoreError('IO_ERROR', 'interrupted'); return original.apply(this, args);
+      if (args[1] === f.sourcePath && !args[6] && !args[10]) throw new CoreError('IO_ERROR', 'interrupted'); return original.apply(this, args);
     });
     try {
       const req = await f.request(); await expect(f.publication.submit(req)).rejects.toBeDefined(); mock.mockRestore();

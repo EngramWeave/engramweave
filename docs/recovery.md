@@ -36,7 +36,7 @@ Obsidian 未提交的 Review Note 只在插件会话中保留。已发送但送�
    ```
 
 3. 检查输出的 `backup_dir`、`isolated_files` 和扫描 Job。离线命令只隔离配置应用数据目录中的 `core.sqlite` 家族，保留独立备份，并完成文件登记重建。
-4. 用同一配置正常启动 Core。启动加载 Analyzer、Human Review、Recompile、Planner 与 MVP Publication 的外部记录，恢复确定性已接受写入和必要投影。离线扫描完成不代表这些工作流服务已经加载；以启动后的接口为准。
+4. 用同一配置正常启动 Core。启动加载 Analyzer、Human Review、Recompile、Planner、Integration Executor 与 MVP Publication 的外部记录，恢复确定性已接受写入和必要投影。离线扫描完成不代表这些工作流服务已经加载；以启动后的接口为准。
 5. 在 Sources 核对 processing／lifecycle／Annotation；在 Obsidian 打开旧 Draft，核对自身 Intent、当前选择和已撤销选择。可用原请求 ID 的 Check Result 查明接受状态。
 
 恢复不调用 Compiler、Analyzer 或 Embedding，也不重放旧轮次／计划。Human Review 完成回执重放不重新授予取消、Discard、Recompile 或入库已撤销的许可。旧 Draft 和用户编辑保留；恢复不提供任意编辑撤销、跨 Draft diff 或独立 rollback 界面。Idea 和正式 MVP 副本不能重复生成，反馈不能重复追加。
@@ -52,3 +52,7 @@ Obsidian 未提交的 Review Note 只在插件会话中保留。已发送但送�
 构建 Core 后运行 `npx vitest run tests/storage/p2-recovery.test.ts tests/review/human-recovery.test.ts tests/review/recompile.test.ts tests/review/publication.test.ts`。它们分别覆盖实际离线 CLI／独立进程恢复，以及原生属性失败、完成回执丢失、并发冲突、旧请求和文件保留。测试只使用隔离 Vault，不在活动库注入损坏。真实模型及原生插件流程仍需单独核对，自动故障注入不等同于人工验收。
 
 Planner 中断、候选缺失和确定性恢复见 [Planner 合同](planning.md)。Obsidian 未保存候选暂存于 Vault 外 OS 应用数据 `EngramWeave/obsidian-candidates/`；它保护本机编辑，不能替代候选文件和 Core 回执的配对备份。
+
+`data_dir/changeset-reviews/` 保存人工取舍，`integration-executions/` 保存已接受内容、逐项进度和消费结果。未完成操作必须与 Source、Draft、当前正式文件和候选一起保留；完成后仅留必要摘要，完整候选不是永久历史。启动先恢复执行事实，再核对 Planner 工作区，正常消费不会退回 reviewed。完成回执重放不重新写入正式文件或重新归档已恢复的 Source。已应用文件后来的人类编辑保留；未应用项的版本冲突需查明和恢复可确认的版本后重试原批准，不能重新运行 AI 来代替恢复。
+
+旧 `draft-publications/` 回执仍可恢复。新的快捷 Publish 与完整 ChangeSet 共用 Executor。相关 Draft 的后续正文编辑可保留，但新增或重新关联的 Draft 不会悄悄纳入旧批准；恢复冲突会保留现场。Vault Git 自动提交仍未交付，正式文件历史由用户现有 Git 管理。

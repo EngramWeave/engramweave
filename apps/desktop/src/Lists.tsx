@@ -23,16 +23,17 @@ export function Jobs({ page }: { page: JobPage | null }) {
         <article key={job.id}>
           <div className="section-heading">
             <strong>
-              {job.kind === 'compile_source' ? 'Compiler' : job.kind === 'analyze_draft' ? 'Draft Analyzer' : job.kind === 'plan_integration' ? 'Integration Planner' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
+              {job.kind === 'compile_source' ? 'Compiler' : job.kind === 'analyze_draft' ? 'Draft Analyzer' : job.kind === 'plan_integration' ? 'Integration Planner' : job.kind === 'apply_integration' ? 'Integration Executor' : job.mode === 'rebuild' ? '重建索引' : '扫描 Vault'}
             </strong>
             <span>
-              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : job.kind === 'analyze_draft' ? `Review ${job.review.status} / Relation ${job.relation.status}` : job.kind === 'plan_integration' ? `${job.model || 'Codex default'} · ${job.source_path}` : `已处理 ${job.processed_files} 个文件`}
+              {job.status} · {job.kind === 'compile_source' ? `${job.route} · ${job.model}` : job.kind === 'analyze_draft' ? `Review ${job.review.status} / Relation ${job.relation.status}` : job.kind === 'plan_integration' ? `${job.model || 'Codex default'} · ${job.source_path}` : job.kind === 'apply_integration' ? `${job.completed_paths.length}/${job.target_paths.length} · ${job.source_path}` : `已处理 ${job.processed_files} 个文件`}
             </span>
           </div>
           <p className="path">
             {job.id} · {job.created_at}
           </p>
           {job.kind === 'plan_integration' && job.changeset_id && !['queued','running'].includes(job.status) && <button onClick={()=>{setOpenError(null);void client.openChangeSet(job.changeset_id!).catch(error=>setOpenError(typeof error==='object'&&error&&'message'in error?String(error.message):String(error)));}}>Open ChangeSet in Obsidian</button>}
+          {job.kind === 'apply_integration' && <><p>Source · {job.source_path}</p><p>Drafts marked discarded · {job.discarded_drafts.length}</p>{job.target_paths.map(target => <p className="path" key={target}>{target} {/\.md$/i.test(target) && <button onClick={()=>{void client.openIntegration(job.id, target).catch(error=>setOpenError(String(error)));}}>Open in Obsidian</button>}</p>)}</>}
           {job.kind === 'scan_vault' && job.summary && (
             <p>
               新增 {job.summary.added} · 更新 {job.summary.updated} · 未变{' '}

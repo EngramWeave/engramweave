@@ -94,6 +94,10 @@ async fn open_document(
 async fn open_changeset(state: State<'_,HostState>, id:String)->Result<()> {
     with_host(&state,move|host|open::launch(&open::changeset_uri(host,id)?)).await
 }
+#[tauri::command]
+async fn open_integration_document(state: State<'_,HostState>, id:String, path:String)->Result<()> {
+    with_host(&state,move|host|open::launch(&open::integration_uri(host,id,path)?)).await
+}
 
 pub fn run() {
     let profile = std::env::var_os("ENGRAMWEAVE_CONFIG")
@@ -112,7 +116,8 @@ pub fn run() {
             core_stop,
             core_request,
             open_document,
-            open_changeset
+            open_changeset,
+            open_integration_document
         ])
         .setup(|app| {
             let window =

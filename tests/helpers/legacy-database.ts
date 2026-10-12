@@ -7,7 +7,7 @@ export function legacyDatabase(db: Database.Database, version: 1 | 2 | 3 | 4) {
   db.exec('INSERT INTO documents SELECT * FROM current_documents; DROP TABLE current_documents;');
   if (version === 1) db.exec('DROP TABLE compiler_jobs');
   if (version < 4) db.exec('DROP TABLE analyzer_jobs');
-  db.exec('DROP TABLE planner_jobs; DROP TABLE processing_rounds; DROP TABLE execution_attempts; DROP TABLE recompile_actions;');
+  db.exec('DROP TABLE integration_jobs; DROP TABLE planner_jobs; DROP TABLE processing_rounds; DROP TABLE execution_attempts; DROP TABLE recompile_actions;');
   db.prepare('UPDATE meta SET schema_version=?').run(version);
   db.pragma(`user_version=${version}`);
 }

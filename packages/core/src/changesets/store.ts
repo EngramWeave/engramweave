@@ -17,6 +17,8 @@ const absent = (error: unknown) => error instanceof CoreError && error.code === 
 export class ChangeSets {
   private readonly writing = new Set<string>();
   constructor(readonly config: Config) {}
+  saving(id: string) { return this.writing.has(id); }
+  acceptance<T>(id: string, action: () => Promise<T>) { return this.exclusive(id, action); }
   private manifestPath(id: string) { return `70_ChangeSets/${changeSetId(id)}/manifest.json`; }
   private async exclusive<T>(id: string, action: () => Promise<T>) {
     changeSetId(id);
@@ -137,7 +139,7 @@ export class ChangeSets {
       } finally { await native.close(); }
     });
   }
-  private async validateContent(manifest:ChangeSet){
+  async validateContent(manifest:ChangeSet){
     if (!manifest.items.some(item => item.kind === 'write')) throw new CoreError('INVALID_MODEL_OUTPUT', 'Integration requires final content, not only source retention or structure', 422);
     let size = 0;
     for (const item of manifest.items) if (item.candidate_path) {
@@ -173,9 +175,10 @@ export class ChangeSets {
     });
   }
   /** Called only for explicit human cancellation; the Agent capability never exposes it. */
-  async cancel(id: string) {
+  async cancel(id: string, consumed = false) {
     return this.exclusive(id, async () => {
-      await this.read(id); const relative = `70_ChangeSets/${id}`; const files: string[] = []; const directories: string[] = [];
+      try { await this.read(id); } catch (error) { if (!consumed || !absent(error)) throw error; }
+      const relative = `70_ChangeSets/${id}`; const files: string[] = []; const directories: string[] = [];
       const visit = async (directory: string) => {
         const resolved = await resolveVaultDirectory(this.config.vault_path, directory); directories.push(directory);
         const recovery=new PropertyNative();

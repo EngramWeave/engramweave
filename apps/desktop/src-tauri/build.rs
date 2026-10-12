@@ -19,6 +19,7 @@ fn main() {
             "core_request",
             "open_document",
             "open_changeset",
+            "open_integration_document",
         ]),
     ))
     .expect("Tauri build failed");

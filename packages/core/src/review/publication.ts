@@ -1,3 +1,5 @@
+import { IntegrationExecutor } from '../changesets/executor.js';
+import { ChangeSets } from '../changesets/store.js';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -25,7 +27,7 @@ const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const maxRecordBytes = 8 * 1024 * 1024;
 interface Edit { path: string; before: string; after: string }
 interface Receipt {
-  version: 1; request: PublishDraftRequest; target_revision: string; knowledge_bytes: string;
+  version: 1; shared_executor?: true; request: PublishDraftRequest; target_revision: string; knowledge_bytes: string;
   edits: Edit[]; phase: 'prepared' | 'created' | 'completed'; error: string | null;
 }
 /** One explicit human approval, one new note. Receipts survive database reconstruction. */
@@ -35,11 +37,15 @@ export class DraftPublications {
   private unfinished = new Set<string>();
   private readonly byDraft = new Map<string, { request: PublishDraftRequest; status: 'completed' | 'unfinished'; error: string | null }>();
   private readonly directory: string;
+  private execution: IntegrationExecutor;
+  private ownsExecutor: boolean;
   constructor(private readonly config: Config, private readonly db: Database.Database, private readonly otherBusy: () => boolean,
     private readonly analysis: (id: string) => { draft_path: string; source_path: string; status: string } | undefined,
-    private readonly revoke: (source: string, id: string) => Promise<void> = async () => {}) {
+    private readonly revoke: (source: string, id: string) => Promise<void> = async () => {}, execution?: IntegrationExecutor) {
     this.directory = path.join(config.data_dir, 'draft-publications');
+    this.ownsExecutor = !execution; this.execution = execution ?? new IntegrationExecutor(config, db, new ChangeSets(config), undefined, () => false, revoke);
   }
+  useExecutor(execution: IntegrationExecutor) { this.execution = execution; this.ownsExecutor = false; }
   busy() { return this.active || this.unfinished.size > 0; }
   async close() { await this.completion; }
   private filename(id: string) {
@@ -67,7 +73,7 @@ export class DraftPublications {
       const record: Receipt = JSON.parse(bytes.toString());
       if (record.version !== 1 || !Value.Check(PublishDraftRequestSchema, record.request) || record.request.request_id !== id
         || !['prepared','created','completed'].includes(record.phase) || typeof record.knowledge_bytes !== 'string'
-        || digest(Buffer.from(record.knowledge_bytes, 'base64')) !== record.target_revision || !Array.isArray(record.edits)
+        || !(record.shared_executor && record.phase === 'completed' && record.knowledge_bytes === '') && digest(Buffer.from(record.knowledge_bytes, 'base64')) !== record.target_revision || !Array.isArray(record.edits)
         || record.edits.length !== record.request.related_drafts.length + 1) throw new Error();
       markdownPath(record.request.target_path);
       const expected = [...record.request.related_drafts.map(item => item.path), record.request.source_path];
@@ -80,6 +86,7 @@ export class DraftPublications {
     } catch { throw new CoreError('CONFIG_ERROR', 'Publication receipt is invalid; preserved for inspection', 400); }
   }
   async initialize() {
+    if (this.ownsExecutor) await this.execution.initialize();
     if (!await this.directoryReady()) return;
     const ids = (await readdir(this.directory)).filter(name => name.endsWith('.json') && idPattern.test(name.slice(0, -5))).map(name => name.slice(0, -5));
     if (ids.length > LIMITS.scan_candidates) throw new CoreError('CONFIG_ERROR', 'Publication history exceeds recovery bound', 400);
@@ -154,9 +161,17 @@ export class DraftPublications {
     edits.push({ path: request.source_path, before: source.revision, after: digest(editScalarProperty(source.bytes, 'processing_status', 'archived')) });
     const bytes = editScalarProperty(editScalarProperty(editScalarProperty(draftFile.bytes, 'type', 'knowledge'), 'lifecycle_status', 'active'), 'mvp_publication_id', request.request_id, true);
     if (parseMarkdown(request.target_path, bytes).state !== 'ready') throw new CoreError('INVALID_SOURCE', 'Draft Properties cannot be published as Knowledge', 422);
-    return { version: 1, request, target_revision: digest(bytes), knowledge_bytes: bytes.toString('base64'), edits, phase: 'prepared', error: null };
+    return { version: 1, shared_executor: true, request, target_revision: digest(bytes), knowledge_bytes: bytes.toString('base64'), edits, phase: 'prepared', error: null };
   }
   private async finish(record: Receipt) {
+    if (record.shared_executor) {
+      const result = await this.execution.shortcut(record.request.request_id, digest(Buffer.from(JSON.stringify(record.request))), async () => ({
+        source_path: record.request.source_path, source_revision: record.request.source_revision, draft_path: record.request.draft_path, related_drafts: record.request.related_drafts,
+        steps: [{ kind: 'write', path: record.request.target_path, before: null, after: record.target_revision, bytes: record.knowledge_bytes, done: false }],
+      }));
+      if (result.job.status !== 'succeeded') throw new CoreError((result.job.error?.code ?? 'IO_ERROR') as ConstructorParameters<typeof CoreError>[0], result.job.error?.message ?? 'Accepted publication needs recovery', 409, result.job.error?.details ?? null);
+      record.phase = 'completed'; record.knowledge_bytes = ''; record.error = null; await this.save(record); this.unfinished.delete(record.request.request_id); return;
+    }
     const vault = this.config.vault_path;
     const native = new PropertyNative();
     try {

@@ -1,6 +1,6 @@
 # 本地 Core
 
-Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。两项独立 AI 分析、Profile 和只读工具见 [Draft Analyzer](analyzer.md)。[Human Review](human-review.md) 可保存每份 Draft 自己的 Intent 和当前选择；正式入库仅支持独立的人工 MVP 例外，Planner／ChangeSet 留在 P3。
+Core 处理一个 Vault，通过显式扫描登记 `10_Ideas/**/*.md`、`20_Sources/**/*.md`、`40_Knowledge/**/*.md` 和 `50_Research/**/*.md`。原始文件是长期资产；SQLite 保存可重建的登记、检索投影和任务。启动不自动扫描或调用 AI。显式 Compiler 可新增 Draft 并写入 Source 处理阶段，见 [Compiler 与 Draft](compiler.md)；三类笔记的混合检索和增量更新见 [语义召回](semantic-recall.md)。两项独立 AI 分析、Profile 和只读工具见 [Draft Analyzer](analyzer.md)。[Human Review](human-review.md) 可保存每份 Draft 自己的 Intent 和当前选择；正式入库支持 Agent Planner／ChangeSet 人工批准和共用 Executor 的快捷新建，见 [Planner 与批准合同](planning.md)。
 
 Desktop 通过受限 Rust 桥接调用同一 Core，见 [Desktop 说明](desktop.md)。Native Host 创建的 Core 通过 `ENGRAMWEAVE_HOST_STDIN=1` 启用私有 stdin 生命周期控制：固定一行 `{"type":"stop"}` 或父管道关闭触发正常停止；普通独立 CLI 不读取 stdin 命令，也不开放 HTTP 停止路由。
 
@@ -36,7 +36,7 @@ npm run core -- --config D:/path/to/config.json
 
 SQLite 缺失时建立空库，generation=0。health 在数据库初始化成功后返回200 ready；初始化期间返回503。ready 表示运行和数据库可用，不代表已扫描。损坏、版本或约束不匹配、Vault 绑定不同的数据库明确报错，保留文件，不自动删除或恢复。
 
-SQLite 当前 schema_version=5，包含 documents、jobs、meta、compiler_jobs、analyzer_jobs、processing_rounds、execution_attempts、recompile_actions。严格验证 schema 1–4 的布局后事务迁移，保留旧文档、历史与 Vault 绑定；处理阶段和生命周期仍保存在 metadata_json 投影中，没有独立阶段列。documents.indexed_at 允许 null，以表示文件尚未成功读取校验。带 indexed_at NOT NULL 等不匹配约束的数据库返回 SCHEMA_UNSUPPORTED，不自动转换或删除。Human Review 的输入和 Intent 使用独立持久回执，不依赖新增数据库表。验证不同布局时使用独立 data_dir 并保留旧库。
+SQLite 当前 schema_version=7，包含 documents、jobs、meta、compiler_jobs、analyzer_jobs、processing_rounds、execution_attempts、recompile_actions、planner_jobs、integration_jobs。严格验证 schema 1–6 的布局后事务迁移，保留旧文档、历史与 Vault 绑定；处理阶段和生命周期仍保存在 metadata_json 投影中，没有独立阶段列。documents.indexed_at 允许 null，以表示文件尚未成功读取校验。带 indexed_at NOT NULL 等不匹配约束的数据库返回 SCHEMA_UNSUPPORTED，不自动转换或删除。Human Review 的输入和 Intent 使用独立持久回执，不依赖新增数据库表。验证不同布局时使用独立 data_dir 并保留旧库。
 
 Ctrl+C 正常停止；宿主持有的 Node IPC 可发送 `{type:"stop"}` 请求停止。正常停止等待当前扫描结束，移除本实例描述，保留数据库和 token；不开放 shutdown HTTP。遗留活动扫描在新进程启动时标 interrupted，须显式重试。
 

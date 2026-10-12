@@ -23,6 +23,7 @@ import { HumanReviewActions } from './review/human.js';
 import { readDraft } from './drafts/files.js';
 import { RecompileActions } from './review/recompile.js';
 import { interruptAttempts } from './jobs/retention.js';
+import { IntegrationExecutor } from './changesets/executor.js';
 import { PlannerJobs } from './jobs/planner.js';
 
 export async function startCore(input: Config) {
@@ -60,31 +61,36 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     let recompile: RecompileActions;
     let humanReview: HumanReviewActions;
     let planner: PlannerJobs;
+    let integration: IntegrationExecutor;
     let recall: SemanticRecall | undefined;
     const processingSettings = new ProcessingSettingsStore(config.data_dir);
     await processingSettings.initialize();
-    const jobs = scanJobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy()), async () => { await recall?.afterRefresh(); });
+    const jobs = scanJobs = new ScanJobs(database, config.vault_path, () => Boolean(compiler?.busy() || batches?.busy() || analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), async () => { await recall?.afterRefresh(); });
     // Watch only records hints; startup neither registers files nor invokes models.
     await jobs.startWatcher();
-    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy()), undefined, () => processingSettings.read().max_retries);
+    compiler = new CompilerJobs(database, config, () => jobs.active() !== null || Boolean(analyzer?.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), undefined, () => processingSettings.read().max_retries);
     await compiler.initialize();
-    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null || Boolean(publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy()), input => analyzer?.guardBatch(input), async target => {
+    batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null || Boolean(publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), input => analyzer?.guardBatch(input), async target => {
       if (target.startsWith('20_Sources/')) { await humanReview?.revoke(target); await planner?.cancelForSource(target); }
-      else { const draft = await readDraft(config.vault_path, target); for (const source of draft.sources) { await humanReview?.revoke(source, target); if ((await planner?.changesets.list(source))?.some(plan => plan.draft_path.toLowerCase() === target.toLowerCase())) await planner?.cancelForSource(source); } }
+      else if (target.startsWith('30_Drafts/')) { const draft = await readDraft(config.vault_path, target); for (const source of draft.sources) { await humanReview?.revoke(source, target); if ((await planner?.changesets.list(source))?.some(plan => plan.draft_path.toLowerCase() === target.toLowerCase())) await planner?.cancelForSource(source); } }
     });
     recall = new SemanticRecall(config, database);
-    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy()), undefined, () => processingSettings.read().max_retries);
+    analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), undefined, () => processingSettings.read().max_retries);
     publications = new DraftPublications(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || processing?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy()), id => analyzer.get(id), (source, id) => humanReview.revoke(source, null, id));
-    const busyOutsideRound = () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy());
+    const busyOutsideRound = () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy());
     processing = new ProcessingRounds(database, config, jobs, compiler, analyzer, processingSettings, busyOutsideRound, () => planner);
-    recompile = new RecompileActions(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || processing.busy() || humanReview?.busy() || planner?.busy()), (source, id) => humanReview.revoke(source, null, id), async id => (await humanReview.receipt(id)).status !== 'not_found');
-    humanReview = new HumanReviewActions(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || processing.busy() || recompile.busy() || planner?.busy()), async id => (await recompile.receipt(id)).status !== 'not_found', source => planner.cancelForSource(source));
-    planner = new PlannerJobs(database, config, recall, humanReview, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || recompile.busy() || humanReview.busy()), analyzer, undefined, () => processingSettings.read().max_retries);
+    recompile = new RecompileActions(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || processing.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), (source, id) => humanReview.revoke(source, null, id), async id => (await humanReview.receipt(id)).status !== 'not_found');
+    humanReview = new HumanReviewActions(config, database, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || processing.busy() || recompile.busy() || planner?.busy() || integration?.busy()), async id => (await recompile.receipt(id)).status !== 'not_found', source => planner.cancelForSource(source));
+    planner = new PlannerJobs(database, config, recall, humanReview, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || publications.busy() || recompile.busy() || humanReview.busy() || integration?.busy()), analyzer, undefined, () => processingSettings.read().max_retries);
+    integration = new IntegrationExecutor(config, database, planner.changesets, humanReview, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || analyzer.busy() || processing.busy() || recompile.busy() || humanReview.busy() || planner.busy()), (source, id) => humanReview.revoke(source, null, id));
+    publications.useExecutor(integration);
+    planner.protectExecutions(id => integration.owns(id) || integration.accepting(id));
     const scheduler = new ProcessingScheduler(() => processingSettings.read(), () => processing.busy() || busyOutsideRound(), async () => { await processing.submit({ request_id: randomUUID(), mode: 'pending' }, 'schedule'); });
-    services = { db: database, jobs, compiler, batches, recall, analyzer, publications, processing, processingSettings, scheduler, recompile, humanReview, planner, instance_id: instance.id };
+    services = { db: database, jobs, compiler, batches, recall, analyzer, publications, processing, processingSettings, scheduler, recompile, humanReview, planner, integration, instance_id: instance.id };
     await analyzer.initialize();
     await batches.initialize();
     await humanReview.initialize();
+    await integration.initialize();
     await publications.initialize();
     await recompile.initialize();
     await planner.initialize();
@@ -96,11 +102,11 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
       if (closed) return;
       closed = true;
       runtime.status = 'degraded';
-      try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.planner?.close(); await services?.recompile?.close(); await services?.humanReview?.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+      try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.planner?.close(); await services?.recompile?.close(); await services?.humanReview?.close(); await services?.publications?.close(); await services?.integration?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
       finally { try { database?.close(); } finally { try { await instance?.close(); } finally { await releaseAttributes(); } } }
     } };
   } catch (error) {
-    try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.planner?.close(); await services?.recompile?.close(); await services?.humanReview?.close(); await services?.publications?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
+    try { services?.scheduler?.close(); await server.close(); await services?.processing?.close(); await services?.planner?.close(); await services?.recompile?.close(); await services?.humanReview?.close(); await services?.publications?.close(); await services?.integration?.close(); const batchClose = services?.batches?.close(); await services?.analyzer?.close(); await services?.compiler?.close(); await batchClose; await services?.jobs.close(); await services?.recall?.close(); }
     finally { try { if (!services) await scanJobs?.close(); } finally { try { database?.close(); } finally { await instance?.close(); } } }
     throw error;
   }

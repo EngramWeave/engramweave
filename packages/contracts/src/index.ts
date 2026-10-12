@@ -1,11 +1,11 @@
 import { Type, type Static, type TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
-import { PlannerJobSchema } from './planning.js';
+import { PlannerJobSchema, IntegrationJobSchema } from './planning.js';
 export * from './planning.js';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 export const LIMITS = Object.freeze({
   markdown_bytes: 5 * 1024 * 1024,
   capture_json_bytes: 8 * 1024 * 1024,
@@ -138,7 +138,7 @@ export const AnalyzerJobSchema = object({ id: nonempty, kind: Type.Literal('anal
   source_path: CapturePathSchema, source_revision: RevisionSchema, draft_path: DraftPathSchema, draft_revision: RevisionSchema, profile_id: AnalysisProfileIdSchema,
   review: AnalyzerTaskStateSchema, relation: AnalyzerTaskStateSchema, error: nullable(ErrorSchema.properties.error) });
 export type AnalyzerJob = Static<typeof AnalyzerJobSchema>;
-export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema, AnalyzerJobSchema, PlannerJobSchema]);
+export const AnyJobSchema = Type.Union([JobSchema, CompilerJobSchema, AnalyzerJobSchema, PlannerJobSchema, IntegrationJobSchema]);
 export const AssetSchema = object({
   kind: enumeration(['inline_markdown', 'vault_file', 'external_ref']), locator: nonempty,
   availability: enumeration(['available', 'missing', 'unverified', 'unsupported']),
@@ -215,9 +215,10 @@ export const SourcesResponseSchema = object({ ...page(SourceSchema), ...indexed,
   facets: Type.Optional(object({ types: Type.Array(text), tags: Type.Array(text) })),
 });
 export type SourcesQuery = Static<typeof SourcesQuerySchema>;
-const LifecycleTargetSchema = object({ path: ScopedMarkdownPathSchema, revision: RevisionSchema });
+const ProjectMarkdownPathSchema = Type.Intersect([VaultPathSchema, Type.String({ pattern: '^60_Projects/.+\\.[mM][dD]$' })]);
+const LifecycleTargetSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, ProjectMarkdownPathSchema]), revision: RevisionSchema });
 const SourceLifecycleTargetSchema = object({ path: ScopedMarkdownPathSchema, revision: nullable(RevisionSchema) });
-const RelatedTargetSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, DraftPathSchema]), revision: RevisionSchema });
+const RelatedTargetSchema = object({ path: Type.Union([ScopedMarkdownPathSchema, DraftPathSchema, ProjectMarkdownPathSchema]), revision: RevisionSchema });
 export const SourceBatchRequestSchema = object({ id: CompileRequestSchema.properties.request_id, action: enumeration(['compile', 'discard', 'restore', 'discard_drafts', 'delete']),
   items: Type.Array(object({ ...SourceLifecycleTargetSchema.properties, source_missing: Type.Optional(Type.Boolean()), request_id: CompileRequestSchema.properties.request_id, related: Type.Optional(Type.Array(RelatedTargetSchema, { maxItems: 100 })), allow_referenced: Type.Optional(Type.Boolean()), reference_revisions: Type.Optional(Type.Array(LifecycleTargetSchema, { maxItems: 100 })) }), { minItems: 1, maxItems: 100 }),
 });

@@ -1,3 +1,4 @@
+import type { IntegrationExecutor } from '../changesets/executor.js';
 import type Database from 'better-sqlite3';
 import type { ScanJobs } from '../jobs/scans.js';
 import type { CompilerJobs } from '../jobs/compiler.js';
@@ -13,4 +14,4 @@ import type { HumanReviewActions } from '../review/human.js';
 import type { PlannerJobs } from '../jobs/planner.js';
 
 export interface CoreServices { db: Database.Database; jobs: ScanJobs; compiler?: CompilerJobs; batches?: SourceBatches; recall?: SemanticRecall; analyzer?: AnalyzerJobs; publications?: DraftPublications;
-  processing?: ProcessingRounds; processingSettings?: ProcessingSettingsStore; scheduler?: ProcessingScheduler; recompile?: RecompileActions; humanReview?: HumanReviewActions; planner?: PlannerJobs; instance_id: string }
+  processing?: ProcessingRounds; processingSettings?: ProcessingSettingsStore; scheduler?: ProcessingScheduler; recompile?: RecompileActions; humanReview?: HumanReviewActions; planner?: PlannerJobs; integration?: IntegrationExecutor; instance_id: string }

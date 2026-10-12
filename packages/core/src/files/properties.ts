@@ -6,7 +6,7 @@ import { markdownPath, resolveVaultDirectory, analysisTemplatePath, normalizeVau
 import { windowsAttributes } from './windows.js';
 import { PropertyNative } from './property-native.js';
 import { CoreError } from '../errors.js';
-import { changeSetFile, plannerTemplatePath } from '../changesets/paths.js';
+import { changeSetFile, plannerTemplatePath, formalPath } from '../changesets/paths.js';
 
 const stemPattern = /^\.engramweave-properties-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 export const isPropertyJournal = (name: string) => name.endsWith('.json') && stemPattern.test(name.slice(0, -5));
@@ -21,12 +21,16 @@ export async function writeSourceProperties(vault: string, relative: string, fil
 
 /** Explicit lifecycle actions use the same bounded native commit and recovery protocol. */
 export async function writeLifecycleProperties(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative, onBytes?: (count: number) => void): Promise<FileRead> {
-  if (analysisTemplatePath(relative)) normalizeVaultPath(relative); else markdownPath(relative, true);
+  if (analysisTemplatePath(relative)) normalizeVaultPath(relative); else if (relative.startsWith('60_Projects/')) formalPath(relative); else markdownPath(relative, true);
   return writeProtectedVaultFile(vault, relative, file, bytes, native, onBytes);
 }
 
 export async function writeCandidateFile(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative): Promise<FileRead> {
   if (!plannerTemplatePath(relative)) changeSetFile(relative);
+  return writeProtectedVaultFile(vault, relative, file, bytes, native);
+}
+export async function writeFormalFile(vault: string, relative: string, file: FileRead, bytes: Buffer, native: PropertyNative): Promise<FileRead> {
+  formalPath(relative);
   return writeProtectedVaultFile(vault, relative, file, bytes, native);
 }
 
@@ -87,7 +91,7 @@ export async function recoverPropertyJournal(vault: string, directory: string, n
   const item = record as Record<string, unknown>;
   if (Object.keys(item).sort().join(',') !== 'after,before,relative,version' || item.version !== 1 || typeof item.relative !== 'string' || typeof item.before !== 'string' || typeof item.after !== 'string'
     || !/^[a-f0-9]{64}$/.test(item.before) || !/^[a-f0-9]{64}$/.test(item.after)
-    || (item.relative.startsWith('70_ChangeSets/') ? changeSetFile(item.relative) : plannerTemplatePath(item.relative) || analysisTemplatePath(item.relative) ? normalizeVaultPath(item.relative) : markdownPath(item.relative, true)) !== item.relative || path.posix.dirname(item.relative) !== directory) {
+    || (item.relative.startsWith('70_ChangeSets/') ? changeSetFile(item.relative) : plannerTemplatePath(item.relative) || analysisTemplatePath(item.relative) ? normalizeVaultPath(item.relative) : item.relative.startsWith('60_Projects/') ? formalPath(item.relative) : markdownPath(item.relative, true)) !== item.relative || path.posix.dirname(item.relative) !== directory) {
     throw new FileProblem('PROPERTY_RECOVERY_CONFLICT', 'invalid', 'Property journal does not match its Source directory');
   }
   await native.run(vault, item.relative, name.slice(0, -5), item.before, item.after, manifestHash, true);

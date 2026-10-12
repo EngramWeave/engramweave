@@ -5,8 +5,8 @@ import { Value } from '@sinclair/typebox/value';
 import { SourceBatchSchema, SourceBatchRequestSchema, type Config, type SourceBatch, type SourceBatchRequest } from '@engramweave/contracts';
 import type Database from 'better-sqlite3';
 import { CoreError } from '../errors.js';
-import { readMarkdown, type FileRead } from '../files/read.js';
-import { parseMarkdown } from '../source/parse.js';
+import { readVaultFile, readMarkdown, type FileRead } from '../files/read.js';
+import { parseMarkdown, parseMarkdownContent } from '../source/parse.js';
 import { parseDraft } from '../drafts/files.js';
 import { editScalarProperty } from '../files/property-scalars.js';
 import { PropertyNative } from '../files/property-native.js';
@@ -115,12 +115,12 @@ export class SourceBatches {
     const file = alreadyRead;
     if (file.revision !== target.revision) throw new CoreError('SOURCE_CHANGED', 'Lifecycle target changed; preview and select it again', 409);
     if (target.path.startsWith('30_Drafts/')) parseDraft(target.path, file);
-    else if (parseMarkdown(target.path, file.bytes).state !== 'ready') throw new CoreError('INVALID_SOURCE', 'Lifecycle target is not readable', 422);
+    else if (parseMarkdownContent(target.path, file.bytes).state !== 'ready') throw new CoreError('INVALID_SOURCE', 'Lifecycle target is not readable', 422);
     const text = new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
     let updated = /^---\r?\n/.test(text) ? editScalarProperty(file.bytes, 'lifecycle_status', status) : Buffer.from(`---\nlifecycle_status: ${status}\n---\n${text}`);
     if (status === 'active' && target.path.startsWith('20_Sources/')) updated = editScalarProperty(updated, 'processing_status', 'pending');
     const committed = file.bytes.equals(updated) ? file : await writeLifecycleProperties(this.config.vault_path, target.path, file, updated, native);
-    if (!target.path.startsWith('30_Drafts/')) {
+    if (!target.path.startsWith('30_Drafts/') && !target.path.startsWith('60_Projects/')) {
       updateCompiledSource(this.db, target.path, committed, parseMarkdown(target.path, committed.bytes));
     }
     if (status === 'discarded') { sourceRelations(this.db, this.config.vault_path).removed(target.path); await this.revokeReview(target.path); }
@@ -134,7 +134,7 @@ export class SourceBatches {
     if (selected.some(target => !marked.has(target.path.toLowerCase()) && ![...preview.drafts,...preview.references].some(choice => choice.path === target.path && choice.revision === target.revision))) throw new CoreError('PATH_CONFLICT', 'Related target is outside the current Discard preview', 409);
     const files = new Map<string,FileRead>();
     for (const target of selected) {
-      const file = await readMarkdown(this.config.vault_path,target.path);
+      const file = target.path.startsWith('60_Projects/') ? await readVaultFile(this.config.vault_path,target.path) : await readMarkdown(this.config.vault_path,target.path);
       if (file.revision !== (marked.get(target.path.toLowerCase()) ?? target.revision)) throw new CoreError('SOURCE_CHANGED', 'Related target changed', 409);
       files.set(target.path,file);
     }

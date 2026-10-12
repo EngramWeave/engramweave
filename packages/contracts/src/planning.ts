@@ -35,6 +35,24 @@ export type CandidateSave = Static<typeof CandidateSaveSchema>;
 export const PlannerTemplateWriteSchema = object({ revision, content: Type.String({ minLength: 1, maxLength: 64000 }) });
 export const PlanningIdSchema = object({ id: uuid });
 export const CandidateQuerySchema = object({ id: uuid, item_id: uuid });
+export const ChangeSetDecisionSchema = object({ item_id: uuid, decision: enumeration(['undecided','include','reject']), domain_approved: Type.Boolean() });
+export const ChangeSetReviewSchema = object({ changeset_id: uuid, manifest_revision: revision, revision,
+  decisions: Type.Array(ChangeSetDecisionSchema, { maxItems: 100 }) });
+export type ChangeSetReview = Static<typeof ChangeSetReviewSchema>;
+export const ReviewSaveSchema = object({ changeset_id: uuid, manifest_revision: revision, revision,
+  decisions: Type.Array(ChangeSetDecisionSchema, { maxItems: 100 }) });
+export const ChangeSetApprovalSchema = object({ request_id: uuid, changeset_id: uuid, manifest_revision: revision, review_revision: revision,
+  source_revision: revision, draft_path: relative, related_drafts: Type.Array(object({ path: relative, revision }), { minItems: 1, maxItems: 100 }),
+  items: Type.Array(object({ item_id: uuid, candidate_revision: nullable(revision), current_revision: nullable(revision) }), { minItems: 1, maxItems: 100 }) });
+export type ChangeSetApproval = Static<typeof ChangeSetApprovalSchema>;
+export const IntegrationJobSchema = object({ id: uuid, kind: Type.Literal('apply_integration'), status: enumeration(['running','succeeded','failed','interrupted']),
+  created_at: instant, started_at: instant, finished_at: nullable(instant), changeset_id: nullable(uuid), source_path: relative,
+  target_paths: Type.Array(relative), completed_paths: Type.Array(relative), discarded_drafts: Type.Array(relative), error });
+export type IntegrationJob = Static<typeof IntegrationJobSchema>;
+export const ChangeSetInspectionSchema = object({ manifest_revision: revision, review: ChangeSetReviewSchema, source_revision: revision, selected_draft: nullable(relative),
+  related_drafts: Type.Array(object({ path: relative, revision })),
+  targets: Type.Array(object({ item_id: uuid, current: nullable(text), current_revision: nullable(revision), candidate_revision: nullable(revision) })) });
+export type ChangeSetInspection = Static<typeof ChangeSetInspectionSchema>;
 export const PLANNING_API = {
   settings: { method: 'GET', url: '/v1/planner/settings', schema: { querystring: object({}), response: { 200: object({ settings: PlannerSettingsSchema }) } } },
   settingsWrite: { method: 'POST', url: '/v1/planner/settings', schema: { querystring: object({}), body: object({ settings: PlannerSettingsSchema }), response: { 200: object({ settings: PlannerSettingsSchema }) } } },
@@ -47,4 +65,9 @@ export const PLANNING_API = {
   candidate: { method: 'GET', url: '/v1/changeset/candidate', schema: { querystring: CandidateQuerySchema, response: { 200: CandidateDocumentSchema } } },
   candidateSave: { method: 'POST', url: '/v1/changeset/candidate', schema: { querystring: object({}), body: CandidateSaveSchema, response: { 200: object({ revision }) } } },
   changesetCancel: { method: 'POST', url: '/v1/changeset/cancel', schema: { querystring: object({}), body: PlanningIdSchema, response: { 200: ChangeSetSchema } } },
+  review: { method: 'GET', url: '/v1/changeset/review', schema: { querystring: PlanningIdSchema, response: { 200: ChangeSetInspectionSchema } } },
+  reviewSave: { method: 'POST', url: '/v1/changeset/review', schema: { querystring: object({}), body: ReviewSaveSchema, response: { 200: ChangeSetReviewSchema } } },
+  approve: { method: 'POST', url: '/v1/changeset/approve', schema: { querystring: object({}), body: ChangeSetApprovalSchema, response: { 200: object({ job: IntegrationJobSchema, reused: Type.Boolean() }) } } },
+  execution: { method: 'GET', url: '/v1/integration', schema: { querystring: PlanningIdSchema, response: { 200: object({ job: nullable(IntegrationJobSchema) }) } } },
+  integrationFile: { method: 'GET', url: '/v1/integration/file', schema: { querystring: object({ id: uuid, path: relative }), response: { 200: object({ path: relative, revision }) } } },
 } as const;

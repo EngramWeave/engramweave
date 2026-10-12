@@ -1,6 +1,6 @@
 # Obsidian MVP 与直接入库
 
-MVP 使用现有 Compiler／Draft Analyzer，让用户在 Obsidian 原生编辑 Draft、查看 Source Annotation 与两项分析，再明确确认新建一份 `40_Knowledge` 笔记。完整 Planner／ChangeSet 和自动 Vault Git 仍待后续阶段；系统边界见 [ADR-0015](../../engramweave-docs/docs/adr/0015-mvp-direct-draft-publication.md)。安装与操作见 [插件 README](../../engramweave-obsidian/README.md)。
+MVP 使用现有 Compiler／Draft Analyzer，让用户在 Obsidian 原生编辑 Draft、查看 Source Annotation 与两项分析，再明确确认新建一份 `40_Knowledge` 笔记。完整 Planner／ChangeSet 现已可用；快捷入口共用 Executor、归档和恢复，自动 Vault Git 仍待 D；系统边界见 [ADR-0015](../../engramweave-docs/docs/adr/0015-mvp-direct-draft-publication.md)。安装与操作见 [插件 README](../../engramweave-obsidian/README.md)。
 
 ## Core 接口
 
@@ -17,7 +17,7 @@ Core 以当前 Draft 字节为准，保留正文和用户 Properties，仅将正
 
 跨文件应用不是文件系统事务。异常可能留下已创建的 Knowledge 和部分 discarded Draft，Core 保留未完成记录，禁止另一个变更操作插入，并在启动时尝试恢复。已确认创建后被用户编辑的 Knowledge 保留；目标被删除／替换、Source 或 Draft 被并发修改时，不覆盖或重建它们，不伪报归档完成。侧边栏显示未完成原因和重试入口。冲突需先检查保留文件和记录、恢复明确的原审批版本，再重试原审批；直接丢弃恢复记录不是支持的取消方式。
 
-完成记录独立于登记数据库，可在数据库重建后辨认已入库操作。记录不是正式历史，正式笔记由用户现有 Git 工具管理，尚无旧审批记录清理界面。完整轮次和有限模型重试由 [Processing](processing.md) 提供；[Human Review](human-review.md) 提供 Review Note、Idea、Recompile、Draft 专属 Intent 与取消许可。MVP 入库不消费 Review Note，归档撤销当前规划选择并保留各 Draft 的 Intent；计划审批和批量插件审阅仍待后续流程。
+完成记录独立于登记数据库，可在数据库重建后辨认已入库操作。记录不是正式历史，正式笔记由用户现有 Git 工具管理，尚无旧审批记录清理界面。完整轮次和有限模型重试由 [Processing](processing.md) 提供；[Human Review](human-review.md) 提供 Review Note、Idea、Recompile、Draft 专属 Intent 与取消许可。MVP 入库不消费 Review Note，归档撤销当前规划选择并保留各 Draft 的 Intent；完整方案审批见 [Planner](planning.md)，批量插件审阅不在当前交付范围。
 
 ## 验证方法
 

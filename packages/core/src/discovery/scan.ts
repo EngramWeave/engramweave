@@ -15,11 +15,12 @@ import { isCaptureTemporaryName } from '../files/publication.js';
 import { registeredSourceBytes } from '../source/properties.js';
 import { isPropertyArtifact, isPropertyJournal, recoverPropertyJournal, writeSourceProperties } from '../files/properties.js';
 import { PropertyNative } from '../files/property-native.js';
+import { formalPath } from '../changesets/paths.js';
 
 class ScanFailure extends CoreError { constructor(message: string) { super('IO_ERROR', message); } }
 export interface Enumeration { paths: string[]; roots: string[]; warnings: Source['diagnostics'] }
 
-export async function enumerateMarkdown(vault: string, knownRoots: string[], native?: PropertyNative, onBytes?: (count: number) => void, selection?: string[]): Promise<Enumeration> {
+export async function enumerateMarkdown(vault: string, knownRoots: string[], native?: PropertyNative, onBytes?: (count: number) => void, selection?: string[], roots: readonly string[] = SCAN_ROOTS): Promise<Enumeration> {
   const result: Enumeration = { paths: [], roots: [], warnings: [] };
   let recoveryEntries = 0;
   try {
@@ -54,13 +55,14 @@ export async function enumerateMarkdown(vault: string, knownRoots: string[], nat
         if (info.isSymbolicLink()) continue;
         if (info.isDirectory()) await visit(child);
         else if (info.isFile() && /\.md$/i.test(name)) {
-          markdownPath(child);
+          if (child.startsWith('60_Projects/')) formalPath(child); else markdownPath(child);
           result.paths.push(child);
           if (result.paths.length > LIMITS.scan_candidates) throw new ScanFailure('Scan exceeds the candidate count limit');
         }
       }
     };
-    for (const root of SCAN_ROOTS) {
+    for (const root of roots) {
+      if (![...SCAN_ROOTS, '60_Projects'].includes(root as typeof SCAN_ROOTS[number])) throw new ScanFailure('Unsupported enumeration root');
       let info;
       try { info = await lstat(path.join(vault, root)); }
       catch (error) {

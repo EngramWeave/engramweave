@@ -70,6 +70,15 @@ pub fn changeset_uri(host: &mut Host, id: String) -> Result<String> {
     uri.query_pairs_mut().append_pair("vault",name).append_pair("vault_path",vault).append_pair("changeset_id",&id);
     Ok(uri.to_string().replace('+',"%20"))
 }
+pub fn integration_uri(host: &mut Host, id: String, path: String) -> Result<String> {
+    host.request(Operation::IntegrationFile, json!({"id": id, "path": path}))?;
+    let status = host.request(Operation::Status, json!({}))?;
+    let vault = status["vault_path"].as_str().ok_or_else(|| Failure::new("INSTANCE_UNCERTAIN", "Vault is unavailable"))?;
+    let name = std::path::Path::new(vault.trim_start_matches(r"\\?\").trim_end_matches(['/', '\\'])).file_name().and_then(|value|value.to_str()).ok_or_else(||Failure::new("INSTANCE_UNCERTAIN","Vault name is unavailable"))?;
+    let mut uri = Url::parse("obsidian://open").unwrap();
+    uri.query_pairs_mut().append_pair("vault", name).append_pair("file", &path);
+    Ok(uri.to_string().replace('+', "%20"))
+}
 
 fn valid_zotero_item(uri: &Url) -> bool {
     if uri.scheme() != "zotero" || uri.host_str() != Some("select") || uri.port().is_some()

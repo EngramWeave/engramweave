@@ -9,6 +9,7 @@
     "allow-core-stop",
     "allow-core-request",
     "allow-open-document",
-    "allow-open-changeset"
+    "allow-open-changeset",
+    "allow-open-integration-document"
   ]
 }

@@ -90,7 +90,7 @@ public static class SourcePropertyCommit {
       stream.Write(bytes,0,bytes.Length); stream.Flush(true);
     }
   }
-  public static void Run(string vault, string relative, string stem, string oldHash, string newHash, string manifestHash, bool recover, string manifestBytes, string replacementBytes, bool delete) {
+  public static void Run(string vault, string relative, string stem, string oldHash, string newHash, string manifestHash, bool recover, string manifestBytes, string replacementBytes, bool delete, bool check) {
     BytesRead=0; PublishedMtime=0;
     var directories = new List<SafeFileHandle>();
     try {
@@ -105,7 +105,15 @@ public static class SourcePropertyCommit {
       string[] parts = relative.Split('/');
       for(int i=0;i<parts.Length-1;i++) { current=Path.Combine(current,parts[i]); directories.Add(Open(current,true)); }
       string target=Path.Combine(current,parts[parts.Length-1]), temp=Path.Combine(current,stem+".tmp"), backup=Path.Combine(current,stem+".bak");
+      if(!recover && !delete && oldHash.Length==0) {
+        try {
+          Create(temp,replacementBytes,5242880);
+          using(var created=Open(temp,false)) { if(Hash(created)!=newHash) throw new IOException("Creation bytes changed"); Move(created,target); }
+        } finally { RemoveChecked(temp,newHash); }
+        return;
+      }
       using(var original=recover ? null : Open(target,false,!delete)) {
+      if(check) { if(Hash(original)!=oldHash) throw new IOException("Preflight revision conflict"); return; }
       if(delete) { if(Hash(original)!=oldHash) throw new IOException("Revision conflict"); Remove(original); return; }
       if(!recover) {
         if(Hash(original)!=oldHash) throw new IOException("Revision conflict");
@@ -212,7 +220,7 @@ public static class Program {
         } else {
           var r = json.Deserialize<Dictionary<string, object>>(line);
           if(Flag(r,"mkdir")) SourcePropertyCommit.EnsureDirectory(Text(r,"vault"),Text(r,"relative"));
-          else SourcePropertyCommit.Run(Text(r,"vault"),Text(r,"relative"),Text(r,"stem"),Text(r,"before"),Text(r,"after"),Text(r,"manifest"),Flag(r,"recover"),Text(r,"manifest_bytes"),Text(r,"replacement_bytes"),Flag(r,"delete"));
+          else SourcePropertyCommit.Run(Text(r,"vault"),Text(r,"relative"),Text(r,"stem"),Text(r,"before"),Text(r,"after"),Text(r,"manifest"),Flag(r,"recover"),Text(r,"manifest_bytes"),Text(r,"replacement_bytes"),Flag(r,"delete"),Flag(r,"check"));
           Console.WriteLine(json.Serialize(new { ok=true, read_bytes=SourcePropertyCommit.BytesRead, mtime=SourcePropertyCommit.PublishedMtime }));
         }
       } catch {
