@@ -84,6 +84,14 @@ Core manages `70_ChangeSets/<id>/manifest.json` and mirrored `candidates/`, excl
 
 P3 prioritizes Agent execution, preserving existing P2 API behavior and independent recall services. Agent tools cannot approve, apply or delete formal files. Full influence review/approval and Executor are implemented. Scoped Git remains P3-D. See [the Agent-first decision](../engramweave-docs/docs/adr/0019-agent-first-delivery-and-core-tools.md) and [the Vault-local review decision](../engramweave-docs/docs/adr/0020-vault-local-changeset-review.md).
 
+## Planned Desktop resource-page increment
+
+Desktop Review will manage Draft files and Changes will manage existing ChangeSet workspaces, using Sources-style lists, filters, read-only details and native Obsidian navigation. Existing safe cancellation and replanning belong to this increment; full standalone Draft discard, restore and deletion remain P3-D. No second editable diff or final approval surface is introduced, and consumed/canceled workspaces are not recreated from Jobs history.
+
+The confirmed increment also extends Core-owned Review Complete with explicitly confirmed sibling cleanup. When other active Drafts share the Source, Obsidian prompts with discard enabled by default and an opt-out. Core will accept and recover the selected Draft and approved sibling lifecycle marks together, excluding protected task/execution inputs and preserving the new selection. Completed request replay must not discard siblings restored later. This extension is not yet implemented.
+
+The D lifecycle contract distinguishes the one current selected Draft from its siblings. Discarding an unselected Draft does not change the Source stage. Discarding the selected Draft before execution acceptance revokes its review, cancels its unapproved proposal, returns reviewed/planned to compiled and marks that file discarded through one Core-owned operation. Remaining Draft count never decides the stage, no sibling is automatically selected, and archived Sources do not regress. Draft Restore changes only its lifecycle and never grants planning permission; Source Restore retains its active/pending contract. Existing Discard Drafts preserves Source stage, so it does not yet satisfy the selected-Draft compound operation and must not be used as a frontend workaround.
+
 ## Intended temporary plan retention
 
 Persist ChangeSets for review, approval, version/precondition-checked execution, and unresolved-operation recovery. Clean successfully consumed or explicitly canceled plans, retaining necessary Job results and errors. Do not clean unfinished work until its outcome is clear, especially archival-marker recovery. Formal content history belongs to Git rather than permanent copies of every ChangeSet.
