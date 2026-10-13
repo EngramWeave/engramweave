@@ -3,7 +3,7 @@ import type { Status } from '@engramweave/contracts';
 import type { HostInfo } from './client';
 import { Icon, type IconName } from './Icon';
 
-export type View = 'dashboard' | 'sources' | 'jobs' | 'search' | 'settings';
+export type View = 'dashboard' | 'sources' | 'review' | 'changes' | 'jobs' | 'search' | 'settings';
 const navigation: {
   label: string;
   icon: IconName;
@@ -17,8 +17,8 @@ const navigation: {
     note: 'Capture API 已提供；Desktop 暂不提供采集表单',
   },
   { label: 'Sources', icon: 'file', view: 'sources' },
-  { label: 'Review', icon: 'list', note: '规划展示，尚未实现' },
-  { label: 'Changes', icon: 'branch', note: '规划展示，尚未实现' },
+  { label: 'Review', icon: 'list', view: 'review' },
+  { label: 'Changes', icon: 'branch', view: 'changes' },
   {
     label: 'Maintenance',
     icon: 'layers',
@@ -39,6 +39,8 @@ export function Shell({
   busy,
   refreshVault,
   active,
+  reviewCount,
+  changeCount,
 }: {
   children: ReactNode;
   view: View;
@@ -51,6 +53,8 @@ export function Shell({
   busy: boolean;
   refreshVault: () => void;
   active: boolean;
+  reviewCount: number | undefined;
+  changeCount: number | undefined;
 }) {
   const [systemExpanded, setSystemExpanded] = useState(true);
   const now = new Date();
@@ -85,6 +89,8 @@ export function Shell({
                 <span>{item.label}</span>
                 {item.view === 'sources' && status ? (
                   <span className="nav-count">{status.counts.pending ?? '—'}</span>
+                ) : item.view === 'review' || item.view === 'changes' ? (
+                  <span className="nav-count">{status ? (item.view === 'review' ? reviewCount : changeCount) ?? '—' : '—'}</span>
                 ) : !item.view ? (
                   <span className="nav-planned">Soon</span>
                 ) : null}
@@ -192,6 +198,7 @@ export function Shell({
                     ? 'sun'
                     : view === 'sources'
                       ? 'file'
+                      : view === 'review' ? 'list' : view === 'changes' ? 'branch'
                       : view === 'jobs'
                         ? 'activity'
                         : view === 'search'
@@ -206,6 +213,8 @@ export function Shell({
                   ? greeting
                   : {
                       sources: 'Sources',
+                      review: 'Review',
+                      changes: 'Changes',
                       jobs: 'Jobs & rounds',
                       search: 'Find your knowledge',
                       settings: 'Your workspace',
@@ -221,6 +230,8 @@ export function Shell({
                   : {
                       sources:
                         'Manage your captured materials and their context.',
+                      review: 'Manage your Draft files. Review and edit in Obsidian.',
+                      changes: 'Inspect existing proposals and their file impact.',
                       jobs: 'Track compilation, analysis, and local indexing.',
                       search:
                         'Find notes, sources, and the context that connects them.',

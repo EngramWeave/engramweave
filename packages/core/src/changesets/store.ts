@@ -90,6 +90,14 @@ export class ChangeSets {
     }
     return items.sort((a,b) => a.created_at.localeCompare(b.created_at));
   }
+  async workspaces() {
+    let directory: string;
+    try { directory = await resolveVaultDirectory(this.config.vault_path, '70_ChangeSets'); }
+    catch (error) { if (absent(error)) return []; throw error; }
+    const names = await readdir(directory, { withFileTypes: true });
+    if (names.length > LIMITS.scan_candidates) throw new CoreError('PAYLOAD_TOO_LARGE', 'Too many ChangeSet workspaces', 413);
+    return names.filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(entry.name)).map(entry => entry.name);
+  }
   /** Detect missing candidate files without rereading mutable formal targets or rejecting human edits. */
   async verifyCandidates(id:string){
     const {manifest}=await this.read(id);const native=new PropertyNative();

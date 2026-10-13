@@ -71,7 +71,7 @@ async fn core_request(
     operation: routes::Operation,
     input: Value,
 ) -> Result<Value> {
-    if matches!(operation, routes::Operation::Recall | routes::Operation::RecallTest | routes::Operation::AnalysisCancel | routes::Operation::ProcessingCancel) {
+    if matches!(operation, routes::Operation::Recall | routes::Operation::RecallTest | routes::Operation::AnalysisCancel | routes::Operation::ProcessingCancel | routes::Operation::PlanCancel) {
         let mut connection = with_host(&state, |host| host.recall_connection()).await?;
         return tauri::async_runtime::spawn_blocking(move || connection.request(operation, input)).await
             .map_err(|_| Failure::new("IO_ERROR", "Recall request failed"))?;
@@ -93,6 +93,10 @@ async fn open_document(
 #[tauri::command]
 async fn open_changeset(state: State<'_,HostState>, id:String)->Result<()> {
     with_host(&state,move|host|open::launch(&open::changeset_uri(host,id)?)).await
+}
+#[tauri::command]
+async fn preview_candidate(state: State<'_, HostState>, id: String, item_id: String) -> Result<()> {
+    with_host(&state, move |host| open::launch(&open::candidate_uri(host, id, item_id)?)).await
 }
 #[tauri::command]
 async fn open_integration_document(state: State<'_,HostState>, id:String, path:String)->Result<()> {
@@ -117,6 +121,7 @@ pub fn run() {
             core_request,
             open_document,
             open_changeset,
+            preview_candidate,
             open_integration_document
         ])
         .setup(|app| {

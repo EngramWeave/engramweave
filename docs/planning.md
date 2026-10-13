@@ -94,3 +94,5 @@ Executor 在正式写入前持久保存接受回执，整体预检后使用 Wind
 
 
 来源保护的元数据检查覆盖 Ideas、Knowledge、Research、Projects，包括尚未登记的本地正式文件；不因此扩大 Projects 的普通登记或语义召回范围。Source 操作可列出这些回链，默认跳过仍被 active 正式内容引用的 Source；明确勾选关联文件仅标记 discarded，确认覆盖删除也不删除正式文件。独立正式文件回收站、受管理 Asset／Derived 清理及 Git 仍属于 D。
+
+按 Source 查询待审方案、取消后回退和重新规划，仅根据该 Source 的有效规划回执读取工作区；无关损坏或无归属工作区留作独立诊断，不阻塞另一份有效 Source。该 Source 自己的 manifest / 输入与回执冲突仍明确拒绝，不跳过有效流程的完整性检查。Desktop 的当前文件页与只读候选预览见 [Desktop](desktop.md)。

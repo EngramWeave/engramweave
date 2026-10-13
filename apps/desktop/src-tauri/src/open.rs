@@ -15,7 +15,7 @@ pub enum OpenTarget {
 
 pub fn document_uri(host: &mut Host, path: String, target: OpenTarget) -> Result<String> {
     // Core validates scope and the current document; the webview cannot supply a URI.
-    let operation = if path.starts_with("30_Drafts/") { Operation::Draft } else { Operation::Document };
+    let operation = if path.starts_with("30_Drafts/") { Operation::DraftFile } else { Operation::Document };
     let document = host.request(operation, json!({"path": path}))?;
     match target {
         OpenTarget::Obsidian => {
@@ -77,6 +77,12 @@ pub fn integration_uri(host: &mut Host, id: String, path: String) -> Result<Stri
     let name = std::path::Path::new(vault.trim_start_matches(r"\\?\").trim_end_matches(['/', '\\'])).file_name().and_then(|value|value.to_str()).ok_or_else(||Failure::new("INSTANCE_UNCERTAIN","Vault name is unavailable"))?;
     let mut uri = Url::parse("obsidian://open").unwrap();
     uri.query_pairs_mut().append_pair("vault", name).append_pair("file", &path);
+    Ok(uri.to_string().replace('+', "%20"))
+}
+pub fn candidate_uri(host: &mut Host, id: String, item_id: String) -> Result<String> {
+    host.request(Operation::Candidate, json!({"id": id, "item_id": item_id}))?;
+    let mut uri = Url::parse(&changeset_uri(host, id)?).unwrap();
+    uri.query_pairs_mut().append_pair("preview_item", &item_id);
     Ok(uri.to_string().replace('+', "%20"))
 }
 

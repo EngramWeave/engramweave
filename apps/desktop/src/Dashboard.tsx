@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Status } from '@engramweave/contracts';
+import { client, type Failure } from './client';
 import type { JobPage, SourcePage } from './client';
 import { Icon, type IconName } from './Icon';
 
@@ -80,56 +81,6 @@ function StatCard({
         <path d="M0 31Q24-9 45 19T84 29T125 34H280V40H0Z" fill="currentColor" />
       </svg>
     </button>
-  );
-}
-
-function PlannedRows({ kind }: { kind: 'review' | 'changes' }) {
-  const titles =
-    kind === 'review'
-      ? [
-          'Ninfer Architecture Deep Dive',
-          'Qwen3.8 Technical Report',
-          'LLM Training Scaling Laws',
-          'Claude Code Agent SDK',
-          'Attention Is All You Need',
-          'The Geography of Thought',
-        ]
-      : [
-          'Ninfer Architecture',
-          'Qwen3.8 Model Integration',
-          'AI Ethics Reading Set',
-          'Personal Goals & Planning',
-        ];
-  return (
-    <div className="planned-rows" aria-label="仅供视觉展示的规划模块">
-      {titles.map((title, i) => (
-        <div className="compact-row" key={title}>
-          {kind === 'review' && (
-            <span className="display-checkbox" aria-hidden="true" />
-          )}
-          <span
-            className={`row-symbol ${kind === 'changes' ? 'violet' : i % 3 === 1 ? 'red' : 'blue'}`}
-          >
-            <Icon
-              name={
-                kind === 'changes' ? 'branch' : i % 3 === 1 ? 'file' : 'link'
-              }
-            />
-          </span>
-          <span className="row-copy">
-            <span className="row-title">{title}</span>
-            <span className="row-meta">
-              {kind === 'changes' ? 'ChangeSet preview' : 'Review preview'} ·
-              示例内容
-            </span>
-          </span>
-          <button className="row-action" disabled>
-            {kind === 'changes' ? '查看变更' : '在 Obsidian 打开'}{' '}
-            {kind === 'review' && <Icon name="external" />}
-          </button>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -239,12 +190,20 @@ export function Dashboard({
   jobs,
   navigate,
   select,
+  openDraft,
+  openChangeSet,
+  drafts,
+  changes,
 }: {
   status: Status | null;
   sources: SourcePage | null;
   jobs: JobPage | null;
-  navigate: (view: 'sources' | 'jobs' | 'search' | 'settings') => void;
+  navigate: (view: 'sources' | 'review' | 'changes' | 'jobs' | 'search' | 'settings') => void;
   select: (path: string) => void;
+  openDraft: (path: string) => void;
+  openChangeSet: (id: string) => void;
+  drafts: { page: Awaited<ReturnType<typeof client.reviewFiles>> | undefined; error: Failure | undefined };
+  changes: { page: Awaited<ReturnType<typeof client.changeFiles>> | undefined; error: Failure | undefined };
 }) {
   const counts = status?.counts;
   const overview = [
@@ -278,15 +237,17 @@ export function Dashboard({
         />
         <StatCard
           title="Review Queue"
-          value="—"
-          caption="规划展示 · Awaiting review"
+          value={drafts.page?.views.to_review ?? '—'}
+          caption="Drafts of compiled Sources"
+          action={() => navigate('review')}
           icon="list"
           tone="violet"
         />
         <StatCard
           title="ChangeSets"
-          value="—"
-          caption="规划展示 · Awaiting approval"
+          value={changes.page?.views.ready ?? '—'}
+          caption="Existing proposals ready for review"
+          action={() => navigate('changes')}
           icon="branch"
           tone="orange"
         />
@@ -363,34 +324,15 @@ export function Dashboard({
             </div>
           )}
         </Panel>
-        <Panel
-          title="Review Queue"
-          icon="list"
-          planned
-          className="review-panel"
-        >
-          <div className="filter-pills">
-            <span className="selected">All</span>
-            <span>Notes</span>
-            <span>Web</span>
-            <span>PDF</span>
-            <span>Images</span>
-          </div>
-          <PlannedRows kind="review" />
+        <Panel title="Review Queue" icon="list" className="review-panel" action={() => navigate('review')}>
+          <p className="hint">Draft files awaiting human review. Edit in Obsidian.</p>
+          {drafts.page?.items.map(item => <div className="compact-row" key={item.path}><span className="row-symbol blue"><Icon name="file" /></span><button className="row-copy row-select" onClick={() => openDraft(item.path)}><span className="row-title">{item.title}</span><span className="row-meta">{item.source_title ?? item.source_path}</span></button><span className="state-tag blue">Compiled</span></div>)}
+          {!drafts.page?.items.length && <p className="empty">{drafts.error ? '文件查询暂不可用，请在 Review 页面刷新。' : status ? 'No Drafts awaiting review.' : 'Connect Core to view Draft files.'}</p>}
         </Panel>
-        <Panel
-          title="ChangeSets"
-          icon="branch"
-          planned
-          className="changes-panel"
-        >
-          <div className="filter-pills">
-            <span className="selected">All</span>
-            <span>Awaiting</span>
-            <span>In Progress</span>
-            <span>Recent</span>
-          </div>
-          <PlannedRows kind="changes" />
+        <Panel title="ChangeSets" icon="branch" className="changes-panel" action={() => navigate('changes')}>
+          <p className="hint">Current proposals. Consumed results are retained in Jobs.</p>
+          {changes.page?.items.map(item => <div className="compact-row" key={item.id}><span className="row-symbol violet"><Icon name="branch" /></span><button className="row-copy row-select" onClick={() => openChangeSet(item.id)}><span className="row-title">{item.title}</span><span className="row-meta">{item.impact.write} write · {item.impact.directory} folders · {item.impact.discard} discard</span></button><span className="state-tag violet">Ready</span></div>)}
+          {!changes.page?.items.length && <p className="empty">{changes.error ? '文件查询暂不可用，请在 Changes 页面刷新。' : status ? 'No proposals ready for review.' : 'Connect Core to view ChangeSets.'}</p>}
         </Panel>
       </div>
       <div className="dashboard-bottom">

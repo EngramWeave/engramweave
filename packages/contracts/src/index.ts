@@ -2,6 +2,7 @@ import { Type, type Static, type TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 import { PlannerJobSchema, IntegrationJobSchema } from './planning.js';
 export * from './planning.js';
+export * from './browser.js';
 
 export const API_VERSION = '1';
 export const CORE_VERSION = '0.1.0';
@@ -344,6 +345,7 @@ export const HumanReviewRequestSchema = object({
   source_path: CapturePathSchema, source_revision: RevisionSchema,
   draft_path: DraftPathSchema, draft_revision: RevisionSchema,
   note: Type.String({ maxLength: 8000 }),
+  discard_drafts: Type.Optional(Type.Array(object({ path: DraftPathSchema, revision: RevisionSchema }), { maxItems: 100 })),
 });
 export type HumanReviewRequest = Static<typeof HumanReviewRequestSchema>;
 export const HumanReviewResponseSchema = object({ request_id: nonempty, action: enumeration(['idea', 'complete', 'cancel']),

@@ -4,7 +4,7 @@
 
 ## 接口与资格
 
-- `POST /v1/human-review`：`request_id`、`action: idea | complete | cancel`、`source_path`／`source_revision`、`draft_path`／`draft_revision`、`note`。输入最多 8000 字符，超限拒绝，不截断。版本仅用于接受时的并发检查，不将 Reviewed Draft 的正文冻结。
+- `POST /v1/human-review`：`request_id`、`action: idea | complete | cancel`、`source_path`／`source_revision`、`draft_path`／`draft_revision`、`note`，Complete 可选 `discard_drafts: [{path, revision}]`。输入最多 8000 字符，超限拒绝，不截断。版本仅用于接受时的并发检查，不将 Reviewed Draft 的正文冻结。
 - `POST /v1/recompile`：沿用 [Processing 合同](processing.md)，以 `feedback` 接收 Review Note。
 - `GET /v1/review-action?id=<UUID>`：返回 `not_found`／`unfinished`／`completed`，已接受时包含原请求，完成时包含结果。查询不重复执行动作。
 - `GET /v1/draft-review` 的 `human_review` 返回 `selected_draft` 和当前打开 Draft 自己的 `intent`。未选择／撤销时前者为 null；该 Draft 尚未提交 Intent 时后者为 null，空 Intent 则为空字符串。
@@ -12,6 +12,16 @@
 这些接口沿用 loopback、Bearer、Host 和无 Origin 的边界。新动作支持一个 active Draft 对应一个 active Source。Idea 可来自未归档的 Source，拒绝全空输入；文件固定新建为 `10_Ideas/<request_id>.md`，原输入作为正文，Properties 保留 Source 和 Draft Wiki Links。它不改 Source 阶段，也不调用 Compiler／Analyzer／Embedding。
 
 Review Complete 要求 Source 为 compiled／reviewed，不要求任何 Analyzer 尝试或分析结果。用户可跳过 AI 分析直接人工确认；已有分析及其失败、过期情况仍作为参考展示。Core 将 Source 改为 reviewed，保存所选身份和该 Draft 本次 Intent。规划前明确确认同 Source 的 B 可以直接切换选择，A 与其 Intent 保留。普通编辑不撤销许可。Cancel 仅针对当前选择，提交空 `note`，reviewed／planned→compiled，清理未批准方案，不改 Draft／Intent。planned 的选择也在正常启动与数据库重建后保留。运行中的模型、轮次或文件操作遵守 Core 的互斥保护。
+
+## Review Complete 的其他稿件整理
+
+有其他同 Source 的 active Draft 时，原生插件先显示标题与路径清单，默认勾选 Mark other Drafts as Discarded。用户可取消勾选以保留它们，或取消整个确认而不改变审阅阶段。没有其他 active Draft 时不增加弹窗。受保护的活动任务 / 已接受执行仍遵守既有 Core 互斥，不自动废弃。单次清单最多 100 份，不截断；超过时可保留其他稿件先完成审阅。
+
+Complete 的可选 `discard_drafts` 只接受明确的其他 active 同 Source 稿件及当前 revision，拒绝当前选中稿、重复路径、其他 Source 和过期版本。其他动作不能携带这个字段。弹窗后重新读取文件；若整理清单变化，要求再次确认，不自动扩大清单。其他稿件仅改变 lifecycle_status，正文、Properties 其余字段和各自 Intent 保留。
+
+Core 在变更前接受同一 Human Review 请求，随后保存 Source reviewed 阶段和确认的其他 Draft 标记，再发布本次选择。逐项标记进度持久化，未完成动作可按原 ID 恢复；此路径不调用普通 Discard 的撤销回调，避免误撤销刚选择的稿件。已完成的整份动作或单文件步骤都不会因重试重新废弃之后手动恢复的稿件。旧请求无清单时保持原行为，SQLite schema 不变；插件的送达不明记录保留原清单与原 ID。
+
+独立废弃当前选中审阅稿及其未批准流程的复合动作、独立 Draft Restore / 清理仍属于 D；这里的整理仅是一次 Review Complete 的明确附带选择。
 
 ## 持久化、重放和恢复
 

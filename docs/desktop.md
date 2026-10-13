@@ -33,7 +33,7 @@ $env:ENGRAMWEAVE_CONFIG = 'D:/path/to/config.json'
 
 窗口保留系统原生标题栏和窗口控制，Windows 11 标题栏及边框颜色与应用背景统一；不支持该颜色 API 的系统保留原生颜色。侧栏、标题区和底部状态保持固定，内容区和 Sources 的列表、属性预览独立滚动。较小窗口压缩侧栏间距，必要时仅导航区域滚动；底部刷新和状态卡片开关始终可用。侧栏底部菜单按钮收起或展开 System Status 卡片。
 
-主页展示真实索引统计、Sources 与扫描任务。Review、ChangeSets、Knowledge Maintenance 等规划区域仅作视觉展示，示例内容明确标记且操作不可用；知识维护不表示 Core 连接配置或 Vault 登记诊断。知识图谱只作结构示意，不表示真实关联。文档详情在 Sources 属性栏或 Search 中展示，离开这些页面后不保留详情卡片。
+主页展示真实索引统计、Sources 与扫描任务。Review Queue 和 ChangeSets 展示实际文件摘要并可定位到对应页面；Knowledge Maintenance 等规划区域仍仅作视觉展示，示例内容明确标记且操作不可用；知识维护不表示 Core 连接配置或 Vault 登记诊断。知识图谱只作结构示意，不表示真实关联。文档详情在 Sources 属性栏或 Search 中展示，离开这些页面后不保留详情卡片。
 
 Sources 使用列表与属性预览并排的布局。顶部六个 View 为 All Sources、Pending、Processing、Archived、Issues、Discarded；discarded Source 仅在最后一个 View 出现，具体筛选规则见 [Sources](sources.md)。可读取不表示已整合。领域概念和状态沿用英文：Processing 为 Pending、Compiled、Reviewed、Planned、Archived，Lifecycle 为 Active 或 Discarded，未记录阶段显示 Not set，未知生命周期显示 Unknown。扫描 Job 失败不改变这些文件属性。统计针对所有来源，不随组合筛选变化。搜索、Filter Chips 与分页使用 Core 接口。选中资料后，右侧只读展示 Annotation、Properties/元数据、生命周期、标签和原始引用；inline Asset 不重复展示。详情不提供正文或属性编辑，底部显式操作另经清单确认。缺失、不支持、无效资产通过 Health 和诊断表达。详情比较当前字节与登记 revision 提示索引过时，不更新数据库。Search 支持 Knowledge、Sources、全部，默认 Knowledge；Annotation 片段明确标为用户上下文。
 
@@ -48,6 +48,22 @@ Settings 的 Compiler 区域配置 API／Codex、模型、reasoning effort、超
 Sources 详情的 Run Compiler 对 active、pending／compiled、已登记 Source 执行一次正文编译。当前扫描与 Compiler 串行；任务结束后刷新阶段与相关 Draft 列表。每次编译新增 Draft，已有用户编辑保留；可预览各 Draft 或通过原生宿主在 Obsidian 打开，Desktop 不编辑正文。Compiler 失败显示在对应 Source／Job，设置错误留在设置区域，不跨页保留。
 
 正文生成成功不表示分析已经结束。Desktop 可选具体 Draft 启动 Analyze Draft 或独立 Retry Review／Retry Relation；分析正文位于 Obsidian 侧边栏。Sources 多选提供正文 Compile 和完整 Process，Jobs 只展示操作、轮次及尝试历史，支持展开详情、分页和打开相关 Draft。扫描 Vault、完整核对和重建索引均留在当前页面，不自动进入 Jobs；需要查看记录时从 System Status 或 Recent Activity 主动打开。Settings 配置时间／间隔、时区和有限重试；最小反馈 Recompile 保留旧稿、返回 pending，Sources 显示计数并支持 Pending 筛选。具体合同见 [Processing](processing.md)。人工直接入库由 [Obsidian MVP](obsidian-mvp.md) 实现，完整 Planner／ChangeSet 生成、批准执行和恢复见 [Planner](planning.md)。Desktop Jobs 显示 Integration Executor 的涉及路径、进度、归档 Draft 清单和错误，并经固定原生入口打开经 Core 核实的正式笔记；批准与重试在 Obsidian，Git 仍待 D。
+
+## Review 与 Changes 文件页面
+
+侧栏 Review 的数字显示全库 To Review 数量，Changes 的数字显示全库 Ready 数量，不随页面搜索或筛选变化；连接或文件摘要不可用时显示 `—`。进入页面、刷新列表或完成管理操作后重新读取摘要。Review 与 Changes 的搜索框沿用 Sources 的样式，按 Enter 或点击搜索按钮提交。
+
+Review 一行对应一份 `30_Drafts` Markdown，包括保留旧稿、discarded 和无法解析的文件。All Drafts 排除已知 discarded；To Review 对应有效 active Draft 的 active compiled Source；Reviewed / Planned 只计当前人工选择，其他同 Source 的稿件不冒充已审阅稿。Issues 独立显示文件或来源问题。Source stage、Analysis 和 Lifecycle 分开展示，不创建 Draft 处理状态；修改时间来自文件，不表示审阅时间。
+
+页面提供搜索、排序、筛选、20 项分页、只读正文 / Properties、Source Annotation、该 Draft 的 Intent、同源稿件、分析概况及相关方案 / Job 跳转。详细分析建议和正文编辑仍在 Obsidian。对有效当前选择可明确启动 Planner；完整或单项分析复用已有 Analyzer。Draft 精确定位使用独立 path 条件，能定位 discarded 和长路径，Source 跳转根据当前生命周期选择正确 View。独立 Draft 废弃、恢复与永久删除仍属于 D，不展示空管理按钮。
+
+Changes 一行对应一个现存工作区；用 manifest、规划回执及 Executor 接受事实区分 Preparing / Ready / Executing / Issues，已接受但中断的执行也受保护。异常工作区保留独立诊断，不使其余列表失效。搜索可匹配目标路径，筛选支持操作和目标领域；详情列出全部正文 / 目录 / 废弃、新领域、理由、证据和已保存人工取舍。Preview 只读显示已保存 Candidate，可经核实的本方案条目在 Obsidian 阅读模式打开；不会替插件保存未提交编辑。
+
+Ready 支持明确取消和单方案 Replan；批量取消只操作明确选择的 Ready 方案，最多 100 份，逐项反馈。取消清理候选并将有效选择返回 reviewed；重新规划使用当前 Draft / Intent / 知识库，新方案重新批准。若旧方案已取消而新请求失败，结果明确说明，并保留从 Review 再次规划的入口。正在生成的方案可取消对应 Planner。已接受执行只能查询 / 恢复原执行，不能用取消、重规划或清理绕过。成功消费或取消的工作区从文件页消失，历史留在 Jobs。
+
+`GET /v1/review-files` 与 `/v1/change-files` 返回分页摘要及独立 View 统计，不传全部正文；选择后才读取详情。`GET /v1/changeset/overview` 读取 manifest 和当前取舍；已接受方案不返回可改取舍。`GET /v1/draft/file` 只核实安全的现存 Draft 路径，允许在 Obsidian 修复无效 Properties，不开放其他目录。接口沿用认证 / Host / Origin 和固定原生白名单；没有新增 Desktop 批准接口。页面 Refresh 只重新读取文件，不登记或启动模型。
+
+原生检查可运行 `node tests/desktop/resource-pages.mjs` 与 `node tests/desktop/review-cleanup.mjs`。先构建 Core、原生 Desktop 和同级 Obsidian 插件；脚本使用本机现有 Playwright / 应用与任务自有隔离 Vault，保留证据于 `.local/P3/ui/`，只关闭自身进程。提案生成是模拟的，实际 UI、Core 文件操作和原生插件是实跑；不能把这些检查记作模型效果或真人验收。Windows URI 注册与用户实际操作另行确认。
 
 ## 验证
 

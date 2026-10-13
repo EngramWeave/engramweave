@@ -12,7 +12,7 @@ export function registerPlanningRoutes(server: FastifyInstance, services: () => 
   server.route({ ...PLANNING_API.templateWrite, handler: request => planner().settings.saveTemplate(request.body as { content: string; revision: string }) });
   server.route({ ...PLANNING_API.plan, async handler(request, reply) { return reply.code(202).send(await planner().submit(request.body as PlanRequest)); } });
   server.route({ ...PLANNING_API.planCancel, handler: request => planner().cancel((request.body as { id: string }).id) });
-  server.route({ ...PLANNING_API.changesets, async handler(request) { return { items: await planner().changesets.list((request.query as { source_path?: string }).source_path) }; } });
+  server.route({ ...PLANNING_API.changesets, async handler(request) { const { source_path } = request.query as { source_path?: string }; return { items: source_path ? await planner().readyForSource(source_path) : await planner().changesets.list() }; } });
   server.route({ ...PLANNING_API.changeset, handler: request => planner().changesets.read((request.query as { id: string }).id) });
   server.route({ ...PLANNING_API.candidate, handler: request => { const query = request.query as { id: string; item_id: string }; return planner().changesets.candidate(query.id, query.item_id); } });
   server.route({ ...PLANNING_API.candidateSave, handler: request => { const input = request.body as CandidateSave; services().integration?.guard(input.changeset_id); return planner().changesets.save(input); } });

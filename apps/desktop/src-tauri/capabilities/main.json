@@ -10,6 +10,7 @@
     "allow-core-request",
     "allow-open-document",
     "allow-open-changeset",
+    "allow-preview-candidate",
     "allow-open-integration-document"
   ]
 }

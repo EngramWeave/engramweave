@@ -5,7 +5,7 @@ import { mkdir, lstat, readdir } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { Value } from '@sinclair/typebox/value';
 import type Database from 'better-sqlite3';
-import { PlannerJobSchema, PlanRequestSchema, type Config, type PlannerJob, type PlanRequest } from '@engramweave/contracts';
+import { PlannerJobSchema, PlanRequestSchema, type Config, type PlannerJob, type PlanRequest, type ChangeSet } from '@engramweave/contracts';
 import { CoreError } from '../errors.js';
 import { atomicWrite, regularRead } from '../execution/settings.js';
 import { executeCodexText } from '../execution/codex.js';
@@ -108,7 +108,7 @@ export class PlannerJobs {
         return { job: record.job, reused: true };
       }
       if (this.otherBusy() || this.unresolved.size) throw new CoreError('JOB_BUSY', 'Finish the active workflow or unresolved planning publication', 409);
-      if ((await this.changesets.list(request.source_path)).length) throw new CoreError('PATH_CONFLICT', 'Inspect or cancel the existing ready ChangeSet before replanning', 409);
+      if ((await this.readyForSource(request.source_path)).length) throw new CoreError('PATH_CONFLICT', 'Inspect or cancel the existing ready ChangeSet before replanning', 409);
       const snapshot = await planningInput(this.config, request.source_path, this.human, this.settings, this.analyzer);
       if (request.source_revision && request.source_revision !== snapshot.source.revision) throw new CoreError('SOURCE_CHANGED', 'Source changed before planning', 409);
       const job: PlannerJob = { id: request.request_id, kind: 'plan_integration', status: 'queued', created_at: new Date().toISOString(), started_at: null, finished_at: null,
@@ -172,11 +172,25 @@ export class PlannerJobs {
     record.phase = 'completed'; record.job.status = 'succeeded'; record.job.error = null; record.job.finished_at = new Date().toISOString(); await this.save(record); this.unresolved.delete(record.job.id);
   }
   private async returnReviewed(record: Record) {
-    if ((await this.changesets.list(record.job.source_path)).some(candidate => candidate.id !== record.job.changeset_id)) return;
+    if ((await this.readyForSource(record.job.source_path, record.job.changeset_id)).length) return;
     const source = await readMarkdown(this.config.vault_path, record.job.source_path); const parsed = parseMarkdown(record.job.source_path, source.bytes);
     if (parsed.processing_status === 'planned' && await this.human.selection(record.job.source_path) === record.job.draft_path) {
       const native = new PropertyNative(); try { const bytes = editScalarProperty(source.bytes, 'processing_status', 'reviewed'); const next = await writeSourceProperties(this.config.vault_path, record.job.source_path, source, bytes, native); updateCompiledSource(this.db, record.job.source_path, next, parseMarkdown(record.job.source_path, next.bytes)); } finally { await native.close(); }
     }
+  }
+  async readyForSource(source: string, exclude: string | null = null): Promise<ChangeSet[]> {
+    // Only receipts for this Source own its flow; unrelated corrupt workspaces remain browsing diagnostics.
+    const manifests: ChangeSet[] = [];
+    for (const job of this.all()) {
+      if (!job.changeset_id || job.changeset_id === exclude || job.source_path.toLowerCase() !== source.toLowerCase() || this.executionOwns(job.changeset_id)) continue;
+      try {
+        const { manifest } = await this.changesets.read(job.changeset_id);
+        if (manifest.source_path.toLowerCase() !== source.toLowerCase() || manifest.draft_path.toLowerCase() !== job.draft_path.toLowerCase()) throw new CoreError('PATH_CONFLICT', 'ChangeSet inputs no longer match its planning receipt', 409);
+        if (manifest.state === 'ready') manifests.push(manifest);
+      }
+      catch (error) { if (!(error instanceof CoreError && error.code === 'DOCUMENT_NOT_FOUND')) throw error; }
+    }
+    return manifests;
   }
   async cancelChangeSet(id: string, toCompiled = false) {
     if (this.running||this.accepting) throw new CoreError('JOB_BUSY', 'Wait for or cancel the running Planner', 409);
@@ -193,7 +207,7 @@ export class PlannerJobs {
   }
   async cancelForSource(source: string) {
     if (this.running) throw new CoreError('JOB_BUSY', 'Wait for the active Planner before canceling review', 409);
-    for (const manifest of await this.changesets.list(source)) {
+    for (const manifest of await this.readyForSource(source)) {
       this.guardExecution(manifest.id);
       const job = this.all().find(job => job.changeset_id === manifest.id); const record = job ? await this.read(job.id) : null;
       if (record && ['prepared','ready'].includes(record.phase)) throw new CoreError('PATH_CONFLICT', 'Resolve interrupted planning publication first', 409);

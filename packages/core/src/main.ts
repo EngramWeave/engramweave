@@ -72,7 +72,7 @@ async function initializeCore(input: Config, releaseAttributes: () => Promise<vo
     await compiler.initialize();
     batches = new SourceBatches(config, database, compiler, () => jobs.active() !== null || Boolean(publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), input => analyzer?.guardBatch(input), async target => {
       if (target.startsWith('20_Sources/')) { await humanReview?.revoke(target); await planner?.cancelForSource(target); }
-      else if (target.startsWith('30_Drafts/')) { const draft = await readDraft(config.vault_path, target); for (const source of draft.sources) { await humanReview?.revoke(source, target); if ((await planner?.changesets.list(source))?.some(plan => plan.draft_path.toLowerCase() === target.toLowerCase())) await planner?.cancelForSource(source); } }
+      else if (target.startsWith('30_Drafts/')) { const draft = await readDraft(config.vault_path, target); for (const source of draft.sources) { await humanReview?.revoke(source, target); if ((await planner?.readyForSource(source))?.some(plan => plan.draft_path.toLowerCase() === target.toLowerCase())) await planner?.cancelForSource(source); } }
     });
     recall = new SemanticRecall(config, database);
     analyzer = new AnalyzerJobs(database, config, recall, () => Boolean(jobs.active() || compiler.busy() || batches.busy() || publications?.busy() || recompile?.busy() || humanReview?.busy() || planner?.busy() || integration?.busy()), undefined, () => processingSettings.read().max_retries);

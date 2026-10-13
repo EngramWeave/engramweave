@@ -303,3 +303,15 @@ fn integration_results_bridge_is_read_only_and_bounded() {
     assert_eq!(file.1, "/v1/integration/file");
     assert!(route(Operation::IntegrationFile, &json!({"id": id, "path": "60_Projects/note.md", "url": "file:///private"})).is_err());
 }
+
+#[test]
+fn resource_browser_bridge_preserves_fixed_read_and_management_boundaries() {
+    assert_eq!(route(Operation::ReviewFiles, &json!({"view":"discarded","limit":20,"offset":0})).unwrap().1, "/v1/review-files");
+    assert!(route(Operation::ReviewFiles, &json!({"path":"C:/private", "url":"https://example.com"})).is_err());
+    assert_eq!(route(Operation::ChangeFiles, &json!({"view":"executing","domain":"50_Research"})).unwrap().1, "/v1/change-files");
+    assert!(route(Operation::ChangeOverview, &json!({"id":"00000000-0000-0000-0000-000000000001","apply":true})).is_err());
+    let cancel=route(Operation::ChangeSetCancel,&json!({"id":"00000000-0000-0000-0000-000000000001"})).unwrap();
+    assert!(cancel.0); assert_eq!(cancel.1,"/v1/changeset/cancel"); assert!(cancel.2.is_empty());
+    assert!(route(Operation::ChangeSetCancel,&json!({"id":"unknown","path":"70_ChangeSets","recursive":true})).is_err());
+    assert!(!route(Operation::DraftFile,&json!({"path":"30_Drafts/broken.md"})).unwrap().0);
+}

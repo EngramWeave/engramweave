@@ -4,6 +4,7 @@ import type { Static, TSchema } from '@sinclair/typebox';
 import {
   API,
   PLANNING_API,
+  RESOURCE_API,
   type SearchQuery,
   type SourcesQuery,
   type CompilerSettings,
@@ -58,6 +59,12 @@ async function request<T extends TSchema>(
   return result;
 }
 export const client = {
+  reviewFiles: (input: import('@engramweave/contracts').ReviewBrowserQuery) => request('review_files', RESOURCE_API.review.schema.response[200], input),
+  changeFiles: (input: import('@engramweave/contracts').ChangeBrowserQuery) => request('change_files', RESOURCE_API.changes.schema.response[200], input),
+  changeOverview: (id: string) => request('change_overview', RESOURCE_API.overview.schema.response[200], { id }),
+  candidate: (id: string, item_id: string) => request('candidate', PLANNING_API.candidate.schema.response[200], { id, item_id }),
+  cancelChangeSet: (id: string) => request('change_set_cancel', PLANNING_API.changesetCancel.schema.response[200], { id }),
+  job: (id: string) => request('job', API.job.schema.response[200], { id }),
   plannerSettings: () => request('planner_settings', PLANNING_API.settings.schema.response[200]),
   savePlannerSettings: (settings: import('@engramweave/contracts').PlannerSettings) => request('planner_settings_write', PLANNING_API.settingsWrite.schema.response[200], {settings}),
   plannerTemplate: () => request('planner_template', PLANNING_API.template.schema.response[200]),
@@ -66,6 +73,7 @@ export const client = {
   cancelPlan: (id:string) => request('plan_cancel', PLANNING_API.planCancel.schema.response[200], {id}),
   changesets: (source_path?:string) => request('change_sets', PLANNING_API.changesets.schema.response[200], source_path ? {source_path} : {}),
   openChangeSet: (id:string) => native<void>('open_changeset',{id}),
+  previewCandidate: (id: string, itemId: string) => native<void>('preview_candidate', { id, itemId }),
   openIntegration: (id:string,path:string) => native<void>('open_integration_document',{id,path}),
   processingSettings: () => request('processing_settings', API.processingSettings.schema.response[200]),
   saveProcessingSettings: (input: import('@engramweave/contracts').ProcessingSettings) => request('processing_settings_write', API.processingSettingsWrite.schema.response[200], input),

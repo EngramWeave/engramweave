@@ -13,6 +13,7 @@ import { registerAnalysisRoutes } from './http/analysis.js';
 import { registerReviewRoutes } from './http/review.js';
 import { registerProcessingRoutes } from './http/processing.js';
 import { registerPlanningRoutes } from './http/planning.js';
+import { registerBrowserRoutes } from './http/browser.js';
 
 export interface HttpRuntime {
   token: string | null;
@@ -80,6 +81,7 @@ export function createHttp(config: Config, runtime: HttpRuntime, services?: () =
     registerReviewRoutes(server, config, services);
     registerProcessingRoutes(server, services);
     registerPlanningRoutes(server, services);
+    registerBrowserRoutes(server, config, services);
   }
   return server;
 }

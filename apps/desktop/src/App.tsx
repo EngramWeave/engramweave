@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import type { Document, SearchQuery, Status, SourcesQuery } from '@engramweave/contracts';
+import type { Document, SearchQuery, Status, SourcesQuery, ReviewBrowserQuery, ChangeBrowserQuery } from '@engramweave/contracts';
 import {
   client,
   failure,
@@ -30,7 +30,13 @@ import { PlannerSettings } from './PlannerSettings';
 import { ProcessingSettings, ProcessingRounds } from './Processing';
 import { SemanticSettings, SemanticSearch } from './SemanticRecall';
 import { SourceCompiler } from './SourceCompiler';
+import { ReviewBrowser } from './ReviewBrowser';
+import { ChangeBrowser } from './ChangeBrowser';
+import { useFileList } from './FileBrowserUI';
 import { DocumentFailure, ErrorNotice, ErrorToast, type ErrorPlacement } from './Feedback';
+
+const reviewSummaryQuery: ReviewBrowserQuery = { view: 'to_review', limit: 3 };
+const changeSummaryQuery: ChangeBrowserQuery = { view: 'ready', limit: 3 };
 
 export function App() {
   const [host, setHost] = useState<HostInfo | null>(null);
@@ -43,6 +49,9 @@ export function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>('dashboard');
+  const [resourceFocus, setResourceFocus] = useState<{ review: string | null; changes: string | null }>({ review: null, changes: null });
+  const [focusedJob, setFocusedJob] = useState<NonNullable<JobPage>['items'][number] | null>(null);
+  const [resourceRevision, setResourceRevision] = useState(0);
   const [sourceQuery, setSourceQuery] = useState<SourcesQuery>({view:'all',sort:'title_asc'});
   const [sourceCounts, setSourceCounts] = useState<SourceCounts | null>(null);
   const [sourceOffset, setSourceOffset] = useState(0);
@@ -212,7 +221,7 @@ export function App() {
     report,
     clearError,
   ]);
-  const refreshSources = useCallback(() => { void refresh().catch(error => report(error, 'sources')); }, [refresh, report]);
+  const refreshSources = useCallback(() => { setResourceRevision(value => value + 1); void refresh().catch(error => report(error, 'sources')); }, [refresh, report]);
   const connect = (start: boolean) =>
     action(async () => {
       connectionEpoch.current++;
@@ -236,15 +245,17 @@ export function App() {
     }, view === 'settings' ? 'operations' : 'toast');
   const navigate = (next: View) => {
     if (next !== view) {
+      setResourceRevision(value => value + 1);
       pageEpoch.current++;
       selection.current++;
       setDocument(null);
       setSelectedPath(null);
       setErrors({});
+      setResourceFocus({ review: null, changes: null }); setFocusedJob(null);
     }
     setView(next);
   };
-  const select = (path: string) => {
+  const select = (path: string, locate = false) => {
     if (view === 'dashboard') navigate('sources');
     const current = ++selection.current;
     setDocument(null);
@@ -253,7 +264,7 @@ export function App() {
     void client
       .document(path)
       .then((value) => {
-        if (selection.current === current) setDocument(value);
+        if (selection.current === current) { setDocument(value); if (locate) { setSourceQuery({ view: value.lifecycle_status === 'discarded' ? 'discarded' : 'all', sort: 'title_asc', path_prefix: path }); setSourceOffset(0); } }
       })
       .catch((error) => {
         if (selection.current === current) report(error, 'document');
@@ -277,6 +288,11 @@ export function App() {
   };
   const staleSearch =
     results && status && results.index_generation !== status.index_generation;
+  const resourceRefresh = `${connectionEpoch.current}:${status?.index_generation}:${jobs?.items[0]?.id}:${jobs?.items[0]?.status}:${active}:${resourceRevision}`;
+  const drafts = useFileList(client.reviewFiles, reviewSummaryQuery, connected, resourceRefresh, report);
+  const changes = useFileList(client.changeFiles, changeSummaryQuery, connected, resourceRefresh, report);
+  const resourceJobs = (id?: string) => { navigate('jobs'); if (id) { const epoch = pageEpoch.current; void client.job(id).then(job => { if (epoch === pageEpoch.current) setFocusedJob(job); }).catch(error => { if (epoch === pageEpoch.current) report(error); }); } };
+  const resourceSource = (path: string) => { navigate('sources'); setSourceOffset(0); setSourceQuery({ view: 'all', sort: 'title_asc', path_prefix: path }); select(path, true); };
   return (
     <Shell
       view={view}
@@ -291,6 +307,8 @@ export function App() {
         void scan('refresh');
       }}
       active={Boolean(active)}
+      reviewCount={drafts.error ? undefined : drafts.page?.views.to_review}
+      changeCount={changes.error ? undefined : changes.page?.views.ready}
     >
       <ErrorToast error={errors.toast} dismiss={dismissToast} />
       {!connected && (
@@ -313,6 +331,10 @@ export function App() {
           jobs={jobs}
           navigate={navigate}
           select={select}
+          openDraft={path => { navigate('review'); setResourceFocus({ review: path, changes: null }); }}
+          openChangeSet={id => { navigate('changes'); setResourceFocus({ review: null, changes: id }); }}
+          drafts={drafts}
+          changes={changes}
         />
       )}
       {view === 'settings' && (
@@ -440,6 +462,8 @@ export function App() {
             : 'detail-container'
         }
       >
+        {view === 'review' && <ReviewBrowser key={`review:${connectionEpoch.current}`} connected={connected} refreshKey={resourceRefresh} active={Boolean(active)} focus={resourceFocus.review} source={resourceSource} change={id => { navigate('changes'); setResourceFocus({ review: null, changes: id }); }} jobs={resourceJobs} started={refreshSources} onFailure={report} />}
+        {view === 'changes' && <ChangeBrowser key={`changes:${connectionEpoch.current}`} connected={connected} refreshKey={resourceRefresh} active={Boolean(active)} focus={resourceFocus.changes} draft={path => { navigate('review'); setResourceFocus({ review: path, changes: null }); }} source={resourceSource} jobs={resourceJobs} started={refreshSources} onFailure={report} />}
         {view === 'sources' && (
           <SourceBrowser
             compilerActions={document?.kind === 'source' ? <SourceCompiler key={document.path} document={document} jobs={jobs} active={Boolean(active)} generation={status?.index_generation} roundId={status?.processing_round?.id} onStarted={() => { void refresh().catch(error => report(error, 'document')); }} onPublished={() => { void select(document.path); }} /> : undefined}
@@ -489,7 +513,8 @@ export function App() {
                 : '没有活动任务，轮询已停止。'}
             </p>
             <ProcessingRounds connected={connected} active={Boolean(active)} />
-            <Jobs page={jobs} />
+            <Jobs page={focusedJob && jobs ? { ...jobs, items: [jobs.items.find(job => job.id === focusedJob.id) ?? focusedJob] } : jobs} />
+            {focusedJob && <button onClick={() => setFocusedJob(null)}>Show all Jobs</button>}
           </section>
         )}
         {view === 'search' && (

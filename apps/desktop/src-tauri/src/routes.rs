@@ -54,6 +54,12 @@ pub enum Operation {
     ChangeSet,
     Integration,
     IntegrationFile,
+    ReviewFiles,
+    ChangeFiles,
+    ChangeOverview,
+    Candidate,
+    ChangeSetCancel,
+    DraftFile,
 }
 
 pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(String, String)>)> {
@@ -124,6 +130,12 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         Operation::ChangeSet => (false, "/v1/changeset", &["id"]),
         Operation::Integration => (false, "/v1/integration", &["id"]),
         Operation::IntegrationFile => (false, "/v1/integration/file", &["id", "path"]),
+        Operation::ReviewFiles => (false, "/v1/review-files", &["view", "q", "path", "limit", "offset", "stages", "analysis", "source_path", "sort"]),
+        Operation::ChangeFiles => (false, "/v1/change-files", &["view", "q", "limit", "offset", "kind", "domain", "source_path", "sort"]),
+        Operation::ChangeOverview => (false, "/v1/changeset/overview", &["id"]),
+        Operation::Candidate => (false, "/v1/changeset/candidate", &["id", "item_id"]),
+        Operation::ChangeSetCancel => (true, "/v1/changeset/cancel", &["id"]),
+        Operation::DraftFile => (false, "/v1/draft/file", &["path"]),
     };
     let object = input
         .as_object()
@@ -141,7 +153,7 @@ pub fn route(operation: Operation, input: &Value) -> Result<(bool, String, Vec<(
         { return Err(Failure::new("VALIDATION_ERROR", "Invalid scan input")); }
         return Ok((true, route.to_string(), vec![]));
     }
-    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses" || route.starts_with("/v1/processing") || route.starts_with("/v1/planner/") || route.starts_with("/v1/plans") || route == "/v1/recompile") {
+    if post && (route.starts_with("/v1/analysis") || route == "/v1/analyses" || route.starts_with("/v1/processing") || route.starts_with("/v1/planner/") || route.starts_with("/v1/plans") || route == "/v1/recompile" || route == "/v1/changeset/cancel") {
         if serde_json::to_vec(input).map(|bytes| bytes.len() > 450000).unwrap_or(true) {
             return Err(Failure::new("VALIDATION_ERROR", "Analysis request exceeds its bound"));
         }

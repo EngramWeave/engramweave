@@ -12,7 +12,7 @@ import { readDraft } from '../drafts/files.js';
 import { parseMarkdown } from '../source/parse.js';
 import { editScalarProperty } from '../files/property-scalars.js';
 import { PropertyNative } from '../files/property-native.js';
-import { recoverPropertyJournal, isPropertyJournal, writeSourceProperties } from '../files/properties.js';
+import { recoverPropertyJournal, isPropertyJournal, writeSourceProperties, writeLifecycleProperties } from '../files/properties.js';
 import { resolveVaultDirectory, markdownPath } from '../files/paths.js';
 import { windowsAttributes } from '../files/windows.js';
 import { publishFile } from '../files/publication.js';
@@ -22,7 +22,8 @@ const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const key = (relative: string) => relative.toLowerCase();
 interface Receipt { version: 1; sequence: number; request: HumanReviewRequest; source_bytes: string | null; after: string | null;
-  idea: { path: string; bytes: string; revision: string } | null; completed: boolean }
+  idea: { path: string; bytes: string; revision: string } | null; completed: boolean;
+  discarded?: { path: string; before: string; after: string; done: boolean }[] }
 interface Revocation { version: 1; sequence: number; source_path: string; draft_path: string | null }
 
 /** Accepted human input is authoritative outside SQLite; selection is separate from each Draft's Intent. */
@@ -65,6 +66,10 @@ export class HumanReviewActions {
         if (record.source_bytes !== null || record.after !== null || !record.idea || record.idea.path !== `10_Ideas/${id}.md`
           || typeof record.idea.bytes !== 'string' || hash(Buffer.from(record.idea.bytes, 'base64')) !== record.idea.revision) throw new Error();
       } else if (record.idea !== null || typeof record.source_bytes !== 'string' || hash(Buffer.from(record.source_bytes, 'base64')) !== record.after) throw new Error();
+      if (record.request.discard_drafts?.length) {
+        if (record.request.action !== 'complete' || record.discarded?.length !== record.request.discard_drafts.length || new Set(record.discarded.map(item => key(item.path))).size !== record.discarded.length) throw new Error();
+        for (const item of record.discarded) if (!record.request.discard_drafts.some(target => target.path === item.path && target.revision === item.before) || !/^[a-f0-9]{64}$/.test(item.after) || typeof item.done !== 'boolean' || key(item.path) === key(record.request.draft_path)) throw new Error();
+      } else if (record.discarded?.length) throw new Error();
       return record;
     } catch { throw new CoreError('CONFIG_ERROR', 'Human Review receipt is invalid; preserved for inspection', 400); }
   }
@@ -147,6 +152,7 @@ export class HumanReviewActions {
   }
   private async prepare(request: HumanReviewRequest): Promise<Receipt> {
     if (!Value.Check(HumanReviewRequestSchema, request)) throw new CoreError('VALIDATION_ERROR', 'Invalid Human Review request', 400);
+    if (request.discard_drafts !== undefined && request.action !== 'complete') throw new CoreError('VALIDATION_ERROR', 'Sibling cleanup belongs only to Review Complete', 400);
     const source = await readMarkdown(this.config.vault_path, request.source_path); const parsed = parseMarkdown(request.source_path, source.bytes);
     const draft = await readDraft(this.config.vault_path, request.draft_path);
     if (source.revision !== request.source_revision || draft.revision !== request.draft_revision) throw new CoreError('SOURCE_CHANGED', 'Source or Draft changed; inspect current files before submitting', 409);
@@ -154,6 +160,16 @@ export class HumanReviewActions {
       || draft.lifecycle_status !== 'active' || draft.sources.length !== 1 || key(draft.sources[0]!) !== key(request.source_path)) throw new CoreError('INVALID_SOURCE', 'Human Review requires an active Draft of its compiled or reviewed Source', 422);
     if (request.action === 'cancel' && (request.note !== '' || !['reviewed','planned'].includes(parsed.processing_status ?? '') || key(this.selected.get(key(request.source_path)) ?? '') !== key(draft.path))) throw new CoreError('PATH_CONFLICT', 'Cancel applies only to the current Reviewed Draft and consumes no input', 409);
     const record: Receipt = { version: 1, sequence: ++this.sequence, request, source_bytes: null, after: null, idea: null, completed: false };
+    if (request.discard_drafts?.length) {
+      if (new Set(request.discard_drafts.map(item => key(item.path))).size !== request.discard_drafts.length) throw new CoreError('VALIDATION_ERROR', 'Duplicate sibling Draft', 400);
+      record.discarded = [];
+      for (const target of request.discard_drafts) {
+        const file = await readMarkdown(this.config.vault_path, target.path); const sibling = await readDraft(this.config.vault_path, target.path);
+        if (key(target.path) === key(request.draft_path) || sibling.lifecycle_status !== 'active' || sibling.sources.length !== 1 || key(sibling.sources[0]!) !== key(request.source_path)) throw new CoreError('PATH_CONFLICT', 'Cleanup requires other active Drafts of this Source', 409);
+        if (file.revision !== target.revision || sibling.revision !== target.revision) throw new CoreError('SOURCE_CHANGED', 'A sibling Draft changed; review the cleanup list again', 409);
+        record.discarded.push({ path: target.path, before: target.revision, after: hash(editScalarProperty(file.bytes, 'lifecycle_status', 'discarded')), done: false });
+      }
+    }
     if (request.action === 'idea') {
       if (!request.note.trim()) throw new CoreError('VALIDATION_ERROR', 'Create Idea requires nonempty input', 400);
       await resolveVaultDirectory(this.config.vault_path, '');
@@ -190,6 +206,19 @@ export class HumanReviewActions {
         if (![request.source_revision, record.after].includes(source.revision)) throw new CoreError('SOURCE_CHANGED', 'Source changed during Human Review; restore the accepted version before retrying', 409);
         if (source.revision !== record.after) source = await writeSourceProperties(vault, request.source_path, source, Buffer.from(record.source_bytes!,'base64'), native);
         updateCompiledSource(this.db, request.source_path, source, parseMarkdown(request.source_path, source.bytes));
+        for (const step of record.discarded ?? []) {
+          if (step.done) continue;
+          const directory = path.posix.dirname(step.path);
+          for (const name of (await readdir(await resolveVaultDirectory(vault, directory))).filter(isPropertyJournal)) await recoverPropertyJournal(vault, directory, name, native);
+          const file = await readMarkdown(vault, step.path); const sibling = await readDraft(vault, step.path);
+          if (![step.before, step.after].includes(file.revision) || sibling.revision !== file.revision || sibling.sources.length !== 1 || key(sibling.sources[0]!) !== key(request.source_path)) throw new CoreError('SOURCE_CHANGED', 'Accepted sibling cleanup changed; preserve the receipt and inspect the file', 409);
+          if (file.revision !== step.after) {
+            const bytes = editScalarProperty(file.bytes, 'lifecycle_status', 'discarded');
+            if (hash(bytes) !== step.after) throw new CoreError('SOURCE_CHANGED', 'Sibling cleanup no longer matches its accepted input', 409);
+            await writeLifecycleProperties(vault, step.path, file, bytes, native);
+          }
+          step.done = true; await this.save(record);
+        }
       } finally { await native.close(); }
     }
     if (request.action === 'cancel') await this.cancelSourcePlan(request.source_path);

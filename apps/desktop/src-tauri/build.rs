@@ -19,6 +19,7 @@ fn main() {
             "core_request",
             "open_document",
             "open_changeset",
+            "preview_candidate",
             "open_integration_document",
         ]),
     ))
