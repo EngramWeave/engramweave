@@ -2,8 +2,6 @@
 
 # EngramWeave
 
-Obsidian 原生审阅 MVP 已提供独立插件：Source 编译／分析、Draft 编辑、侧边栏结果和人工确认直接入库 `40_Knowledge`。使用方法见 [插件说明](../engramweave-obsidian/README.md)，Core 安全与恢复边界见 [直接入库合同](docs/obsidian-mvp.md)。
-
 **你的知识，你来定稿。**
 
 AI 编译，你定稿。面向长期学习与研究的个人知识编译系统。
@@ -12,13 +10,18 @@ AI 编译，你定稿。面向长期学习与研究的个人知识编译系统�
 ![Design](https://img.shields.io/badge/Design-Human--in--the--loop-7C3AED?style=flat-square)
 ![Knowledge](https://img.shields.io/badge/Knowledge-Markdown-7C3AED?style=flat-square&logo=markdown)
 
-[项目设计与边界](CONTEXT.md) · [开发状态](#开发状态) · [快速开始](#快速开始) · [问题反馈](https://github.com/EngramWeave/engramweave/issues)
+[项目设计方案](https://github.com/EngramWeave/engramweave-docs/blob/main/%E4%B8%AA%E4%BA%BA%E7%9F%A5%E8%AF%86%E7%BC%96%E8%AF%91%E7%B3%BB%E7%BB%9F%E6%80%BB%E4%BD%93%E8%AE%BE%E8%AE%A1%E6%96%B9%E6%A1%88_v0.4.md) · [快速开始](#快速开始) · [问题反馈](https://github.com/EngramWeave/engramweave/issues)
 
 </div>
 
-> 项目处于早期开发阶段，P1、P2 与 P3-A/BC 开发已完成，Desktop 已提供 Review / Changes 文件页面。下文描述产品设计与目标使用方式；编译、分析、人工审阅、候选批准和正式写入已可用，自动 Vault Git 等后续能力仍在开发，当前可用范围见[开发状态](#开发状态)。
+> 项目处于早期开发阶段，P1、P2 与 P3-A/BC 开发已完成，Desktop 已提供 Review / Changes 文件页面。项目配套obsidian插件[点击这里](https://github.com/EngramWeave/engramweave-obsidian)。下文描述产品设计与目标使用方式；编译、分析、人工审阅、候选批准和正式写入已可用，自动 Vault Git 等后续能力仍在开发，当前可用范围见[开发状态](#开发状态)。
 
 ---
+
+<img width="1411" height="1001" alt="image" src="https://github.com/user-attachments/assets/dab503f3-13d5-4902-867c-98f06525be11" />
+<img width="1411" height="1001" alt="image" src="https://github.com/user-attachments/assets/b5b9e0bc-dbc6-4388-a26a-3ad4229c1c2d" />
+
+
 
 ## 你一定经历过
 
